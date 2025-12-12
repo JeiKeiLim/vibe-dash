@@ -1,0 +1,26 @@
+# Build artifacts
+bin/
+dist/
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# IDE and editor files
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+*.out
+coverage.html
+
+# Go
+vendor/

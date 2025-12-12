@@ -1,0 +1,23 @@
+run:
+  timeout: 5m
+  go: "1.21"
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - goimports
+    - misspell
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/JeiKeiLim/vibe-dash
+
+issues:
+  exclude-dirs:
+    - test/fixtures

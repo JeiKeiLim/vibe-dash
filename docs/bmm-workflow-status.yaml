@@ -1,0 +1,35 @@
+# BMM Workflow Status
+# Tracks completion of analysis and planning workflows
+
+workflows:
+  product-brief:
+    status: complete
+    output_file: "docs/analysis/product-brief-bmad-test-2025-12-05.md"
+    completed_date: "2025-12-05"
+    completed_steps: [1, 2, 3, 4, 5, 6]
+  
+  prd:
+    status: complete
+    output_file: "docs/prd.md"
+    completed_date: "2025-12-08"
+    completed_steps: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+
+  architecture:
+    status: complete
+    output_file: "docs/architecture.md"
+    completed_date: "2025-12-11"
+
+  ux-design:
+    status: complete
+    output_file: "docs/ux-design-specification.md"
+    completed_date: "2025-12-11"
+
+  epics:
+    status: partial
+    output_file: "docs/epics.md"
+    notes: "FR inventory complete, story breakdown pending"
+
+  implementation-readiness:
+    status: complete
+    output_file: "docs/implementation-readiness-report-2025-12-11.md"
+    completed_date: "2025-12-11"
