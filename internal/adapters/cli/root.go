@@ -2,10 +2,11 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/spf13/cobra"
+
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui"
 )
 
 // RootCmd is the root command for the vibe CLI.
@@ -21,12 +22,9 @@ Run 'vibe' with no arguments to launch the interactive dashboard.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		slog.Info("vibe-dash starting")
 
-		// User-facing output goes to stdout (not slog)
-		// slog output goes to stderr for diagnostics
-		fmt.Fprintln(cmd.OutOrStdout(), "TUI dashboard coming soon. Press Ctrl+C to exit.")
-
-		// Wait for context cancellation (respects signal handling in main.go)
-		<-cmd.Context().Done()
+		if err := tui.Run(cmd.Context()); err != nil {
+			slog.Error("TUI error", "error", err)
+		}
 	},
 }
 

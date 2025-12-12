@@ -84,57 +84,35 @@ func TestRootCmd_HasRunFunction(t *testing.T) {
 	}
 }
 
-func TestRootCmd_TUIPlaceholder(t *testing.T) {
-	// Test that the Run function exists and contains the expected behavior
-	// by calling it directly rather than through Execute() which has state issues
+func TestRootCmd_TUIIntegration(t *testing.T) {
+	// Test that the Run function exists and is configured for TUI
+	// Note: Actual TUI testing requires a terminal, so we only verify
+	// the function exists and the command structure is correct.
+	// TUI functionality is tested in internal/adapters/tui/model_test.go
 	if RootCmd.Run == nil {
 		t.Fatal("RootCmd.Run should not be nil")
 	}
 
-	// Create a context that we'll cancel to simulate Ctrl+C
+	// Verify the TUI starts (will fail immediately without TTY, which is expected)
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	// Create a command with the context attached
 	cmd := &cobra.Command{}
 	cmd.SetContext(ctx)
 
-	// Capture stdout
-	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-
-	// Run in goroutine
+	// Run in goroutine - will exit quickly due to no TTY in test environment
 	done := make(chan struct{})
 	go func() {
 		RootCmd.Run(cmd, []string{})
 		close(done)
 	}()
 
-	// Wait for output to appear (poll with timeout instead of fixed sleep)
-	deadline := time.Now().Add(1 * time.Second)
-	for time.Now().Before(deadline) {
-		if buf.Len() > 0 {
-			break
-		}
-		time.Sleep(1 * time.Millisecond)
-	}
-
-	// Now cancel the context
-	cancel()
-
-	// Wait for function to finish
+	// TUI should exit quickly in test environment (no TTY available)
 	select {
 	case <-done:
-		// Success - Run function exited after context cancellation
-	case <-time.After(1 * time.Second):
-		t.Fatal("Run function did not exit after context cancellation")
-	}
-
-	output := buf.String()
-	// AC3: Should display placeholder message
-	if !strings.Contains(output, "TUI dashboard") {
-		t.Errorf("Output should mention TUI dashboard, got: %s", output)
-	}
-	if !strings.Contains(output, "Ctrl+C") {
-		t.Errorf("Output should mention Ctrl+C to exit, got: %s", output)
+		// Success - Run function completed (TUI failed to start due to no TTY, as expected)
+	case <-time.After(2 * time.Second):
+		cancel()
+		t.Fatal("Run function should exit quickly when no TTY is available")
 	}
 }
