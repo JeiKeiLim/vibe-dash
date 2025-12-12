@@ -26,11 +26,10 @@ func main() {
 	// Run application with cancellable context
 	if err := run(ctx); err != nil {
 		slog.Error("application error", "error", err)
-		os.Exit(1)
+		os.Exit(cli.MapErrorToExitCode(err))
 	}
 }
 
 func run(ctx context.Context) error {
-	slog.Info("vibe-dash starting")
 	return cli.Execute(ctx)
 }

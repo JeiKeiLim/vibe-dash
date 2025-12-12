@@ -1,0 +1,44 @@
+package cli
+
+import (
+	"errors"
+
+	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
+)
+
+// Exit codes for the CLI per Architecture "Error-to-Exit-Code Mapping"
+const (
+	ExitSuccess         = 0
+	ExitGeneralError    = 1
+	ExitProjectNotFound = 2
+	ExitConfigInvalid   = 3
+	ExitDetectionFailed = 4
+)
+
+// MapErrorToExitCode maps domain errors to CLI exit codes.
+//
+// Exit code mapping:
+//   - ErrProjectNotFound     → 2 (specific, recoverable)
+//   - ErrConfigInvalid       → 3 (specific, user can fix config)
+//   - ErrDetectionFailed     → 4 (specific, retry may help)
+//   - ErrProjectAlreadyExists → 1 (general - user decision needed)
+//   - ErrPathNotAccessible   → 1 (general - filesystem issue)
+//   - ErrInvalidStage        → 1 (general - internal error)
+//   - ErrInvalidConfidence   → 1 (general - internal error)
+//   - Any other error        → 1 (general catch-all)
+func MapErrorToExitCode(err error) int {
+	if err == nil {
+		return ExitSuccess
+	}
+
+	switch {
+	case errors.Is(err, domain.ErrProjectNotFound):
+		return ExitProjectNotFound
+	case errors.Is(err, domain.ErrConfigInvalid):
+		return ExitConfigInvalid
+	case errors.Is(err, domain.ErrDetectionFailed):
+		return ExitDetectionFailed
+	default:
+		return ExitGeneralError
+	}
+}

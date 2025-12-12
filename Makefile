@@ -1,8 +1,16 @@
 .PHONY: build test test-all lint fmt check-fmt run clean install test-accuracy
 
+# Version information for ldflags
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+LDFLAGS = -ldflags "-X github.com/JeiKeiLim/vibe-dash/internal/adapters/cli.Version=$(VERSION) \
+                    -X github.com/JeiKeiLim/vibe-dash/internal/adapters/cli.Commit=$(COMMIT) \
+                    -X github.com/JeiKeiLim/vibe-dash/internal/adapters/cli.BuildDate=$(BUILD_DATE)"
+
 # CGO_ENABLED=1 required for go-sqlite3
 build:
-	CGO_ENABLED=1 go build -o bin/vibe ./cmd/vibe
+	CGO_ENABLED=1 go build $(LDFLAGS) -o bin/vibe ./cmd/vibe
 
 test:
 	go test ./...
@@ -14,10 +22,10 @@ lint:
 	$(shell go env GOPATH)/bin/golangci-lint run
 
 fmt:
-	goimports -w .
+	$(shell go env GOPATH)/bin/goimports -w .
 
 check-fmt:
-	@test -z "$$(goimports -l .)" || (echo "Run 'make fmt' to fix formatting" && exit 1)
+	@test -z "$$($(shell go env GOPATH)/bin/goimports -l .)" || (echo "Run 'make fmt' to fix formatting" && exit 1)
 
 run: build
 	./bin/vibe
@@ -26,7 +34,7 @@ clean:
 	rm -rf bin/
 
 install:
-	CGO_ENABLED=1 go install ./cmd/vibe
+	CGO_ENABLED=1 go install $(LDFLAGS) ./cmd/vibe
 
 # Placeholder for detection accuracy testing (95% threshold)
 test-accuracy:

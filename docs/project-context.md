@@ -158,3 +158,12 @@ make test-accuracy # detection accuracy (must be ≥95%)
 
 **First user story:**
 > "As a developer, I can run `vibe` and see an empty dashboard"
+
+---
+
+## Post-MVP References
+
+### BMAD Progress Dashboard
+**URL:** https://github.com/ibadmore/bmad-progress-dashboard
+
+An existing implementation of a BMAD progress dashboard. Consider adopting this approach or integrating lessons learned during post-MVP phase for sprint/workflow visualization features.
