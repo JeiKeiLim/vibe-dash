@@ -2,11 +2,9 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 )
 
 // Minimum terminal dimensions
@@ -14,30 +12,6 @@ const (
 	MinWidth  = 60
 	MinHeight = 20
 )
-
-// UseColor determines if colors should be used based on NO_COLOR and TERM env vars.
-var UseColor = os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
-
-// Styles for the TUI
-var (
-	boxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("240")).
-			Padding(1, 2)
-
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("39")) // Cyan
-
-	hintStyle = lipgloss.NewStyle().
-			Faint(true)
-)
-
-func init() {
-	if !UseColor {
-		lipgloss.SetColorProfile(termenv.Ascii)
-	}
-}
 
 // renderEmptyView renders the welcome screen when no projects are present.
 func renderEmptyView(width, height int) string {

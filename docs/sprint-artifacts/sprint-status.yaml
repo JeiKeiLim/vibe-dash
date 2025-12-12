@@ -43,7 +43,7 @@ development_status:
   1-3-port-interfaces: done
   1-4-cobra-cli-framework: done
   1-5-bubble-tea-tui-shell: done
-  1-6-lipgloss-styles-foundation: backlog
+  1-6-lipgloss-styles-foundation: done
   1-7-configuration-auto-creation: backlog
   epic-1-retrospective: optional
 

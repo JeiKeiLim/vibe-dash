@@ -1,0 +1,114 @@
+package tui
+
+import (
+	"os"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+)
+
+// UseColor determines if colors should be used based on NO_COLOR and TERM env vars.
+// Respects NO_COLOR environment variable per accessibility guidelines.
+var UseColor = os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
+
+// ============================================================================
+// Base Styles (from Story 1.5)
+// ============================================================================
+
+var (
+	// boxStyle is used for bordered containers with rounded corners.
+	boxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("240")).
+			Padding(1, 2)
+
+	// titleStyle is used for headings.
+	titleStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("39")) // Cyan
+
+	// hintStyle is used for dimmed help text.
+	hintStyle = lipgloss.NewStyle().
+			Faint(true)
+)
+
+// ============================================================================
+// Dashboard Component Styles (Story 1.6)
+// Uses 16-color ANSI palette for maximum terminal compatibility.
+// ============================================================================
+
+// SelectedStyle is used for the currently selected row in lists.
+// Uses cyan background for visibility on both dark and light themes.
+var SelectedStyle = lipgloss.NewStyle().
+	Background(lipgloss.Color("6")) // Cyan
+
+// WaitingStyle is used ONLY for the WAITING indicator (killer feature).
+// Bold red to catch peripheral vision. Reserved exclusively for agent waiting state.
+var WaitingStyle = lipgloss.NewStyle().
+	Bold(true).
+	Foreground(lipgloss.Color("1")) // Red
+
+// RecentStyle is used for today indicator (within 24 hours).
+var RecentStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("2")) // Green
+
+// ActiveStyle is used for this week indicator (within 7 days).
+var ActiveStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("3")) // Yellow
+
+// UncertainStyle is used for uncertain detection state.
+var UncertainStyle = lipgloss.NewStyle().
+	Faint(true).
+	Foreground(lipgloss.Color("8")) // Bright black (gray)
+
+// FavoriteStyle is used for favorite/starred project indicator.
+var FavoriteStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("5")) // Magenta
+
+// DimStyle is used for hints, secondary info, and less important text.
+// Note: Functionally similar to hintStyle but with different semantic purpose.
+// hintStyle is for help text overlays, DimStyle is for general dimming.
+var DimStyle = lipgloss.NewStyle().
+	Faint(true)
+
+// BorderStyle is used for panel boundaries with square corners.
+// Uses ANSI color 8 (bright black/gray) for 16-color palette compatibility.
+var BorderStyle = lipgloss.NewStyle().
+	Border(lipgloss.NormalBorder()).
+	BorderForeground(lipgloss.Color("8"))
+
+// ============================================================================
+// Style Helper Functions
+// ============================================================================
+
+// ApplySelected wraps text with selection highlighting.
+func ApplySelected(text string) string {
+	return SelectedStyle.Render(text)
+}
+
+// ApplyIndicator applies the appropriate style to text based on indicator type.
+// Supported types: "waiting", "recent", "active", "uncertain", "favorite", "dim".
+func ApplyIndicator(indicatorType string, text string) string {
+	switch indicatorType {
+	case "waiting":
+		return WaitingStyle.Render(text)
+	case "recent":
+		return RecentStyle.Render(text)
+	case "active":
+		return ActiveStyle.Render(text)
+	case "uncertain":
+		return UncertainStyle.Render(text)
+	case "favorite":
+		return FavoriteStyle.Render(text)
+	case "dim":
+		return DimStyle.Render(text)
+	default:
+		return text
+	}
+}
+
+func init() {
+	if !UseColor {
+		lipgloss.SetColorProfile(termenv.Ascii)
+	}
+}
