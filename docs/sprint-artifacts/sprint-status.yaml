@@ -44,7 +44,7 @@ development_status:
   1-4-cobra-cli-framework: done
   1-5-bubble-tea-tui-shell: done
   1-6-lipgloss-styles-foundation: done
-  1-7-configuration-auto-creation: backlog
+  1-7-configuration-auto-creation: done
   epic-1-retrospective: optional
 
   # Epic 2: Project Management & Detection
