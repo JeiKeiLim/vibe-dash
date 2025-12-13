@@ -8,8 +8,11 @@ import (
 	"syscall"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/cli"
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/detectors"
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/detectors/speckit"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence/sqlite"
 	"github.com/JeiKeiLim/vibe-dash/internal/config"
+	"github.com/JeiKeiLim/vibe-dash/internal/core/services"
 )
 
 func main() {
@@ -53,6 +56,12 @@ func run(ctx context.Context) error {
 		return err
 	}
 	cli.SetRepository(repo)
+
+	// Initialize detection service with registry (Story 2.5)
+	registry := detectors.NewRegistry()
+	registry.Register(speckit.NewSpeckitDetector())
+	detectionSvc := services.NewDetectionService(registry)
+	cli.SetDetectionService(detectionSvc)
 
 	return cli.Execute(ctx)
 }

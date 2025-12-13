@@ -13,6 +13,22 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 )
 
+// MockDetector implements ports.Detector for testing
+type MockDetector struct {
+	detectResult   *domain.DetectionResult
+	detectErr      error
+	multipleResult []*domain.DetectionResult
+	multipleErr    error
+}
+
+func (m *MockDetector) Detect(_ context.Context, _ string) (*domain.DetectionResult, error) {
+	return m.detectResult, m.detectErr
+}
+
+func (m *MockDetector) DetectMultiple(_ context.Context, _ string) ([]*domain.DetectionResult, error) {
+	return m.multipleResult, m.multipleErr
+}
+
 // MockRepository implements ports.ProjectRepository for testing
 type MockRepository struct {
 	projects map[string]*domain.Project
@@ -395,5 +411,101 @@ func TestAdd_SaveFailure(t *testing.T) {
 	// Verify no project was saved
 	if len(mock.projects) != 0 {
 		t.Errorf("expected 0 projects saved on error, got %d", len(mock.projects))
+	}
+}
+
+func TestAdd_WithDetectionService(t *testing.T) {
+	repoMock := NewMockRepository()
+	cli.SetRepository(repoMock)
+
+	// Create mock detector with speckit result
+	detectionResult := domain.NewDetectionResult(
+		"speckit",
+		domain.StagePlan,
+		domain.ConfidenceCertain,
+		"plan.md found",
+	)
+	detectorMock := &MockDetector{
+		detectResult: &detectionResult,
+	}
+	cli.SetDetectionService(detectorMock)
+	defer cli.SetDetectionService(nil) // Reset after test
+
+	tmpDir := t.TempDir()
+
+	output, err := executeAddCommand([]string{tmpDir})
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// Verify detection result in output (Stage.String() capitalizes: "Plan", "Tasks", etc.)
+	if !strings.Contains(output, "speckit") {
+		t.Errorf("expected output to contain methodology 'speckit', got: %s", output)
+	}
+	if !strings.Contains(output, "Plan") {
+		t.Errorf("expected output to contain stage 'Plan', got: %s", output)
+	}
+
+	// Verify project has detection fields populated
+	for _, p := range repoMock.projects {
+		if p.DetectedMethod != "speckit" {
+			t.Errorf("expected DetectedMethod 'speckit', got '%s'", p.DetectedMethod)
+		}
+		if p.CurrentStage != domain.StagePlan {
+			t.Errorf("expected CurrentStage StagePlan, got %v", p.CurrentStage)
+		}
+	}
+}
+
+func TestAdd_DetectionFailureIsNonFatal(t *testing.T) {
+	repoMock := NewMockRepository()
+	cli.SetRepository(repoMock)
+
+	// Create mock detector that returns an error
+	detectorMock := &MockDetector{
+		detectErr: errors.New("detection failed"),
+	}
+	cli.SetDetectionService(detectorMock)
+	defer cli.SetDetectionService(nil) // Reset after test
+
+	tmpDir := t.TempDir()
+
+	_, err := executeAddCommand([]string{tmpDir})
+
+	// Detection failure should NOT cause add to fail
+	if err != nil {
+		t.Fatalf("expected no error (detection failure should be non-fatal), got: %v", err)
+	}
+
+	// Verify project was still saved
+	if len(repoMock.projects) != 1 {
+		t.Errorf("expected 1 project saved, got %d", len(repoMock.projects))
+	}
+
+	// Verify project has default detection values
+	for _, p := range repoMock.projects {
+		if p.DetectedMethod != "" {
+			t.Errorf("expected empty DetectedMethod on detection failure, got '%s'", p.DetectedMethod)
+		}
+	}
+}
+
+func TestAdd_WithoutDetectionService(t *testing.T) {
+	repoMock := NewMockRepository()
+	cli.SetRepository(repoMock)
+	cli.SetDetectionService(nil) // Explicitly nil
+
+	tmpDir := t.TempDir()
+
+	_, err := executeAddCommand([]string{tmpDir})
+
+	// Should succeed without detection service
+	if err != nil {
+		t.Fatalf("expected no error without detection service, got: %v", err)
+	}
+
+	if len(repoMock.projects) != 1 {
+		t.Errorf("expected 1 project, got %d", len(repoMock.projects))
 	}
 }

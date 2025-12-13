@@ -15,10 +15,20 @@ import (
 // Package-level variable for MVP simplicity (Option A from Dev Notes).
 var repository ports.ProjectRepository
 
+// detectionService is the detection service injected at startup.
+// Used by add command to detect project methodology.
+var detectionService ports.Detector
+
 // SetRepository sets the project repository for the add command.
 // Used by main.go for production and tests for mocking.
 func SetRepository(repo ports.ProjectRepository) {
 	repository = repo
+}
+
+// SetDetectionService sets the detection service for the add command.
+// Used by main.go for production and tests for mocking.
+func SetDetectionService(svc ports.Detector) {
+	detectionService = svc
 }
 
 // addName holds the --name flag value
@@ -113,6 +123,16 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		project.DisplayName = addName
 	}
 
+	// Perform detection if service is available
+	if detectionService != nil {
+		result, err := detectionService.Detect(ctx, canonicalPath)
+		if err == nil && result != nil {
+			project.DetectedMethod = result.Method
+			project.CurrentStage = result.Stage
+		}
+		// Detection failure is non-fatal - project defaults to unknown
+	}
+
 	// Save to repository
 	if err := repository.Save(ctx, project); err != nil {
 		return fmt.Errorf("failed to save project: %w", err)
@@ -125,6 +145,9 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "✓ Added: %s\n", displayName)
 	fmt.Fprintf(cmd.OutOrStdout(), "  Path: %s\n", canonicalPath)
+	if project.DetectedMethod != "" && project.DetectedMethod != "unknown" {
+		fmt.Fprintf(cmd.OutOrStdout(), "  Method: %s (%s)\n", project.DetectedMethod, project.CurrentStage)
+	}
 
 	return nil
 }

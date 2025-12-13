@@ -12,6 +12,34 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 )
 
+// Detector provides methodology detection for a project path.
+// This interface is implemented by services.DetectionService and allows
+// CLI and other consumers to depend on an abstraction for testing.
+type Detector interface {
+	// Detect performs methodology detection on the given path.
+	// Returns the first successful detection result, or a result with
+	// Method="unknown" if no detector matches.
+	Detect(ctx context.Context, path string) (*domain.DetectionResult, error)
+
+	// DetectMultiple checks ALL registered detectors and returns all matching results.
+	// This supports FR14: detecting multiple methodologies in the same project.
+	DetectMultiple(ctx context.Context, path string) ([]*domain.DetectionResult, error)
+}
+
+// DetectorRegistry coordinates detection across multiple MethodDetectors.
+// This interface is implemented by adapters/detectors.Registry.
+//
+// Thread Safety: Implementations must be safe for concurrent DetectAll() calls
+// after all Register() calls have completed during initialization.
+type DetectorRegistry interface {
+	// DetectAll tries each registered detector until one succeeds.
+	// Returns a result with Method="unknown" if no detector matches.
+	DetectAll(ctx context.Context, path string) (*domain.DetectionResult, error)
+
+	// Detectors returns all registered detectors for multi-methodology detection.
+	Detectors() []MethodDetector
+}
+
 // MethodDetector defines the interface for workflow methodology detection.
 // Implementations scan project directories for markers that indicate
 // which development methodology is being used (e.g., speckit, bmad).

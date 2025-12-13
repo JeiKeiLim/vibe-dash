@@ -24,6 +24,9 @@ type Registry struct {
 	detectors []ports.MethodDetector
 }
 
+// Compile-time interface compliance check
+var _ ports.DetectorRegistry = (*Registry)(nil)
+
 // NewRegistry creates a new detector registry with no registered detectors.
 func NewRegistry() *Registry {
 	return &Registry{
