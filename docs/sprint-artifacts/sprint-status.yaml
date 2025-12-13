@@ -37,7 +37,7 @@ story_location: "{project-root}/docs/sprint-artifacts"
 
 development_status:
   # Epic 1: Foundation & First Launch
-  epic-1: in-progress
+  epic-1: done
   1-1-project-scaffolding: done
   1-2-domain-entities: done
   1-3-port-interfaces: done
@@ -45,11 +45,11 @@ development_status:
   1-5-bubble-tea-tui-shell: done
   1-6-lipgloss-styles-foundation: done
   1-7-configuration-auto-creation: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: completed
 
   # Epic 2: Project Management & Detection
-  epic-2: backlog
-  2-1-sqlite-repository-setup: backlog
+  epic-2: in-progress
+  2-1-sqlite-repository-setup: done
   2-2-path-resolution-utilities: backlog
   2-3-add-project-command: backlog
   2-4-speckit-detector-implementation: backlog
