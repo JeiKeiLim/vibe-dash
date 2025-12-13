@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/cli"
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence/sqlite"
 	"github.com/JeiKeiLim/vibe-dash/internal/config"
 )
 
@@ -45,6 +46,13 @@ func run(ctx context.Context) error {
 		"refresh_debounce_ms", cfg.RefreshDebounceMs,
 		"agent_waiting_threshold_minutes", cfg.AgentWaitingThresholdMinutes,
 	)
+
+	// Initialize repository for CLI commands (Story 2.3)
+	repo, err := sqlite.NewSQLiteRepository("")
+	if err != nil {
+		return err
+	}
+	cli.SetRepository(repo)
 
 	return cli.Execute(ctx)
 }
