@@ -50,7 +50,7 @@ development_status:
   # Epic 2: Project Management & Detection
   epic-2: in-progress
   2-1-sqlite-repository-setup: done
-  2-2-path-resolution-utilities: backlog
+  2-2-path-resolution-utilities: done
   2-3-add-project-command: backlog
   2-4-speckit-detector-implementation: backlog
   2-5-detection-service: backlog

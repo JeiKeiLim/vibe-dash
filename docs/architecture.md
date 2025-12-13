@@ -804,7 +804,8 @@ vibe-dash/
 │   │   │   ├── platform_unix.go      # Linux/macOS implementation
 │   │   │   ├── platform_windows.go   # Windows implementation (post-MVP stub)
 │   │   │   ├── watcher.go            # fsnotify FileWatcher implementation
-│   │   │   └── paths.go              # Path resolution utilities
+│   │   │   ├── paths.go              # Path resolution utilities
+│   │   │   └── paths_test.go         # Path resolution tests
 │   │   │
 │   │   └── detectors/
 │   │       ├── registry.go           # Detector registry - ONLY place that knows all detectors
