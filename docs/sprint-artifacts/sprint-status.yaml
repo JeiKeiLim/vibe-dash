@@ -55,7 +55,7 @@ development_status:
   2-4-speckit-detector-implementation: done
   2-5-detection-service: done
   2-6-project-name-collision-handling: done
-  2-7-list-projects-command: backlog
+  2-7-list-projects-command: done
   2-8-remove-project-command: backlog
   2-9-path-validation-at-launch: backlog
   2-10-golden-path-test-fixtures: backlog
