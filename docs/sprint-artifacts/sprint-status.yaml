@@ -52,7 +52,7 @@ development_status:
   2-1-sqlite-repository-setup: done
   2-2-path-resolution-utilities: done
   2-3-add-project-command: done
-  2-4-speckit-detector-implementation: backlog
+  2-4-speckit-detector-implementation: done
   2-5-detection-service: backlog
   2-6-project-name-collision-handling: backlog
   2-7-list-projects-command: backlog
