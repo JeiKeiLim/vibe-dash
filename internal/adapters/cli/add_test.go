@@ -31,8 +31,9 @@ func (m *MockDetector) DetectMultiple(_ context.Context, _ string) ([]*domain.De
 
 // MockRepository implements ports.ProjectRepository for testing
 type MockRepository struct {
-	projects map[string]*domain.Project
-	saveErr  error
+	projects  map[string]*domain.Project
+	saveErr   error
+	deleteErr error
 }
 
 func NewMockRepository() *MockRepository {
@@ -92,6 +93,9 @@ func (m *MockRepository) FindHibernated(_ context.Context) ([]*domain.Project, e
 }
 
 func (m *MockRepository) Delete(_ context.Context, id string) error {
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
 	for path, p := range m.projects {
 		if p.ID == id {
 			delete(m.projects, path)
