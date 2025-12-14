@@ -58,7 +58,7 @@ development_status:
   2-7-list-projects-command: done
   2-8-remove-project-command: done
   2-9-path-validation-at-launch: done
-  2-10-golden-path-test-fixtures: backlog
+  2-10-golden-path-test-fixtures: done
   epic-2-retrospective: optional
 
   # Epic 3: Dashboard Visualization

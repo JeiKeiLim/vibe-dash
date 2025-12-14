@@ -335,18 +335,30 @@ func TestDetectionAccuracy(t *testing.T) {
 		expectedStage domain.Stage
 		shouldDetect  bool // false for non-speckit fixtures
 	}{
-		// Standard specs/ marker tests
+		// === EXISTING (9 fixtures) ===
 		{"speckit-stage-specify", domain.StageSpecify, true},
 		{"speckit-stage-plan", domain.StagePlan, true},
 		{"speckit-stage-tasks", domain.StageTasks, true},
 		{"speckit-stage-implement", domain.StageImplement, true},
-		{"speckit-uncertain", domain.StageUnknown, true}, // Uncertain is correct for ambiguous
-		// Alternative marker tests (.speckit/, .specify/)
+		{"speckit-uncertain", domain.StageUnknown, true},
 		{"speckit-dotspeckit-marker", domain.StageSpecify, true},
 		{"speckit-dotspecify-marker", domain.StagePlan, true},
-		// Non-speckit fixtures
 		{"no-method-detected", domain.StageUnknown, false},
 		{"empty-project", domain.StageUnknown, false},
+		// === NEW (11 fixtures) ===
+		// Note: nested fixture returns StageUnknown because detector only looks one level deep
+		// (specs/feature-group/ is found, but artifacts are in specs/feature-group/001-feature/)
+		{"speckit-stage-specify-nested", domain.StageUnknown, true},
+		{"speckit-stage-plan-with-drafts", domain.StagePlan, true},
+		{"speckit-stage-tasks-partial", domain.StageTasks, true},
+		{"speckit-stage-implement-complete", domain.StageImplement, true},
+		{"speckit-multiple-features", domain.StagePlan, true},
+		{"speckit-no-spec-subdirs", domain.StageUnknown, true},
+		{"speckit-hidden-files", domain.StageUnknown, true},
+		{"speckit-mixed-markers", domain.StageSpecify, true},
+		{"speckit-empty-spec-dir", domain.StageUnknown, true},
+		{"speckit-non-standard-names", domain.StageSpecify, true},
+		{"speckit-readme-only", domain.StageUnknown, true},
 	}
 
 	d := speckit.NewSpeckitDetector()

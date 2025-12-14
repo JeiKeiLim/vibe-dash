@@ -36,6 +36,7 @@ clean:
 install:
 	CGO_ENABLED=1 go install $(LDFLAGS) ./cmd/vibe
 
-# Placeholder for detection accuracy testing (95% threshold)
+# Detection accuracy testing (95% threshold - launch blocker)
 test-accuracy:
-	@echo "Detection accuracy tests not yet implemented"
+	@echo "Running detection accuracy tests (95% threshold)..."
+	@go test -v -run TestDetectionAccuracy ./internal/adapters/detectors/... 2>&1 | tee /dev/stderr | grep -q "PASS" || (echo "FAILED: Detection accuracy below 95% threshold" && exit 1)
