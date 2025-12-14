@@ -3,13 +3,14 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/project"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/timeformat"
 )
 
 // listJSON holds the --json flag value
@@ -67,7 +68,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Sort alphabetically by effective name
-	sortProjects(projects)
+	project.SortByName(projects)
 
 	if listJSON {
 		return formatJSON(cmd, projects)
@@ -83,57 +84,21 @@ func runList(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// effectiveName returns DisplayName if set, otherwise Name.
-// Used for display and sorting per AC5.
-func effectiveName(p *domain.Project) string {
-	if p.DisplayName != "" {
-		return p.DisplayName
-	}
-	return p.Name
-}
-
-// sortProjects sorts projects alphabetically by effective name (case-insensitive).
-func sortProjects(projects []*domain.Project) {
-	sort.Slice(projects, func(i, j int) bool {
-		nameI := effectiveName(projects[i])
-		nameJ := effectiveName(projects[j])
-		return strings.ToLower(nameI) < strings.ToLower(nameJ)
-	})
-}
-
 // formatPlainText formats projects as a plain text table.
 func formatPlainText(cmd *cobra.Command, projects []*domain.Project) {
 	// Header
 	fmt.Fprintf(cmd.OutOrStdout(), "%-40s %-10s %12s\n", "PROJECT", "STAGE", "LAST ACTIVE")
 
 	for _, p := range projects {
-		name := effectiveName(p)
+		name := project.EffectiveName(p)
 		if len(name) > 40 {
 			name = name[:37] + "..."
 		}
 
 		stage := p.CurrentStage.String()
-		lastActive := formatRelativeTime(p.LastActivityAt)
+		lastActive := timeformat.FormatRelativeTime(p.LastActivityAt)
 
 		fmt.Fprintf(cmd.OutOrStdout(), "%-40s %-10s %12s\n", name, stage, lastActive)
-	}
-}
-
-// formatRelativeTime formats a time as relative (e.g., "5m ago", "2h ago").
-func formatRelativeTime(t time.Time) string {
-	d := time.Since(t)
-
-	switch {
-	case d < time.Minute:
-		return "just now"
-	case d < time.Hour:
-		return fmt.Sprintf("%dm ago", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh ago", int(d.Hours()))
-	case d < 7*24*time.Hour:
-		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
-	default:
-		return fmt.Sprintf("%dw ago", int(d.Hours()/(24*7)))
 	}
 }
 

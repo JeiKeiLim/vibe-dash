@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/filesystem"
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/components"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 )
@@ -29,6 +30,10 @@ type Model struct {
 	invalidProjects   []InvalidProject
 	currentInvalidIdx int
 	validationError   string // Error message to display in validation dialog
+
+	// Project list state (Story 3.1)
+	projects    []*domain.Project
+	projectList components.ProjectListModel
 
 	// Dependencies (injected)
 	repository ports.ProjectRepository
@@ -62,6 +67,12 @@ type keepProjectMsg struct {
 	err       error
 }
 
+// ProjectsLoadedMsg is sent when projects are loaded from the repository.
+type ProjectsLoadedMsg struct {
+	projects []*domain.Project
+	err      error
+}
+
 // NewModel creates a new Model with default values.
 // The repository parameter is used for project persistence operations.
 func NewModel(repo ports.ProjectRepository) Model {
@@ -90,6 +101,15 @@ func (m Model) validatePathsCmd() tea.Cmd {
 	}
 }
 
+// loadProjectsCmd creates a command that loads all projects from the repository.
+func (m Model) loadProjectsCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		projects, err := m.repository.FindAll(ctx)
+		return ProjectsLoadedMsg{projects: projects, err: err}
+	}
+}
+
 // Update implements tea.Model. Handles messages and returns updated model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -115,6 +135,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.height = m.pendingHeight
 			m.ready = true
 			m.hasPendingResize = false
+			// Update project list dimensions
+			if len(m.projects) > 0 {
+				m.projectList.SetSize(m.width, m.height)
+			}
 		}
 		return m, nil
 
@@ -124,8 +148,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewMode = viewModeValidation
 			m.invalidProjects = msg.invalidProjects
 			m.currentInvalidIdx = 0
+			return m, nil
 		}
-		return m, nil
+		// No invalid projects, load projects
+		return m, m.loadProjectsCmd()
 
 	case validationErrorMsg:
 		// Log error and continue to normal view (non-fatal)
@@ -139,7 +165,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.validationError = "" // Clear error on success
-		return m.advanceToNextInvalid(), nil
+		m, cmd := m.advanceToNextInvalid()
+		return m, cmd
 
 	case moveProjectMsg:
 		// Handle async move completion
@@ -148,7 +175,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.validationError = "" // Clear error on success
-		return m.advanceToNextInvalid(), nil
+		m, cmd := m.advanceToNextInvalid()
+		return m, cmd
 
 	case keepProjectMsg:
 		// Handle async keep completion
@@ -157,19 +185,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.validationError = "" // Clear error on success
-		return m.advanceToNextInvalid(), nil
+		m, cmd := m.advanceToNextInvalid()
+		return m, cmd
+
+	case ProjectsLoadedMsg:
+		// Handle project loading result
+		if msg.err != nil {
+			slog.Error("Failed to load projects", "error", msg.err)
+			m.projects = nil
+			return m, nil
+		}
+		m.projects = msg.projects
+		if len(m.projects) > 0 {
+			m.projectList = components.NewProjectListModel(m.projects, m.width, m.height)
+		}
+		return m, nil
 	}
 
 	return m, nil
 }
 
 // advanceToNextInvalid moves to the next invalid project or switches to normal view.
-func (m Model) advanceToNextInvalid() Model {
+// Returns the model and a command to load projects if validation is complete.
+func (m Model) advanceToNextInvalid() (Model, tea.Cmd) {
 	m.currentInvalidIdx++
 	if m.currentInvalidIdx >= len(m.invalidProjects) {
 		m.viewMode = viewModeNormal
+		// Load projects after validation is complete
+		return m, m.loadProjectsCmd()
 	}
-	return m
+	return m, nil
 }
 
 // handleValidationKeyMsg processes keyboard input in validation mode.
@@ -289,6 +334,13 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Forward key messages to project list when in normal mode
+	if len(m.projects) > 0 {
+		var cmd tea.Cmd
+		m.projectList, cmd = m.projectList.Update(msg)
+		return m, cmd
+	}
+
 	return m, nil
 }
 
@@ -308,9 +360,24 @@ func (m Model) View() string {
 		return renderValidationDialog(m.invalidProjects[m.currentInvalidIdx].Project, m.width, m.height, m.validationError)
 	}
 
+	// Render help overlay (overlays everything)
 	if m.showHelp {
 		return renderHelpOverlay(m.width, m.height)
 	}
 
-	return renderEmptyView(m.width, m.height)
+	// Render empty view if no projects (AC6)
+	if len(m.projects) == 0 {
+		return renderEmptyView(m.width, m.height)
+	}
+
+	// Render project list (Story 3.1)
+	return m.renderDashboard()
+}
+
+// renderDashboard renders the main dashboard with project list.
+func (m Model) renderDashboard() string {
+	// For now, just the project list
+	// Story 3.3 adds detail panel
+	// Story 3.4 adds status bar
+	return m.projectList.View()
 }
