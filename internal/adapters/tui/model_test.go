@@ -249,6 +249,9 @@ func TestDefaultKeyBindings(t *testing.T) {
 	if kb.Escape != "esc" {
 		t.Errorf("Expected Escape to be 'esc', got %q", kb.Escape)
 	}
+	if kb.Detail != "d" {
+		t.Errorf("Expected Detail to be 'd', got %q", kb.Detail)
+	}
 }
 
 func TestUseColorLogic(t *testing.T) {
@@ -551,5 +554,213 @@ func TestModel_SelectionPersistence(t *testing.T) {
 	// Selection should persist
 	if m.projectList.Index() != 2 {
 		t.Errorf("Selection should persist after resize at index 2, got %d", m.projectList.Index())
+	}
+}
+
+// ============================================================================
+// Detail Panel Tests (Story 3.3)
+// ============================================================================
+
+func TestModel_DetailPanelToggle(t *testing.T) {
+	m := createModelWithProjects(3)
+	m.showDetailPanel = false
+
+	// Press 'd' to show detail panel
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	if !updated.showDetailPanel {
+		t.Error("Detail panel should be visible after pressing 'd'")
+	}
+	if !updated.detailPanel.IsVisible() {
+		t.Error("Detail panel component should be visible after pressing 'd'")
+	}
+
+	// Toggle again
+	newModel, _ = updated.Update(msg)
+	updated = newModel.(Model)
+
+	if updated.showDetailPanel {
+		t.Error("Detail panel should be hidden after pressing 'd' again")
+	}
+	if updated.detailPanel.IsVisible() {
+		t.Error("Detail panel component should be hidden after pressing 'd' again")
+	}
+}
+
+func TestModel_DetailPanelDefaultState_Height29(t *testing.T) {
+	m := NewModel(nil)
+
+	// Simulate window size with height 29 (< 30)
+	m.hasPendingResize = true
+	m.pendingWidth = 80
+	m.pendingHeight = 29
+
+	newModel, _ := m.Update(resizeTickMsg{})
+	updated := newModel.(Model)
+
+	// Per AC4: height < 30 => panel closed by default
+	if updated.showDetailPanel {
+		t.Error("Detail panel should be closed by default when height < 30")
+	}
+}
+
+func TestModel_DetailPanelDefaultState_Height30(t *testing.T) {
+	m := NewModel(nil)
+
+	// Simulate window size with height 30 (in 30-34 range)
+	m.hasPendingResize = true
+	m.pendingWidth = 80
+	m.pendingHeight = 30
+
+	newModel, _ := m.Update(resizeTickMsg{})
+	updated := newModel.(Model)
+
+	// Per AC6: height 30-34 => panel closed by default
+	if updated.showDetailPanel {
+		t.Error("Detail panel should be closed by default when height is 30")
+	}
+}
+
+func TestModel_DetailPanelDefaultState_Height34(t *testing.T) {
+	m := NewModel(nil)
+
+	// Simulate window size with height 34 (in 30-34 range)
+	m.hasPendingResize = true
+	m.pendingWidth = 80
+	m.pendingHeight = 34
+
+	newModel, _ := m.Update(resizeTickMsg{})
+	updated := newModel.(Model)
+
+	// Per AC6: height 30-34 => panel closed by default
+	if updated.showDetailPanel {
+		t.Error("Detail panel should be closed by default when height is 34")
+	}
+}
+
+func TestModel_DetailPanelDefaultState_Height35(t *testing.T) {
+	m := NewModel(nil)
+
+	// Simulate window size with height 35 (>= 35)
+	m.hasPendingResize = true
+	m.pendingWidth = 80
+	m.pendingHeight = 35
+
+	newModel, _ := m.Update(resizeTickMsg{})
+	updated := newModel.(Model)
+
+	// Per AC5: height >= 35 => panel open by default
+	if !updated.showDetailPanel {
+		t.Error("Detail panel should be open by default when height >= 35")
+	}
+}
+
+func TestModel_DetailPanelDefaultState_Height50(t *testing.T) {
+	m := NewModel(nil)
+
+	// Simulate window size with height 50 (>= 35)
+	m.hasPendingResize = true
+	m.pendingWidth = 80
+	m.pendingHeight = 50
+
+	newModel, _ := m.Update(resizeTickMsg{})
+	updated := newModel.(Model)
+
+	// Per AC5: height >= 35 => panel open by default
+	if !updated.showDetailPanel {
+		t.Error("Detail panel should be open by default when height >= 35")
+	}
+}
+
+func TestModel_DetailPanelUpdateOnSelection(t *testing.T) {
+	m := createModelWithProjects(3)
+	// Initialize detail panel
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.detailPanel.SetProject(m.projectList.SelectedProject())
+
+	// Get initial selected project
+	initial := m.projectList.SelectedProject()
+	if initial == nil {
+		t.Fatal("Initial selected project should not be nil")
+	}
+
+	// Press 'j' to move down
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Selection should have changed
+	if updated.projectList.Index() != 1 {
+		t.Errorf("Selection should move to index 1, got %d", updated.projectList.Index())
+	}
+}
+
+func TestModel_DetailPanelHint_ShortTerminal(t *testing.T) {
+	m := createModelWithProjects(3)
+	m.height = 25 // Less than 30
+	m.showDetailPanel = false
+
+	view := m.renderDashboard()
+
+	// Should contain hint for short terminals
+	if !strings.Contains(view, "Press [d] for details") {
+		t.Error("Short terminal should show 'Press [d] for details' hint")
+	}
+}
+
+func TestModel_DetailPanelHint_NotShownWhenOpen(t *testing.T) {
+	m := createModelWithProjects(3)
+	m.height = 25 // Less than 30
+	m.showDetailPanel = true
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.detailPanel.SetVisible(true)
+	m.detailPanel.SetProject(m.projectList.SelectedProject())
+
+	view := m.renderDashboard()
+
+	// Should NOT contain hint when panel is open
+	if strings.Contains(view, "Press [d] for details") {
+		t.Error("Hint should not be shown when detail panel is open")
+	}
+}
+
+func TestShouldShowDetailPanelByDefault(t *testing.T) {
+	tests := []struct {
+		height   int
+		expected bool
+	}{
+		{25, false}, // < 35
+		{29, false}, // < 35
+		{30, false}, // < 35
+		{34, false}, // < 35
+		{35, true},  // >= 35
+		{40, true},  // >= 35
+		{50, true},  // >= 35
+		{100, true}, // >= 35
+	}
+
+	for _, tt := range tests {
+		result := shouldShowDetailPanelByDefault(tt.height)
+		if result != tt.expected {
+			t.Errorf("shouldShowDetailPanelByDefault(%d) = %v, want %v", tt.height, result, tt.expected)
+		}
+	}
+}
+
+func TestModel_DetailPanelSplitLayout(t *testing.T) {
+	m := createModelWithProjects(3)
+	m.height = 40 // Tall enough to show panel
+	m.showDetailPanel = true
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.detailPanel.SetVisible(true)
+	m.detailPanel.SetProject(m.projectList.SelectedProject())
+
+	view := m.renderDashboard()
+
+	// Split layout should include detail panel with DETAILS: title
+	if !strings.Contains(view, "DETAILS:") {
+		t.Error("Split layout should include detail panel with 'DETAILS:' title")
 	}
 }

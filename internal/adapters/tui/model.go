@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/filesystem"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/components"
@@ -34,6 +35,10 @@ type Model struct {
 	// Project list state (Story 3.1)
 	projects    []*domain.Project
 	projectList components.ProjectListModel
+
+	// Detail panel state (Story 3.3)
+	showDetailPanel bool
+	detailPanel     components.DetailPanelModel
 
 	// Dependencies (injected)
 	repository ports.ProjectRepository
@@ -77,11 +82,18 @@ type ProjectsLoadedMsg struct {
 // The repository parameter is used for project persistence operations.
 func NewModel(repo ports.ProjectRepository) Model {
 	return Model{
-		ready:      false,
-		showHelp:   false,
-		viewMode:   viewModeNormal,
-		repository: repo,
+		ready:           false,
+		showHelp:        false,
+		showDetailPanel: false, // Default closed, set based on height in resizeTickMsg
+		viewMode:        viewModeNormal,
+		repository:      repo,
 	}
+}
+
+// shouldShowDetailPanelByDefault returns true if detail panel should be open by default
+// based on terminal height. Per AC5: >= 35 rows = open, otherwise closed.
+func shouldShowDetailPanelByDefault(height int) bool {
+	return height >= 35
 }
 
 // Init implements tea.Model. Returns a command to validate project paths.
@@ -131,13 +143,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case resizeTickMsg:
 		if m.hasPendingResize {
+			wasReady := m.ready
 			m.width = m.pendingWidth
 			m.height = m.pendingHeight
 			m.ready = true
 			m.hasPendingResize = false
-			// Update project list dimensions
+
+			// Set initial detail panel visibility only on first ready (AC4, AC5, AC6)
+			if !wasReady {
+				m.showDetailPanel = shouldShowDetailPanelByDefault(m.height)
+				m.detailPanel.SetVisible(m.showDetailPanel)
+			}
+
+			// Update component dimensions
 			if len(m.projects) > 0 {
 				m.projectList.SetSize(m.width, m.height)
+				m.detailPanel.SetSize(m.width, m.height)
 			}
 		}
 		return m, nil
@@ -198,6 +219,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.projects = msg.projects
 		if len(m.projects) > 0 {
 			m.projectList = components.NewProjectListModel(m.projects, m.width, m.height)
+			// Initialize detail panel with selected project
+			m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+			m.detailPanel.SetProject(m.projectList.SelectedProject())
+			m.detailPanel.SetVisible(m.showDetailPanel)
 		}
 		return m, nil
 	}
@@ -335,12 +360,18 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case KeyEscape:
 		// No-op in normal mode - future stories (3.7, 3.9) will add prompt cancellation
 		return m, nil
+	case KeyDetail:
+		m.showDetailPanel = !m.showDetailPanel
+		m.detailPanel.SetVisible(m.showDetailPanel)
+		return m, nil
 	}
 
 	// Forward key messages to project list when in normal mode
 	if len(m.projects) > 0 {
 		var cmd tea.Cmd
 		m.projectList, cmd = m.projectList.Update(msg)
+		// Update detail panel with current selection (may have changed)
+		m.detailPanel.SetProject(m.projectList.SelectedProject())
 		return m, cmd
 	}
 
@@ -377,10 +408,33 @@ func (m Model) View() string {
 	return m.renderDashboard()
 }
 
-// renderDashboard renders the main dashboard with project list.
+// renderDashboard renders the main dashboard with project list and optional detail panel.
 func (m Model) renderDashboard() string {
-	// For now, just the project list
-	// Story 3.3 adds detail panel
-	// Story 3.4 adds status bar
-	return m.projectList.View()
+	// Handle height < 30 case - show hint when panel closed (AC4)
+	if m.height < 30 && !m.showDetailPanel {
+		hint := DimStyle.Render("Press [d] for details")
+		return m.projectList.View() + "\n" + hint
+	}
+
+	// Full-width project list when detail panel is hidden
+	if !m.showDetailPanel {
+		return m.projectList.View()
+	}
+
+	// Split layout: list (60%) | detail (40%)
+	listWidth := int(float64(m.width) * 0.6)
+	detailWidth := m.width - listWidth - 1 // -1 for separator space
+
+	// Create copies with updated sizes for this render
+	projectList := m.projectList
+	projectList.SetSize(listWidth, m.height)
+
+	detailPanel := m.detailPanel
+	detailPanel.SetSize(detailWidth, m.height)
+
+	// Render side by side
+	listView := projectList.View()
+	detailView := detailPanel.View()
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, listView, detailView)
 }

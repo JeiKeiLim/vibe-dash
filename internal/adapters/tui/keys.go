@@ -7,6 +7,7 @@ const (
 	KeyForceQuit = "ctrl+c"
 	KeyHelp      = "?"
 	KeyEscape    = "esc"
+	KeyDetail    = "d"
 )
 
 // KeyBindings holds the current key bindings for the TUI.
@@ -16,6 +17,7 @@ type KeyBindings struct {
 	ForceQuit string
 	Help      string
 	Escape    string
+	Detail    string
 }
 
 // DefaultKeyBindings returns the default key bindings.
@@ -25,5 +27,6 @@ func DefaultKeyBindings() KeyBindings {
 		ForceQuit: KeyForceQuit,
 		Help:      KeyHelp,
 		Escape:    KeyEscape,
+		Detail:    KeyDetail,
 	}
 }

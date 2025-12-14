@@ -10,19 +10,21 @@ import (
 
 // Project represents a development project being tracked
 type Project struct {
-	ID             string       // Unique identifier (path hash, 16 hex chars)
-	Name           string       // Derived from directory name
-	Path           string       // Canonical absolute path
-	DisplayName    string       // Optional user-set nickname (FR5)
-	DetectedMethod string       // "speckit", "bmad", "unknown"
-	CurrentStage   Stage        // Current workflow stage
-	IsFavorite     bool         // Always visible regardless of activity (FR30)
-	State          ProjectState // Active or Hibernated (FR28-33)
-	Notes          string       // User notes/memo (FR21)
-	PathMissing    bool         // True if path was inaccessible at launch (FR-validation)
-	LastActivityAt time.Time    // Last file change detected (FR34-38)
-	CreatedAt      time.Time    // When project was added
-	UpdatedAt      time.Time    // Last database update
+	ID                 string       // Unique identifier (path hash, 16 hex chars)
+	Name               string       // Derived from directory name
+	Path               string       // Canonical absolute path
+	DisplayName        string       // Optional user-set nickname (FR5)
+	DetectedMethod     string       // "speckit", "bmad", "unknown"
+	CurrentStage       Stage        // Current workflow stage
+	Confidence         Confidence   // Detection confidence level (FR12)
+	DetectionReasoning string       // Human-readable detection explanation (FR11, FR26)
+	IsFavorite         bool         // Always visible regardless of activity (FR30)
+	State              ProjectState // Active or Hibernated (FR28-33)
+	Notes              string       // User notes/memo (FR21)
+	PathMissing        bool         // True if path was inaccessible at launch (FR-validation)
+	LastActivityAt     time.Time    // Last file change detected (FR34-38)
+	CreatedAt          time.Time    // When project was added
+	UpdatedAt          time.Time    // Last database update
 }
 
 // GenerateID creates a deterministic ID from canonical path

@@ -71,7 +71,7 @@ development_status:
   epic-3: in-progress
   3-1-project-list-component: done
   3-2-keyboard-navigation: done
-  3-3-detail-panel-component: backlog
+  3-3-detail-panel-component: done
   3-4-status-bar-component: backlog
   3-5-help-overlay: backlog
   3-6-manual-refresh: backlog

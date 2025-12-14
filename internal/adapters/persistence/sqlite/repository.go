@@ -118,8 +118,8 @@ func (r *SQLiteRepository) Save(ctx context.Context, project *domain.Project) er
 		nullString(project.DisplayName),
 		nullString(project.DetectedMethod),
 		project.CurrentStage.String(),
-		"", // confidence - populated by detection service (Story 2.4)
-		"", // detection_reasoning - populated by detection service (Story 2.4)
+		nullString(project.Confidence.String()),
+		nullString(project.DetectionReasoning),
 		boolToInt(project.IsFavorite),
 		stateToString(project.State),
 		nullString(project.Notes),
@@ -310,8 +310,8 @@ type projectRow struct {
 	DisplayName        sql.NullString `db:"display_name"`
 	DetectedMethod     sql.NullString `db:"detected_method"`
 	CurrentStage       string         `db:"current_stage"`
-	Confidence         sql.NullString `db:"confidence"`          // Read but not mapped to Project
-	DetectionReasoning sql.NullString `db:"detection_reasoning"` // Read but not mapped to Project
+	Confidence         sql.NullString `db:"confidence"`
+	DetectionReasoning sql.NullString `db:"detection_reasoning"`
 	IsFavorite         int            `db:"is_favorite"`
 	State              string         `db:"state"`
 	Notes              sql.NullString `db:"notes"`
@@ -340,23 +340,25 @@ func rowToProject(row *projectRow) (*domain.Project, error) {
 	// Parse enums (use zero value on error)
 	stage, _ := domain.ParseStage(row.CurrentStage)
 	state, _ := domain.ParseProjectState(row.State)
+	confidence, _ := domain.ParseConfidence(row.Confidence.String)
 
 	return &domain.Project{
-		ID:             row.ID,
-		Name:           row.Name,
-		Path:           row.Path,
-		DisplayName:    row.DisplayName.String,
-		DetectedMethod: row.DetectedMethod.String,
-		CurrentStage:   stage,
-		IsFavorite:     row.IsFavorite == 1,
-		State:          state,
-		Notes:          row.Notes.String,
-		PathMissing:    row.PathMissing == 1,
-		LastActivityAt: lastActivity,
-		CreatedAt:      created,
-		UpdatedAt:      updated,
+		ID:                 row.ID,
+		Name:               row.Name,
+		Path:               row.Path,
+		DisplayName:        row.DisplayName.String,
+		DetectedMethod:     row.DetectedMethod.String,
+		CurrentStage:       stage,
+		Confidence:         confidence,
+		DetectionReasoning: row.DetectionReasoning.String,
+		IsFavorite:         row.IsFavorite == 1,
+		State:              state,
+		Notes:              row.Notes.String,
+		PathMissing:        row.PathMissing == 1,
+		LastActivityAt:     lastActivity,
+		CreatedAt:          created,
+		UpdatedAt:          updated,
 	}, nil
-	// Note: Confidence and DetectionReasoning are NOT mapped - they belong to DetectionResult
 }
 
 // nullString converts a string to sql.NullString, treating empty strings as NULL
