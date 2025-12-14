@@ -25,6 +25,11 @@ var migrations = []Migration{
 			CreateIndexPathSQL + "\n" +
 			CreateIndexStateSQL,
 	},
+	{
+		Version:     2,
+		Description: "Add path_missing column to projects",
+		SQL:         "ALTER TABLE projects ADD COLUMN path_missing INTEGER DEFAULT 0;",
+	},
 }
 
 // RunMigrations applies all pending migrations to the database

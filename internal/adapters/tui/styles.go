@@ -65,6 +65,11 @@ var UncertainStyle = lipgloss.NewStyle().
 var FavoriteStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("5")) // Magenta
 
+// WarningStyle is used for warning indicators (e.g., missing path).
+var WarningStyle = lipgloss.NewStyle().
+	Bold(true).
+	Foreground(lipgloss.Color("3")) // Yellow
+
 // DimStyle is used for hints, secondary info, and less important text.
 // Note: Functionally similar to hintStyle but with different semantic purpose.
 // hintStyle is for help text overlays, DimStyle is for general dimming.
@@ -87,7 +92,7 @@ func ApplySelected(text string) string {
 }
 
 // ApplyIndicator applies the appropriate style to text based on indicator type.
-// Supported types: "waiting", "recent", "active", "uncertain", "favorite", "dim".
+// Supported types: "waiting", "recent", "active", "uncertain", "favorite", "dim", "warning".
 func ApplyIndicator(indicatorType string, text string) string {
 	switch indicatorType {
 	case "waiting":
@@ -102,6 +107,8 @@ func ApplyIndicator(indicatorType string, text string) string {
 		return FavoriteStyle.Render(text)
 	case "dim":
 		return DimStyle.Render(text)
+	case "warning":
+		return WarningStyle.Render(text)
 	default:
 		return text
 	}

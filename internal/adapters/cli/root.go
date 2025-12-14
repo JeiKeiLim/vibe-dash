@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence/sqlite"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui"
 )
 
@@ -22,7 +23,14 @@ Run 'vibe' with no arguments to launch the interactive dashboard.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		slog.Info("vibe-dash starting")
 
-		if err := tui.Run(cmd.Context()); err != nil {
+		// Initialize repository for path validation at launch
+		repo, err := sqlite.NewSQLiteRepository("")
+		if err != nil {
+			slog.Error("Failed to initialize repository", "error", err)
+			return
+		}
+
+		if err := tui.Run(cmd.Context(), repo); err != nil {
 			slog.Error("TUI error", "error", err)
 		}
 	},

@@ -19,6 +19,7 @@ type Project struct {
 	IsFavorite     bool         // Always visible regardless of activity (FR30)
 	State          ProjectState // Active or Hibernated (FR28-33)
 	Notes          string       // User notes/memo (FR21)
+	PathMissing    bool         // True if path was inaccessible at launch (FR-validation)
 	LastActivityAt time.Time    // Last file change detected (FR34-38)
 	CreatedAt      time.Time    // When project was added
 	UpdatedAt      time.Time    // Last database update

@@ -5,10 +5,12 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 )
 
 func TestNewModel(t *testing.T) {
-	m := NewModel()
+	m := NewModel(nil)
 
 	if m.ready {
 		t.Error("NewModel().ready should be false")
@@ -22,19 +24,23 @@ func TestNewModel(t *testing.T) {
 	if m.height != 0 {
 		t.Errorf("NewModel().height should be 0, got %d", m.height)
 	}
+	if m.viewMode != viewModeNormal {
+		t.Error("NewModel().viewMode should be viewModeNormal")
+	}
 }
 
 func TestModel_Init(t *testing.T) {
-	m := NewModel()
+	m := NewModel(nil)
 	cmd := m.Init()
 
-	if cmd != nil {
-		t.Error("Init() should return nil")
+	// Init now returns a validation command (even with nil repo)
+	if cmd == nil {
+		t.Error("Init() should return a validation command")
 	}
 }
 
 func TestModel_Update_QuitKey(t *testing.T) {
-	m := NewModel()
+	m := NewModel(nil)
 	m.ready = true
 
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
@@ -47,7 +53,7 @@ func TestModel_Update_QuitKey(t *testing.T) {
 }
 
 func TestModel_Update_CtrlC(t *testing.T) {
-	m := NewModel()
+	m := NewModel(nil)
 	m.ready = true
 
 	msg := tea.KeyMsg{Type: tea.KeyCtrlC}
@@ -59,7 +65,7 @@ func TestModel_Update_CtrlC(t *testing.T) {
 }
 
 func TestModel_Update_HelpToggle(t *testing.T) {
-	m := NewModel()
+	m := NewModel(nil)
 	m.ready = true
 
 	// Press '?' to show help
@@ -81,7 +87,7 @@ func TestModel_Update_HelpToggle(t *testing.T) {
 }
 
 func TestModel_Update_HelpCloseOnAnyKey(t *testing.T) {
-	m := NewModel()
+	m := NewModel(nil)
 	m.ready = true
 	m.showHelp = true // Help is showing
 
@@ -96,7 +102,7 @@ func TestModel_Update_HelpCloseOnAnyKey(t *testing.T) {
 }
 
 func TestModel_Update_WindowSize(t *testing.T) {
-	m := NewModel()
+	m := NewModel(nil)
 
 	// Send WindowSizeMsg
 	msg := tea.WindowSizeMsg{Width: 80, Height: 24}
@@ -132,7 +138,7 @@ func TestModel_Update_WindowSize(t *testing.T) {
 func TestModel_Update_ResizeTickWithNoPending(t *testing.T) {
 	// Edge case: resizeTickMsg arrives when no resize is pending
 	// This can happen with rapid resize events causing multiple ticks
-	m := NewModel()
+	m := NewModel(nil)
 	m.ready = true
 	m.width = 80
 	m.height = 24
@@ -153,7 +159,7 @@ func TestModel_Update_ResizeTickWithNoPending(t *testing.T) {
 }
 
 func TestModel_View_NotReady(t *testing.T) {
-	m := NewModel()
+	m := NewModel(nil)
 	m.ready = false
 
 	view := m.View()
@@ -164,7 +170,7 @@ func TestModel_View_NotReady(t *testing.T) {
 }
 
 func TestModel_View_TooSmall(t *testing.T) {
-	m := NewModel()
+	m := NewModel(nil)
 	m.ready = true
 	m.width = 50  // Less than MinWidth (60)
 	m.height = 15 // Less than MinHeight (20)
@@ -180,7 +186,7 @@ func TestModel_View_TooSmall(t *testing.T) {
 }
 
 func TestModel_View_EmptyView(t *testing.T) {
-	m := NewModel()
+	m := NewModel(nil)
 	m.ready = true
 	m.width = 80
 	m.height = 24
@@ -204,7 +210,7 @@ func TestModel_View_EmptyView(t *testing.T) {
 }
 
 func TestModel_View_HelpOverlay(t *testing.T) {
-	m := NewModel()
+	m := NewModel(nil)
 	m.ready = true
 	m.width = 80
 	m.height = 24
@@ -274,5 +280,69 @@ func TestMinDimensions(t *testing.T) {
 	}
 	if MinHeight != 20 {
 		t.Errorf("MinHeight should be 20, got %d", MinHeight)
+	}
+}
+
+func TestModel_View_ValidationMode(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 24
+	m.viewMode = viewModeValidation
+	m.invalidProjects = []InvalidProject{
+		{
+			Project: &domain.Project{
+				Name: "test-invalid-project",
+				Path: "/nonexistent/path/to/project",
+			},
+			Error: domain.ErrPathNotAccessible,
+		},
+	}
+	m.currentInvalidIdx = 0
+
+	view := m.View()
+
+	// Check for expected validation dialog content
+	expectedStrings := []string{
+		"Warning",
+		"test-invalid-project",
+		"/nonexistent/path/to/project",
+		"[D] Delete",
+		"[M] Move",
+		"[K] Keep",
+	}
+
+	for _, s := range expectedStrings {
+		if !strings.Contains(view, s) {
+			t.Errorf("Validation dialog missing: %q", s)
+		}
+	}
+}
+
+func TestModel_View_ValidationModeWithError(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 24
+	m.viewMode = viewModeValidation
+	m.invalidProjects = []InvalidProject{
+		{
+			Project: &domain.Project{
+				Name: "test-project",
+				Path: "/some/path",
+			},
+		},
+	}
+	m.currentInvalidIdx = 0
+	m.validationError = "operation failed"
+
+	view := m.View()
+
+	// Check that error is displayed
+	if !strings.Contains(view, "Error:") {
+		t.Error("Validation dialog should display error message")
+	}
+	if !strings.Contains(view, "operation failed") {
+		t.Error("Validation dialog should contain error text")
 	}
 }

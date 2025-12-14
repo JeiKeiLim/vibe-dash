@@ -57,7 +57,7 @@ development_status:
   2-6-project-name-collision-handling: done
   2-7-list-projects-command: done
   2-8-remove-project-command: done
-  2-9-path-validation-at-launch: backlog
+  2-9-path-validation-at-launch: done
   2-10-golden-path-test-fixtures: backlog
   epic-2-retrospective: optional
 

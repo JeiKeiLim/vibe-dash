@@ -123,6 +123,7 @@ func (r *SQLiteRepository) Save(ctx context.Context, project *domain.Project) er
 		boolToInt(project.IsFavorite),
 		stateToString(project.State),
 		nullString(project.Notes),
+		boolToInt(project.PathMissing),
 		project.LastActivityAt.Format(time.RFC3339Nano),
 		project.CreatedAt.Format(time.RFC3339Nano),
 		project.UpdatedAt.Format(time.RFC3339Nano),
@@ -314,6 +315,7 @@ type projectRow struct {
 	IsFavorite         int            `db:"is_favorite"`
 	State              string         `db:"state"`
 	Notes              sql.NullString `db:"notes"`
+	PathMissing        int            `db:"path_missing"`
 	LastActivityAt     string         `db:"last_activity_at"`
 	CreatedAt          string         `db:"created_at"`
 	UpdatedAt          string         `db:"updated_at"`
@@ -349,6 +351,7 @@ func rowToProject(row *projectRow) (*domain.Project, error) {
 		IsFavorite:     row.IsFavorite == 1,
 		State:          state,
 		Notes:          row.Notes.String,
+		PathMissing:    row.PathMissing == 1,
 		LastActivityAt: lastActivity,
 		CreatedAt:      created,
 		UpdatedAt:      updated,

@@ -2,13 +2,13 @@ package sqlite
 
 // projectColumns lists all columns for SELECT queries (DRY)
 const projectColumns = `id, name, path, display_name, detected_method, current_stage,
-       confidence, detection_reasoning, is_favorite, state, notes,
+       confidence, detection_reasoning, is_favorite, state, notes, path_missing,
        last_activity_at, created_at, updated_at`
 
 // insertOrReplaceProjectSQL upserts a project by ID
 const insertOrReplaceProjectSQL = `
 INSERT OR REPLACE INTO projects (` + projectColumns + `)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 // selectByIDSQL retrieves a project by its unique identifier
 const selectByIDSQL = `SELECT ` + projectColumns + ` FROM projects WHERE id = ?`
