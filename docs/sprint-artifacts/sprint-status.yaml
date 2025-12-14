@@ -1,5 +1,5 @@
 # generated: 2025-12-12
-# updated: 2025-12-15
+# updated: 2025-12-14
 # project: bmad-test
 # project_key: vibe-dash
 # tracking_system: file-system
@@ -70,7 +70,7 @@ development_status:
   # Epic 3: Dashboard Visualization
   epic-3: in-progress
   3-1-project-list-component: done
-  3-2-keyboard-navigation: backlog
+  3-2-keyboard-navigation: done
   3-3-detail-panel-component: backlog
   3-4-status-bar-component: backlog
   3-5-help-overlay: backlog

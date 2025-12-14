@@ -332,6 +332,9 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case KeyHelp:
 		m.showHelp = !m.showHelp
 		return m, nil
+	case KeyEscape:
+		// No-op in normal mode - future stories (3.7, 3.9) will add prompt cancellation
+		return m, nil
 	}
 
 	// Forward key messages to project list when in normal mode

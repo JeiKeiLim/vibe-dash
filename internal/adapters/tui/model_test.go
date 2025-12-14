@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/components"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 )
 
@@ -245,6 +246,9 @@ func TestDefaultKeyBindings(t *testing.T) {
 	if kb.Help != "?" {
 		t.Errorf("Expected Help to be '?', got %q", kb.Help)
 	}
+	if kb.Escape != "esc" {
+		t.Errorf("Expected Escape to be 'esc', got %q", kb.Escape)
+	}
 }
 
 func TestUseColorLogic(t *testing.T) {
@@ -344,5 +348,208 @@ func TestModel_View_ValidationModeWithError(t *testing.T) {
 	}
 	if !strings.Contains(view, "operation failed") {
 		t.Error("Validation dialog should contain error text")
+	}
+}
+
+// createModelWithProjects creates a test model with multiple projects for navigation tests.
+func createModelWithProjects(count int) Model {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 24
+
+	// Create test projects
+	projects := make([]*domain.Project, count)
+	for i := 0; i < count; i++ {
+		projects[i] = &domain.Project{
+			ID:   string(rune('a' + i)),
+			Name: string(rune('a' + i)),
+			Path: "/path/" + string(rune('a'+i)),
+		}
+	}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, m.width, m.height)
+	return m
+}
+
+func TestModel_Navigation_JMovesDown(t *testing.T) {
+	m := createModelWithProjects(3)
+
+	// Initial selection should be 0
+	if m.projectList.Index() != 0 {
+		t.Errorf("Initial selection should be 0, got %d", m.projectList.Index())
+	}
+
+	// Press j to move down
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	if updated.projectList.Index() != 1 {
+		t.Errorf("After 'j', selection should be 1, got %d", updated.projectList.Index())
+	}
+}
+
+func TestModel_Navigation_KMovesUp(t *testing.T) {
+	m := createModelWithProjects(3)
+
+	// Move to second item first
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	if updated.projectList.Index() != 1 {
+		t.Errorf("After 'j', selection should be 1, got %d", updated.projectList.Index())
+	}
+
+	// Press k to move up
+	msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}
+	newModel, _ = updated.Update(msg)
+	updated = newModel.(Model)
+
+	if updated.projectList.Index() != 0 {
+		t.Errorf("After 'k', selection should be 0, got %d", updated.projectList.Index())
+	}
+}
+
+func TestModel_Navigation_ArrowDownMovesDown(t *testing.T) {
+	m := createModelWithProjects(3)
+
+	// Initial selection should be 0
+	if m.projectList.Index() != 0 {
+		t.Errorf("Initial selection should be 0, got %d", m.projectList.Index())
+	}
+
+	// Press down arrow to move down
+	msg := tea.KeyMsg{Type: tea.KeyDown}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	if updated.projectList.Index() != 1 {
+		t.Errorf("After down arrow, selection should be 1, got %d", updated.projectList.Index())
+	}
+}
+
+func TestModel_Navigation_ArrowUpMovesUp(t *testing.T) {
+	m := createModelWithProjects(3)
+
+	// Move to second item first using down arrow
+	msg := tea.KeyMsg{Type: tea.KeyDown}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	if updated.projectList.Index() != 1 {
+		t.Errorf("After down arrow, selection should be 1, got %d", updated.projectList.Index())
+	}
+
+	// Press up arrow to move up
+	msg = tea.KeyMsg{Type: tea.KeyUp}
+	newModel, _ = updated.Update(msg)
+	updated = newModel.(Model)
+
+	if updated.projectList.Index() != 0 {
+		t.Errorf("After up arrow, selection should be 0, got %d", updated.projectList.Index())
+	}
+}
+
+func TestModel_Navigation_BoundaryBehavior(t *testing.T) {
+	m := createModelWithProjects(3)
+
+	// Test at first item: pressing 'k' should stay at first (no wrap)
+	if m.projectList.Index() != 0 {
+		t.Errorf("Initial selection should be 0, got %d", m.projectList.Index())
+	}
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	if updated.projectList.Index() != 0 {
+		t.Errorf("At first item, 'k' should stay at 0, got %d", updated.projectList.Index())
+	}
+
+	// Move to last item
+	for i := 0; i < 2; i++ {
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+		newModel, _ = updated.Update(msg)
+		updated = newModel.(Model)
+	}
+
+	if updated.projectList.Index() != 2 {
+		t.Errorf("After moving to last, selection should be 2, got %d", updated.projectList.Index())
+	}
+
+	// Test at last item: pressing 'j' should stay at last (no wrap)
+	msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	newModel, _ = updated.Update(msg)
+	updated = newModel.(Model)
+
+	if updated.projectList.Index() != 2 {
+		t.Errorf("At last item, 'j' should stay at 2, got %d", updated.projectList.Index())
+	}
+}
+
+func TestModel_Escape_NormalMode(t *testing.T) {
+	m := createModelWithProjects(3)
+
+	// Press Esc in normal mode - should be no-op (return nil cmd)
+	msg := tea.KeyMsg{Type: tea.KeyEscape}
+	newModel, cmd := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Model state should be unchanged
+	if updated.showHelp {
+		t.Error("Esc should not toggle help")
+	}
+	if updated.projectList.Index() != m.projectList.Index() {
+		t.Error("Esc should not change selection")
+	}
+	// Cmd should be nil (no-op)
+	if cmd != nil {
+		t.Error("Esc in normal mode should return nil command")
+	}
+}
+
+func TestModel_Escape_WhileHelpShowing(t *testing.T) {
+	m := createModelWithProjects(3)
+	m.showHelp = true // Help is showing
+
+	// Press Esc to close help
+	msg := tea.KeyMsg{Type: tea.KeyEscape}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Help should be closed (any key closes help, including Esc)
+	if updated.showHelp {
+		t.Error("Esc should close help overlay")
+	}
+}
+
+func TestModel_SelectionPersistence(t *testing.T) {
+	m := createModelWithProjects(5)
+
+	// Move to third item
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	for i := 0; i < 2; i++ {
+		newModel, _ := m.Update(msg)
+		m = newModel.(Model)
+	}
+
+	if m.projectList.Index() != 2 {
+		t.Errorf("Selection should be at index 2, got %d", m.projectList.Index())
+	}
+
+	// Simulate window resize (which might affect state)
+	sizeMsg := tea.WindowSizeMsg{Width: 100, Height: 30}
+	newModel, _ := m.Update(sizeMsg)
+	m = newModel.(Model)
+
+	// Process resize tick
+	newModel, _ = m.Update(resizeTickMsg{})
+	m = newModel.(Model)
+
+	// Selection should persist
+	if m.projectList.Index() != 2 {
+		t.Errorf("Selection should persist after resize at index 2, got %d", m.projectList.Index())
 	}
 }
