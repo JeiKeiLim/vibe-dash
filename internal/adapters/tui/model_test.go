@@ -210,6 +210,29 @@ func TestModel_View_EmptyView(t *testing.T) {
 	}
 }
 
+func TestModel_View_EmptyViewWithStatusBar(t *testing.T) {
+	// AC2: Status bar should always be visible, even in empty view
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 24
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	view := m.View()
+
+	// Status bar should be present in empty view (AC2)
+	if !strings.Contains(view, "active") {
+		t.Error("Empty view should include status bar with 'active' count")
+	}
+	if !strings.Contains(view, "hibernated") {
+		t.Error("Empty view should include status bar with 'hibernated' count")
+	}
+	// Should have shortcuts line
+	if !strings.Contains(view, "[j/k]") {
+		t.Error("Empty view should include status bar shortcuts")
+	}
+}
+
 func TestModel_View_HelpOverlay(t *testing.T) {
 	m := NewModel(nil)
 	m.ready = true
@@ -762,5 +785,97 @@ func TestModel_DetailPanelSplitLayout(t *testing.T) {
 	// Split layout should include detail panel with DETAILS: title
 	if !strings.Contains(view, "DETAILS:") {
 		t.Error("Split layout should include detail panel with 'DETAILS:' title")
+	}
+}
+
+// ============================================================================
+// Status Bar Tests (Story 3.4)
+// ============================================================================
+
+func TestModel_StatusBarIntegration(t *testing.T) {
+	m := createModelWithProjects(3)
+	m.statusBar = components.NewStatusBarModel(m.width)
+	active, hibernated, waiting := components.CalculateCounts(m.projects)
+	m.statusBar.SetCounts(active, hibernated, waiting)
+
+	view := m.renderDashboard()
+
+	// Status bar should be part of dashboard
+	if !strings.Contains(view, "active") {
+		t.Error("Dashboard should include status bar with 'active' count")
+	}
+	if !strings.Contains(view, "hibernated") {
+		t.Error("Dashboard should include status bar with 'hibernated' count")
+	}
+}
+
+func TestModel_StatusBarCountsUpdate(t *testing.T) {
+	// Create projects with mixed states
+	projects := []*domain.Project{
+		{ID: "a", Name: "a", Path: "/a", State: domain.StateActive},
+		{ID: "b", Name: "b", Path: "/b", State: domain.StateActive},
+		{ID: "c", Name: "c", Path: "/c", State: domain.StateHibernated},
+	}
+
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	// Simulate ProjectsLoadedMsg
+	msg := ProjectsLoadedMsg{projects: projects}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Check counts were updated
+	view := updated.statusBar.View()
+	if !strings.Contains(view, "2 active") {
+		t.Errorf("Status bar should show '2 active', got: %s", view)
+	}
+	if !strings.Contains(view, "1 hibernated") {
+		t.Errorf("Status bar should show '1 hibernated', got: %s", view)
+	}
+}
+
+func TestModel_StatusBarHeightReservation(t *testing.T) {
+	m := createModelWithProjects(3)
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(m.width)
+	active, hibernated, waiting := components.CalculateCounts(m.projects)
+	m.statusBar.SetCounts(active, hibernated, waiting)
+
+	view := m.renderDashboard()
+	lines := strings.Split(view, "\n")
+
+	// Dashboard should have content area + 2 lines for status bar
+	// The last 2 lines should be the status bar
+	if len(lines) < 2 {
+		t.Errorf("Dashboard should have at least 2 lines for status bar, got %d lines", len(lines))
+	}
+
+	// Last line should be shortcuts line (contains navigation keys)
+	lastLine := lines[len(lines)-1]
+	if !strings.Contains(lastLine, "[j/k]") && !strings.Contains(lastLine, "[q]") {
+		t.Errorf("Last line should be shortcuts, got: %s", lastLine)
+	}
+}
+
+func TestModel_StatusBarWidthUpdate(t *testing.T) {
+	m := NewModel(nil)
+	m.statusBar = components.NewStatusBarModel(100) // Initial wide
+
+	// Simulate resize to narrow
+	m.hasPendingResize = true
+	m.pendingWidth = 60
+	m.pendingHeight = 40
+
+	newModel, _ := m.Update(resizeTickMsg{})
+	updated := newModel.(Model)
+
+	// Status bar should show abbreviated shortcuts at width < 80
+	view := updated.statusBar.View()
+	if strings.Contains(view, "[d] details") {
+		t.Error("Status bar should use abbreviated shortcuts at width 60")
 	}
 }

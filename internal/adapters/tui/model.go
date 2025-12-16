@@ -40,6 +40,9 @@ type Model struct {
 	showDetailPanel bool
 	detailPanel     components.DetailPanelModel
 
+	// Status bar state (Story 3.4)
+	statusBar components.StatusBarModel
+
 	// Dependencies (injected)
 	repository ports.ProjectRepository
 }
@@ -87,6 +90,7 @@ func NewModel(repo ports.ProjectRepository) Model {
 		showDetailPanel: false, // Default closed, set based on height in resizeTickMsg
 		viewMode:        viewModeNormal,
 		repository:      repo,
+		statusBar:       components.NewStatusBarModel(0), // Width set in resizeTickMsg
 	}
 }
 
@@ -155,10 +159,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.detailPanel.SetVisible(m.showDetailPanel)
 			}
 
-			// Update component dimensions
+			// Update status bar width (Story 3.4)
+			m.statusBar.SetWidth(m.width)
+
+			// Update component dimensions with adjusted height (subtract 2 for status bar)
 			if len(m.projects) > 0 {
-				m.projectList.SetSize(m.width, m.height)
-				m.detailPanel.SetSize(m.width, m.height)
+				contentHeight := m.height - 2 // Reserve 2 lines for status bar
+				m.projectList.SetSize(m.width, contentHeight)
+				m.detailPanel.SetSize(m.width, contentHeight)
 			}
 		}
 		return m, nil
@@ -218,11 +226,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.projects = msg.projects
 		if len(m.projects) > 0 {
-			m.projectList = components.NewProjectListModel(m.projects, m.width, m.height)
+			contentHeight := m.height - 2 // Reserve 2 lines for status bar
+			m.projectList = components.NewProjectListModel(m.projects, m.width, contentHeight)
 			// Initialize detail panel with selected project
-			m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+			m.detailPanel = components.NewDetailPanelModel(m.width, contentHeight)
 			m.detailPanel.SetProject(m.projectList.SelectedProject())
 			m.detailPanel.SetVisible(m.showDetailPanel)
+
+			// Update status bar counts (Story 3.4)
+			active, hibernated, waiting := components.CalculateCounts(m.projects)
+			m.statusBar.SetCounts(active, hibernated, waiting)
 		}
 		return m, nil
 	}
@@ -400,18 +413,31 @@ func (m Model) View() string {
 	}
 
 	// Render empty view if no projects (AC6)
+	// Status bar is always visible per AC2, even in empty view
 	if len(m.projects) == 0 {
-		return renderEmptyView(m.width, m.height)
+		contentHeight := m.height - 2 // Reserve 2 lines for status bar
+		emptyContent := renderEmptyView(m.width, contentHeight)
+		statusBar := m.statusBar.View()
+		return lipgloss.JoinVertical(lipgloss.Left, emptyContent, statusBar)
 	}
 
 	// Render project list (Story 3.1)
 	return m.renderDashboard()
 }
 
-// renderDashboard renders the main dashboard with project list and optional detail panel.
+// renderDashboard renders the main dashboard with project list, optional detail panel, and status bar.
 func (m Model) renderDashboard() string {
-	// Handle height < 30 case - show hint when panel closed (AC4)
-	if m.height < 30 && !m.showDetailPanel {
+	contentHeight := m.height - 2 // Reserve 2 lines for status bar
+	mainContent := m.renderMainContent(contentHeight)
+	statusBar := m.statusBar.View()
+	return lipgloss.JoinVertical(lipgloss.Left, mainContent, statusBar)
+}
+
+// renderMainContent renders the main content area (project list and optional detail panel).
+func (m Model) renderMainContent(height int) string {
+	// Handle height < 30 case - show hint when panel closed (AC4 from Story 3.3)
+	// Note: using height-2 threshold since we've already subtracted status bar
+	if height < 28 && !m.showDetailPanel { // 30-2 for status bar
 		hint := DimStyle.Render("Press [d] for details")
 		return m.projectList.View() + "\n" + hint
 	}
@@ -427,10 +453,10 @@ func (m Model) renderDashboard() string {
 
 	// Create copies with updated sizes for this render
 	projectList := m.projectList
-	projectList.SetSize(listWidth, m.height)
+	projectList.SetSize(listWidth, height)
 
 	detailPanel := m.detailPanel
-	detailPanel.SetSize(detailWidth, m.height)
+	detailPanel.SetSize(detailWidth, height)
 
 	// Render side by side
 	listView := projectList.View()
