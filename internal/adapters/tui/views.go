@@ -59,19 +59,35 @@ func renderEmptyView(width, height int) string {
 func renderHelpOverlay(width, height int) string {
 	title := titleStyle.Render("KEYBOARD SHORTCUTS")
 
+	// Unicode arrows: \u2193 renders as ↓, \u2191 renders as ↑
 	content := strings.Join([]string{
 		"",
+		"Navigation",
+		"j/\u2193     Move down",
+		"k/\u2191     Move up",
+		"",
+		"Actions",
+		"d        Toggle detail panel",
+		"f        Toggle favorite",
+		"n        Edit notes",
+		"x        Remove project",
+		"a        Add project",
+		"r        Refresh/rescan",
+		"",
+		"Views",
+		"h        View hibernated projects",
+		"",
 		"General",
-		"?        Toggle this help",
+		"?        Show this help",
 		"q        Quit",
-		"Ctrl+C   Force quit",
+		"Esc      Cancel/close",
 		"",
 		hintStyle.Render("Press any key to close"),
 		"",
 	}, "\n")
 
 	box := boxStyle.
-		Width(40).
+		Width(46). // Longest line (32) + padding (4) + border (2) + buffer (8)
 		Render(content)
 
 	// Add title to the border

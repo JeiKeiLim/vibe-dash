@@ -244,9 +244,12 @@ func TestModel_View_HelpOverlay(t *testing.T) {
 
 	expectedStrings := []string{
 		"KEYBOARD SHORTCUTS",
-		"Toggle this help",
+		"Navigation",
+		"Actions",
+		"Views",
+		"General",
+		"Show this help",
 		"Quit",
-		"Force quit",
 		"Press any key to close",
 	}
 
