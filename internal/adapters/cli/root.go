@@ -30,7 +30,9 @@ Run 'vibe' with no arguments to launch the interactive dashboard.`,
 			return
 		}
 
-		if err := tui.Run(cmd.Context(), repo); err != nil {
+		// Pass detection service to TUI for refresh functionality (Story 3.6)
+		// Uses existing detectionService package variable from add.go
+		if err := tui.Run(cmd.Context(), repo, detectionService); err != nil {
 			slog.Error("TUI error", "error", err)
 		}
 	},

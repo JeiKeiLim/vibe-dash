@@ -22,10 +22,10 @@ var (
 // Shortcut string constants (AC7: responsive width)
 const (
 	// Full shortcuts (width >= 80) - with pipe separators
-	shortcutsFull = "│ [j/k] nav [d] details [f] fav [?] help [q] quit │"
+	shortcutsFull = "│ [j/k] nav [d] details [f] fav [r] refresh [?] help [q] quit │"
 
 	// Abbreviated shortcuts (width < 80)
-	shortcutsAbbrev = "│ [j/k] [d] [f] [?] [q] │"
+	shortcutsAbbrev = "│ [j/k] [d] [f] [r] [?] [q] │"
 
 	// Width threshold for abbreviation (AC7)
 	widthThreshold = 80
@@ -45,6 +45,12 @@ type StatusBarModel struct {
 	waitingCount     int
 	width            int
 	inHibernatedView bool // Placeholder for Story 5.4
+
+	// Refresh state (Story 3.6)
+	isRefreshing    bool
+	refreshProgress int
+	refreshTotal    int
+	lastRefreshMsg  string // "Refreshed N projects" or error message
 }
 
 // NewStatusBarModel creates a new StatusBarModel with the given width.
@@ -72,6 +78,18 @@ func (s *StatusBarModel) SetInHibernatedView(inView bool) {
 	s.inHibernatedView = inView
 }
 
+// SetRefreshing updates the refresh state (Story 3.6).
+func (s *StatusBarModel) SetRefreshing(isRefreshing bool, progress, total int) {
+	s.isRefreshing = isRefreshing
+	s.refreshProgress = progress
+	s.refreshTotal = total
+}
+
+// SetRefreshComplete sets the completion message (Story 3.6).
+func (s *StatusBarModel) SetRefreshComplete(msg string) {
+	s.lastRefreshMsg = msg
+}
+
 // View renders the status bar to a string.
 // Returns two lines: counts line and shortcuts line (AC1).
 func (s StatusBarModel) View() string {
@@ -82,6 +100,12 @@ func (s StatusBarModel) View() string {
 
 // renderCounts renders the counts line with pipe separators (AC1, AC4, AC5).
 func (s StatusBarModel) renderCounts() string {
+	// Show refresh spinner when refreshing (Story 3.6 AC1)
+	if s.isRefreshing {
+		spinnerText := fmt.Sprintf("Refreshing... (%d/%d)", s.refreshProgress, s.refreshTotal)
+		return "│ " + spinnerText + " │"
+	}
+
 	parts := []string{
 		fmt.Sprintf("%d active", s.activeCount),
 		fmt.Sprintf("%d hibernated", s.hibernatedCount),
@@ -92,6 +116,11 @@ func (s StatusBarModel) renderCounts() string {
 	if s.waitingCount > 0 {
 		waitingText := statusBarWaitingStyle.Render(fmt.Sprintf("⏸️ %d WAITING", s.waitingCount))
 		parts = append(parts, waitingText)
+	}
+
+	// Show refresh result for 3 seconds after completion (Story 3.6)
+	if s.lastRefreshMsg != "" {
+		parts = append(parts, s.lastRefreshMsg)
 	}
 
 	return "│ " + strings.Join(parts, " │ ") + " │"

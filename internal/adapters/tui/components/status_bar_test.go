@@ -74,6 +74,9 @@ func TestStatusBar_View_ShortcutsFull(t *testing.T) {
 	if !strings.Contains(view, "[d] details") {
 		t.Errorf("expected '[d] details' in full shortcuts, got: %s", view)
 	}
+	if !strings.Contains(view, "[r] refresh") {
+		t.Errorf("expected '[r] refresh' in full shortcuts, got: %s", view)
+	}
 	if !strings.Contains(view, "[q] quit") {
 		t.Errorf("expected '[q] quit' in full shortcuts, got: %s", view)
 	}
@@ -91,6 +94,12 @@ func TestStatusBar_View_ShortcutsAbbreviated(t *testing.T) {
 	}
 	if !strings.Contains(view, "[d]") {
 		t.Errorf("expected '[d]' in abbreviated shortcuts, got: %s", view)
+	}
+	if !strings.Contains(view, "[f]") {
+		t.Errorf("expected '[f]' in abbreviated shortcuts, got: %s", view)
+	}
+	if !strings.Contains(view, "[r]") {
+		t.Errorf("expected '[r]' in abbreviated shortcuts, got: %s", view)
 	}
 	// Should NOT have full descriptions
 	if strings.Contains(view, "[d] details") {
@@ -294,5 +303,117 @@ func TestStatusBar_TwoLineLayout(t *testing.T) {
 
 	if len(lines) != 2 {
 		t.Errorf("expected 2 lines in status bar, got %d: %s", len(lines), view)
+	}
+}
+
+// ============================================================================
+// Story 3.6: Refresh State Tests
+// ============================================================================
+
+func TestStatusBar_RefreshingState(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetRefreshing(true, 2, 5)
+
+	view := sb.View()
+
+	if !strings.Contains(view, "Refreshing...") {
+		t.Errorf("expected 'Refreshing...' in output, got: %s", view)
+	}
+	if !strings.Contains(view, "2/5") {
+		t.Errorf("expected progress '2/5' in output, got: %s", view)
+	}
+}
+
+func TestStatusBar_RefreshingStateZeroProgress(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetRefreshing(true, 0, 3)
+
+	view := sb.View()
+
+	if !strings.Contains(view, "Refreshing...") {
+		t.Errorf("expected 'Refreshing...' in output, got: %s", view)
+	}
+	if !strings.Contains(view, "0/3") {
+		t.Errorf("expected progress '0/3' in output, got: %s", view)
+	}
+}
+
+func TestStatusBar_RefreshingHidesNormalCounts(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetRefreshing(true, 1, 3)
+
+	view := sb.View()
+
+	// Should NOT show normal counts while refreshing
+	if strings.Contains(view, "5 active") {
+		t.Errorf("expected normal counts to be hidden while refreshing, got: %s", view)
+	}
+	if strings.Contains(view, "2 hibernated") {
+		t.Errorf("expected normal counts to be hidden while refreshing, got: %s", view)
+	}
+}
+
+func TestStatusBar_RefreshComplete(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetRefreshComplete("Refreshed 3 projects")
+
+	view := sb.View()
+
+	if !strings.Contains(view, "Refreshed 3 projects") {
+		t.Errorf("expected completion message 'Refreshed 3 projects' in output, got: %s", view)
+	}
+	// Should also show normal counts
+	if !strings.Contains(view, "5 active") {
+		t.Errorf("expected normal counts with completion message, got: %s", view)
+	}
+}
+
+func TestStatusBar_RefreshComplete_Cleared(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetRefreshComplete("Refreshed 3 projects")
+	sb.SetRefreshComplete("") // Clear
+
+	view := sb.View()
+
+	if strings.Contains(view, "Refreshed") {
+		t.Errorf("expected completion message to be cleared, got: %s", view)
+	}
+	// Should still show normal counts
+	if !strings.Contains(view, "5 active") {
+		t.Errorf("expected normal counts after clearing, got: %s", view)
+	}
+}
+
+func TestStatusBar_RefreshComplete_Error(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetRefreshComplete("Refresh failed")
+
+	view := sb.View()
+
+	if !strings.Contains(view, "Refresh failed") {
+		t.Errorf("expected error message 'Refresh failed' in output, got: %s", view)
+	}
+}
+
+func TestStatusBar_SetRefreshing_EndRefresh(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetRefreshing(true, 2, 3)
+	sb.SetRefreshing(false, 0, 0) // End refresh
+
+	view := sb.View()
+
+	// Should NOT show refreshing anymore
+	if strings.Contains(view, "Refreshing...") {
+		t.Errorf("expected refreshing to end, got: %s", view)
+	}
+	// Should show normal counts again
+	if !strings.Contains(view, "5 active") {
+		t.Errorf("expected normal counts after refresh ends, got: %s", view)
 	}
 }

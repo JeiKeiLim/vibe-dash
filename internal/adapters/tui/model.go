@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -43,8 +44,15 @@ type Model struct {
 	// Status bar state (Story 3.4)
 	statusBar components.StatusBarModel
 
+	// Refresh state (Story 3.6)
+	isRefreshing    bool
+	refreshTotal    int
+	refreshProgress int
+	refreshError    string
+
 	// Dependencies (injected)
-	repository ports.ProjectRepository
+	repository       ports.ProjectRepository
+	detectionService ports.Detector // Optional - may be nil if not wired
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -81,6 +89,17 @@ type ProjectsLoadedMsg struct {
 	err      error
 }
 
+// refreshCompleteMsg signals refresh is complete (Story 3.6).
+type refreshCompleteMsg struct {
+	refreshedCount int
+	failedCount    int
+	err            error // Only set if ALL projects failed
+}
+
+// clearRefreshMsgMsg signals to clear the refresh completion message (Story 3.6).
+// Sent after 3-second timer expires.
+type clearRefreshMsgMsg struct{}
+
 // NewModel creates a new Model with default values.
 // The repository parameter is used for project persistence operations.
 func NewModel(repo ports.ProjectRepository) Model {
@@ -92,6 +111,12 @@ func NewModel(repo ports.ProjectRepository) Model {
 		repository:      repo,
 		statusBar:       components.NewStatusBarModel(0), // Width set in resizeTickMsg
 	}
+}
+
+// SetDetectionService sets the detection service for refresh operations.
+// This is optional - if not set, refresh will show "Detection service not available".
+func (m *Model) SetDetectionService(svc ports.Detector) {
+	m.detectionService = svc
 }
 
 // shouldShowDetailPanelByDefault returns true if detail panel should be open by default
@@ -123,6 +148,63 @@ func (m Model) loadProjectsCmd() tea.Cmd {
 		ctx := context.Background()
 		projects, err := m.repository.FindAll(ctx)
 		return ProjectsLoadedMsg{projects: projects, err: err}
+	}
+}
+
+// startRefresh initiates async refresh of all projects (Story 3.6).
+func (m Model) startRefresh() (tea.Model, tea.Cmd) {
+	m.isRefreshing = true
+	m.refreshTotal = len(m.projects)
+	m.refreshProgress = 0
+	m.refreshError = ""
+	m.statusBar.SetRefreshing(true, 0, m.refreshTotal)
+
+	return m, m.refreshProjectsCmd()
+}
+
+// refreshProjectsCmd creates a command that rescans all projects (Story 3.6).
+func (m Model) refreshProjectsCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		var refreshedCount, failedCount int
+
+		for _, project := range m.projects {
+			select {
+			case <-ctx.Done():
+				return refreshCompleteMsg{refreshedCount, failedCount, ctx.Err()}
+			default:
+			}
+
+			// Run detection
+			result, err := m.detectionService.Detect(ctx, project.Path)
+			if err != nil {
+				slog.Debug("refresh detection failed", "project", project.Name, "error", err)
+				failedCount++
+				continue
+			}
+
+			// Update project with new detection result
+			project.DetectedMethod = result.Method
+			project.CurrentStage = result.Stage
+			project.Confidence = result.Confidence
+			project.DetectionReasoning = result.Reasoning
+			project.UpdatedAt = time.Now()
+
+			if err := m.repository.Save(ctx, project); err != nil {
+				slog.Debug("refresh save failed", "project", project.Name, "error", err)
+				failedCount++
+				continue
+			}
+
+			refreshedCount++
+		}
+
+		var resultErr error
+		if refreshedCount == 0 && failedCount > 0 {
+			resultErr = fmt.Errorf("all projects failed to refresh")
+		}
+
+		return refreshCompleteMsg{refreshedCount, failedCount, resultErr}
 	}
 }
 
@@ -237,6 +319,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			active, hibernated, waiting := components.CalculateCounts(m.projects)
 			m.statusBar.SetCounts(active, hibernated, waiting)
 		}
+		return m, nil
+
+	case refreshCompleteMsg:
+		// Handle refresh completion (Story 3.6)
+		m.isRefreshing = false
+		m.statusBar.SetRefreshing(false, 0, 0)
+		if msg.err != nil {
+			m.refreshError = msg.err.Error()
+			m.statusBar.SetRefreshComplete("Refresh failed")
+			return m, nil
+		}
+		m.refreshError = ""
+		m.statusBar.SetRefreshComplete(fmt.Sprintf("Refreshed %d projects", msg.refreshedCount))
+		// Reload projects and start timer to clear message
+		return m, tea.Batch(
+			m.loadProjectsCmd(),
+			tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+				return clearRefreshMsgMsg{}
+			}),
+		)
+
+	case clearRefreshMsgMsg:
+		// Clear refresh completion message after 3 seconds (Story 3.6)
+		m.statusBar.SetRefreshComplete("")
 		return m, nil
 	}
 
@@ -377,6 +483,16 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showDetailPanel = !m.showDetailPanel
 		m.detailPanel.SetVisible(m.showDetailPanel)
 		return m, nil
+	case KeyRefresh:
+		if m.isRefreshing {
+			return m, nil // Ignore if already refreshing
+		}
+		if m.detectionService == nil {
+			// No detection service - show message and return
+			m.refreshError = "Detection service not available"
+			return m, nil
+		}
+		return m.startRefresh()
 	}
 
 	// Forward key messages to project list when in normal mode
