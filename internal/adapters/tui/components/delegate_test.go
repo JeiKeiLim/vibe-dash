@@ -298,3 +298,55 @@ func TestProjectItemDelegate_Render_RecencyIndicator_ZeroTime(t *testing.T) {
 		t.Errorf("Render() should NOT contain ⚡ for zero time, got: %q", output)
 	}
 }
+
+// Story 3.8: Favorite indicator tests
+
+func TestProjectItemDelegate_RendersFavoriteIndicator_Favorited(t *testing.T) {
+	delegate := NewProjectItemDelegate(80)
+
+	project := &domain.Project{
+		ID:             "1",
+		Name:           "test-project",
+		Path:           "/test",
+		CurrentStage:   domain.StageImplement,
+		LastActivityAt: time.Now(),
+		IsFavorite:     true,
+	}
+	item := ProjectItem{Project: project}
+
+	items := []list.Item{item}
+	l := list.New(items, delegate, 80, 10)
+
+	var buf bytes.Buffer
+	delegate.Render(&buf, l, 0, item)
+	output := buf.String()
+
+	if !strings.Contains(output, "⭐") {
+		t.Errorf("Render() should contain ⭐ for favorited project, got: %q", output)
+	}
+}
+
+func TestProjectItemDelegate_RendersFavoriteIndicator_NotFavorited(t *testing.T) {
+	delegate := NewProjectItemDelegate(80)
+
+	project := &domain.Project{
+		ID:             "1",
+		Name:           "test-project",
+		Path:           "/test",
+		CurrentStage:   domain.StageImplement,
+		LastActivityAt: time.Now(),
+		IsFavorite:     false,
+	}
+	item := ProjectItem{Project: project}
+
+	items := []list.Item{item}
+	l := list.New(items, delegate, 80, 10)
+
+	var buf bytes.Buffer
+	delegate.Render(&buf, l, 0, item)
+	output := buf.String()
+
+	if strings.Contains(output, "⭐") {
+		t.Errorf("Render() should NOT contain ⭐ for non-favorited project, got: %q", output)
+	}
+}

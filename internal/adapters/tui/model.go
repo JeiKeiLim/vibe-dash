@@ -123,6 +123,20 @@ type noteSaveErrorMsg struct {
 // clearNoteFeedbackMsg signals to clear note feedback message (Story 3.7).
 type clearNoteFeedbackMsg struct{}
 
+// favoriteSavedMsg signals favorite was toggled successfully (Story 3.8).
+type favoriteSavedMsg struct {
+	projectID  string
+	isFavorite bool
+}
+
+// favoriteSaveErrorMsg signals favorite save failed (Story 3.8).
+type favoriteSaveErrorMsg struct {
+	err error
+}
+
+// clearFavoriteFeedbackMsg signals to clear favorite feedback message (Story 3.8).
+type clearFavoriteFeedbackMsg struct{}
+
 // NewModel creates a new Model with default values.
 // The repository parameter is used for project persistence operations.
 func NewModel(repo ports.ProjectRepository) Model {
@@ -403,6 +417,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.noteFeedback = ""
 		m.statusBar.SetRefreshComplete("")
 		return m, nil
+
+	case favoriteSavedMsg:
+		// Update local project state (Story 3.8)
+		for _, p := range m.projects {
+			if p.ID == msg.projectID {
+				p.IsFavorite = msg.isFavorite
+				break
+			}
+		}
+		// Update detail panel
+		m.detailPanel.SetProject(m.projectList.SelectedProject())
+		// Set feedback message
+		var feedback string
+		if msg.isFavorite {
+			feedback = "⭐ Favorited"
+		} else {
+			feedback = "☆ Unfavorited"
+		}
+		m.statusBar.SetRefreshComplete(feedback)
+		// Clear after 3 seconds
+		return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return clearFavoriteFeedbackMsg{}
+		})
+
+	case favoriteSaveErrorMsg:
+		m.statusBar.SetRefreshComplete("✗ Failed to toggle favorite")
+		return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return clearFavoriteFeedbackMsg{}
+		})
+
+	case clearFavoriteFeedbackMsg:
+		m.statusBar.SetRefreshComplete("")
+		return m, nil
 	}
 
 	return m, nil
@@ -561,6 +608,12 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil // No project to edit
 		}
 		return m.startNoteEditing()
+	case KeyFavorite:
+		// Story 3.8: Toggle favorite status for selected project
+		if len(m.projects) == 0 {
+			return m, nil // No project to favorite
+		}
+		return m.toggleFavorite()
 	}
 
 	// Forward key messages to project list when in normal mode
@@ -646,6 +699,41 @@ func (m Model) saveNoteCmd(projectID, note string) tea.Cmd {
 		}
 
 		return noteSavedMsg{projectID: projectID, newNote: note}
+	}
+}
+
+// toggleFavorite toggles the favorite status of the selected project (Story 3.8).
+func (m Model) toggleFavorite() (tea.Model, tea.Cmd) {
+	selected := m.projectList.SelectedProject()
+	if selected == nil {
+		return m, nil
+	}
+
+	newFavorite := !selected.IsFavorite
+	return m, m.saveFavoriteCmd(selected.ID, newFavorite)
+}
+
+// saveFavoriteCmd creates a command that saves the favorite status to repository (Story 3.8).
+func (m Model) saveFavoriteCmd(projectID string, isFavorite bool) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		// Find project
+		project, err := m.repository.FindByID(ctx, projectID)
+		if err != nil {
+			return favoriteSaveErrorMsg{err: err}
+		}
+
+		// Update favorite status
+		project.IsFavorite = isFavorite
+		project.UpdatedAt = time.Now()
+
+		// Save
+		if err := m.repository.Save(ctx, project); err != nil {
+			return favoriteSaveErrorMsg{err: err}
+		}
+
+		return favoriteSavedMsg{projectID: projectID, isFavorite: isFavorite}
 	}
 }
 

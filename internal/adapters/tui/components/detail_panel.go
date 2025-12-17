@@ -144,6 +144,13 @@ func (m DetailPanelModel) renderProject() string {
 	}
 	lines = append(lines, formatField("Notes", notes))
 
+	// Favorite status (Story 3.8)
+	favorite := "No"
+	if p.IsFavorite {
+		favorite = "⭐ Yes"
+	}
+	lines = append(lines, formatField("Favorite", favorite))
+
 	// Added date
 	addedDate := p.CreatedAt.Format("2006-01-02")
 	lines = append(lines, formatField("Added", addedDate))

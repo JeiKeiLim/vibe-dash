@@ -16,6 +16,7 @@ import (
 // Column widths for project row layout
 const (
 	colSelection = 2  // "> " or "  "
+	colFavorite  = 2  // styled "⭐" or "  " (Story 3.8)
 	colNameMin   = 15 // Minimum name width
 	colIndicator = 3  // "✨ " or "⚡ " or "   "
 	colStage     = 10 // "Implement" is longest
@@ -40,6 +41,10 @@ var (
 
 	dimStyle = lipgloss.NewStyle().
 			Faint(true)
+
+	// favoriteStyle mirrors tui.FavoriteStyle (ANSI color 5 magenta) - keep in sync with styles.go (Story 3.8)
+	favoriteStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("5")) // Magenta
 )
 
 // ProjectItemDelegate is a custom delegate for rendering project rows.
@@ -94,8 +99,9 @@ func (d ProjectItemDelegate) Render(w io.Writer, m list.Model, index int, listIt
 // calculateNameWidth calculates the dynamic name column width based on terminal width.
 func (d ProjectItemDelegate) calculateNameWidth() int {
 	// Calculate available space for name
-	// width - selection - indicator - stage - waiting - time - spacing
-	nameWidth := d.width - colSelection - colIndicator - colStage - colWaiting - colTime - 4
+	// width - selection - favorite - indicator - stage - waiting - time - spacing (Story 3.8: added favorite)
+	// Spacing breakdown: 5 = 1 (after name) + 1 (after indicator) + 1 (after stage) + 1 (after waiting) + 1 (before time)
+	nameWidth := d.width - colSelection - colFavorite - colIndicator - colStage - colWaiting - colTime - 5
 
 	if nameWidth < colNameMin {
 		nameWidth = colNameMin
@@ -114,6 +120,13 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 	// Selection indicator
 	if isSelected {
 		sb.WriteString("> ")
+	} else {
+		sb.WriteString("  ")
+	}
+
+	// Favorite indicator (Story 3.8)
+	if item.Project.IsFavorite {
+		sb.WriteString(favoriteStyle.Render("⭐"))
 	} else {
 		sb.WriteString("  ")
 	}
