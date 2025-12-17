@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/components"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/project"
 )
 
 // Model represents the main TUI application state.
@@ -49,6 +51,13 @@ type Model struct {
 	refreshTotal    int
 	refreshProgress int
 	refreshError    string
+
+	// Note editing state (Story 3.7)
+	isEditingNote  bool
+	noteInput      textinput.Model // From charmbracelet/bubbles
+	originalNote   string          // For cancel restoration
+	noteEditTarget *domain.Project // Project being edited
+	noteFeedback   string          // "✓ Note saved" or error message
 
 	// Dependencies (injected)
 	repository       ports.ProjectRepository
@@ -99,6 +108,20 @@ type refreshCompleteMsg struct {
 // clearRefreshMsgMsg signals to clear the refresh completion message (Story 3.6).
 // Sent after 3-second timer expires.
 type clearRefreshMsgMsg struct{}
+
+// noteSavedMsg signals note was saved successfully (Story 3.7).
+type noteSavedMsg struct {
+	projectID string
+	newNote   string
+}
+
+// noteSaveErrorMsg signals note save failed (Story 3.7).
+type noteSaveErrorMsg struct {
+	err error
+}
+
+// clearNoteFeedbackMsg signals to clear note feedback message (Story 3.7).
+type clearNoteFeedbackMsg struct{}
 
 // NewModel creates a new Model with default values.
 // The repository parameter is used for project persistence operations.
@@ -212,6 +235,10 @@ func (m Model) refreshProjectsCmd() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Route to note editing handler when in note editing mode (Story 3.7)
+		if m.isEditingNote {
+			return m.handleNoteEditingKeyMsg(msg)
+		}
 		// Route to validation handler when in validation mode
 		if m.viewMode == viewModeValidation {
 			return m.handleValidationKeyMsg(msg)
@@ -342,6 +369,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clearRefreshMsgMsg:
 		// Clear refresh completion message after 3 seconds (Story 3.6)
+		m.statusBar.SetRefreshComplete("")
+		return m, nil
+
+	case noteSavedMsg:
+		// Update local project state (Story 3.7)
+		for _, p := range m.projects {
+			if p.ID == msg.projectID {
+				p.Notes = msg.newNote
+				break
+			}
+		}
+		// Update detail panel
+		m.detailPanel.SetProject(m.projectList.SelectedProject())
+		// Set feedback message and display in status bar (AC2: feedback shows "✓ Note saved")
+		m.noteFeedback = "✓ Note saved"
+		m.statusBar.SetRefreshComplete(m.noteFeedback)
+		// Clear after 3 seconds
+		return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return clearNoteFeedbackMsg{}
+		})
+
+	case noteSaveErrorMsg:
+		// Handle note save failure (Story 3.7)
+		m.noteFeedback = "✗ Failed to save note"
+		m.statusBar.SetRefreshComplete(m.noteFeedback)
+		return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return clearNoteFeedbackMsg{}
+		})
+
+	case clearNoteFeedbackMsg:
+		// Clear note feedback message (Story 3.7)
+		m.noteFeedback = ""
 		m.statusBar.SetRefreshComplete("")
 		return m, nil
 	}
@@ -493,6 +552,15 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.startRefresh()
+	case KeyNotes:
+		// Story 3.7: Open note editor for selected project
+		if m.isEditingNote {
+			return m, nil // Ignore if already editing
+		}
+		if len(m.projects) == 0 {
+			return m, nil // No project to edit
+		}
+		return m.startNoteEditing()
 	}
 
 	// Forward key messages to project list when in normal mode
@@ -505,6 +573,80 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// startNoteEditing opens the note editor for the selected project (Story 3.7).
+func (m Model) startNoteEditing() (tea.Model, tea.Cmd) {
+	selected := m.projectList.SelectedProject()
+	if selected == nil {
+		return m, nil
+	}
+
+	m.isEditingNote = true
+	m.noteEditTarget = selected
+	m.originalNote = selected.Notes
+
+	// Initialize text input with current note
+	ti := textinput.New()
+	ti.Placeholder = "Enter note..."
+	ti.Focus()
+	ti.CharLimit = 500 // Reasonable limit for notes
+	ti.Width = m.width - 10
+	ti.SetValue(selected.Notes)
+	m.noteInput = ti
+
+	return m, textinput.Blink
+}
+
+// handleNoteEditingKeyMsg processes keyboard input during note editing (Story 3.7).
+func (m Model) handleNoteEditingKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		// Save note
+		return m.saveNote()
+	case tea.KeyEsc:
+		// Cancel editing, restore original
+		m.isEditingNote = false
+		m.noteInput = textinput.Model{} // Clear
+		return m, nil
+	}
+
+	// Forward to text input
+	var cmd tea.Cmd
+	m.noteInput, cmd = m.noteInput.Update(msg)
+	return m, cmd
+}
+
+// saveNote saves the note to the repository (Story 3.7).
+func (m Model) saveNote() (tea.Model, tea.Cmd) {
+	newNote := strings.TrimSpace(m.noteInput.Value())
+	m.isEditingNote = false
+
+	return m, m.saveNoteCmd(m.noteEditTarget.ID, newNote)
+}
+
+// saveNoteCmd creates a command that saves the note to repository (Story 3.7).
+func (m Model) saveNoteCmd(projectID, note string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		// Find project
+		project, err := m.repository.FindByID(ctx, projectID)
+		if err != nil {
+			return noteSaveErrorMsg{err: err}
+		}
+
+		// Update note
+		project.Notes = note
+		project.UpdatedAt = time.Now()
+
+		// Save
+		if err := m.repository.Save(ctx, project); err != nil {
+			return noteSaveErrorMsg{err: err}
+		}
+
+		return noteSavedMsg{projectID: projectID, newNote: note}
+	}
 }
 
 // View implements tea.Model. Renders the UI to a string.
@@ -526,6 +668,12 @@ func (m Model) View() string {
 	// Render help overlay (overlays everything)
 	if m.showHelp {
 		return renderHelpOverlay(m.width, m.height)
+	}
+
+	// Render note editor dialog (overlays everything) (Story 3.7)
+	if m.isEditingNote && m.noteEditTarget != nil {
+		projectName := project.EffectiveName(m.noteEditTarget)
+		return renderNoteEditor(projectName, m.noteInput, m.width, m.height)
 	}
 
 	// Render empty view if no projects (AC6)

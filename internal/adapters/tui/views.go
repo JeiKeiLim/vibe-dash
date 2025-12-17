@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -110,4 +111,55 @@ func renderTooSmallView(width, height int) string {
 	msg := fmt.Sprintf("Terminal too small. Minimum %dx%d required.\nCurrent: %dx%d",
 		MinWidth, MinHeight, width, height)
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, msg)
+}
+
+// renderNoteEditor renders the inline note editor dialog (Story 3.7).
+// Follows renderHelpOverlay pattern for dialog styling and centering.
+func renderNoteEditor(projectName string, input textinput.Model, width, height int) string {
+	// Dialog dimensions - ensure minimum width of 30, cap at 60
+	dialogWidth := width - 4
+	if dialogWidth < 30 {
+		dialogWidth = 30
+	}
+	if dialogWidth > 60 {
+		dialogWidth = 60
+	}
+
+	// Title
+	title := titleStyle.Render(fmt.Sprintf("Edit note for \"%s\"", projectName))
+
+	// Input line with > prefix
+	inputLine := "> " + input.View()
+
+	// Instructions
+	instructions := hintStyle.Render("[Enter] save  [Esc] cancel")
+
+	// Content
+	content := strings.Join([]string{
+		"",
+		inputLine,
+		"",
+		instructions,
+		"",
+	}, "\n")
+
+	// Dialog box style (same as help overlay)
+	box := boxStyle.
+		Width(dialogWidth).
+		Render(content)
+
+	// Add title to the border (same pattern as renderHelpOverlay)
+	lines := strings.Split(box, "\n")
+	if len(lines) > 0 {
+		topBorder := lines[0]
+		titleWithDash := fmt.Sprintf("\u2500 %s ", title)
+
+		if len(topBorder) > 3 {
+			lines[0] = string(topBorder[0]) + titleWithDash + topBorder[len(titleWithDash)+1:]
+		}
+		box = strings.Join(lines, "\n")
+	}
+
+	// Center in terminal
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
 }
