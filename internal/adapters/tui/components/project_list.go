@@ -74,7 +74,12 @@ func (m *ProjectListModel) SetProjects(projects []*domain.Project) {
 	m.projects = sortedProjects
 	m.list.SetItems(items)
 
-	// Select first item if available and nothing is selected
+	// Handle selection after list update (Story 3.9 AC6 fix)
+	// Case 1: Index is out of bounds (e.g., removed last item) - select last valid item
+	if len(items) > 0 && m.list.Index() >= len(items) {
+		m.list.Select(len(items) - 1)
+	}
+	// Case 2: Nothing selected (Index < 0) - select first item
 	if len(items) > 0 && m.list.Index() < 0 {
 		m.list.Select(0)
 	}

@@ -163,3 +163,48 @@ func renderNoteEditor(projectName string, input textinput.Model, width, height i
 	// Center in terminal
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
 }
+
+// renderConfirmRemoveDialog renders the inline remove confirmation dialog (Story 3.9).
+// Follows renderNoteEditor pattern for dialog styling and centering.
+func renderConfirmRemoveDialog(projectName string, width, height int) string {
+	// Dialog dimensions - cap width at 60
+	dialogWidth := width - 4
+	if dialogWidth < 30 {
+		dialogWidth = 30
+	}
+	if dialogWidth > 60 {
+		dialogWidth = 60
+	}
+
+	// Title
+	title := titleStyle.Render("Confirm Removal")
+
+	// Content
+	content := strings.Join([]string{
+		"",
+		fmt.Sprintf("Remove '%s' from tracking?", projectName),
+		"",
+		hintStyle.Render("[y] Yes  [n] No  [Esc] Cancel"),
+		"",
+	}, "\n")
+
+	// Dialog box style (same as help overlay)
+	box := boxStyle.
+		Width(dialogWidth).
+		Render(content)
+
+	// Add title to the border (same pattern as renderHelpOverlay)
+	lines := strings.Split(box, "\n")
+	if len(lines) > 0 {
+		topBorder := lines[0]
+		titleWithDash := fmt.Sprintf("\u2500 %s ", title)
+
+		if len(topBorder) > 3 {
+			lines[0] = string(topBorder[0]) + titleWithDash + topBorder[len(titleWithDash)+1:]
+		}
+		box = strings.Join(lines, "\n")
+	}
+
+	// Center in terminal
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
+}

@@ -59,6 +59,10 @@ type Model struct {
 	noteEditTarget *domain.Project // Project being edited
 	noteFeedback   string          // "✓ Note saved" or error message
 
+	// Remove confirmation state (Story 3.9)
+	isConfirmingRemove bool
+	confirmTarget      *domain.Project // Project pending removal
+
 	// Dependencies (injected)
 	repository       ports.ProjectRepository
 	detectionService ports.Detector // Optional - may be nil if not wired
@@ -136,6 +140,19 @@ type favoriteSaveErrorMsg struct {
 
 // clearFavoriteFeedbackMsg signals to clear favorite feedback message (Story 3.8).
 type clearFavoriteFeedbackMsg struct{}
+
+// removeConfirmedMsg signals project removal was confirmed (Story 3.9).
+type removeConfirmedMsg struct {
+	projectID   string
+	projectName string
+	err         error
+}
+
+// removeConfirmTimeoutMsg signals confirmation dialog timed out (Story 3.9).
+type removeConfirmTimeoutMsg struct{}
+
+// clearRemoveFeedbackMsg signals to clear remove feedback message (Story 3.9).
+type clearRemoveFeedbackMsg struct{}
 
 // NewModel creates a new Model with default values.
 // The repository parameter is used for project persistence operations.
@@ -252,6 +269,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Route to note editing handler when in note editing mode (Story 3.7)
 		if m.isEditingNote {
 			return m.handleNoteEditingKeyMsg(msg)
+		}
+		// Route to remove confirmation handler when in confirmation mode (Story 3.9)
+		if m.isConfirmingRemove {
+			return m.handleRemoveConfirmationKeyMsg(msg)
 		}
 		// Route to validation handler when in validation mode
 		if m.viewMode == viewModeValidation {
@@ -450,6 +471,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clearFavoriteFeedbackMsg:
 		m.statusBar.SetRefreshComplete("")
 		return m, nil
+
+	case removeConfirmedMsg:
+		// Handle async delete completion (Story 3.9)
+		if msg.err != nil {
+			m.statusBar.SetRefreshComplete("✗ Failed to remove: " + msg.err.Error())
+			return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+				return clearRemoveFeedbackMsg{}
+			})
+		}
+		// Remove from local projects slice
+		var newProjects []*domain.Project
+		for _, p := range m.projects {
+			if p.ID != msg.projectID {
+				newProjects = append(newProjects, p)
+			}
+		}
+		m.projects = newProjects
+		// Update project list component
+		m.projectList.SetProjects(newProjects)
+		// Update detail panel with new selection
+		m.detailPanel.SetProject(m.projectList.SelectedProject())
+		// Update status bar counts
+		active, hibernated, waiting := components.CalculateCounts(m.projects)
+		m.statusBar.SetCounts(active, hibernated, waiting)
+		// Show success feedback
+		m.statusBar.SetRefreshComplete("✓ Removed: " + msg.projectName)
+		return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return clearRemoveFeedbackMsg{}
+		})
+
+	case removeConfirmTimeoutMsg:
+		// Auto-cancel confirmation after 30 seconds (Story 3.9, AC4)
+		if m.isConfirmingRemove {
+			m.isConfirmingRemove = false
+			m.confirmTarget = nil
+		}
+		return m, nil
+
+	case clearRemoveFeedbackMsg:
+		m.statusBar.SetRefreshComplete("")
+		return m, nil
 	}
 
 	return m, nil
@@ -614,6 +676,15 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil // No project to favorite
 		}
 		return m.toggleFavorite()
+	case KeyRemove:
+		// Story 3.9: Start remove confirmation for selected project
+		if m.isConfirmingRemove {
+			return m, nil // Already confirming
+		}
+		if len(m.projects) == 0 {
+			return m, nil // No project to remove
+		}
+		return m.startRemoveConfirmation()
 	}
 
 	// Forward key messages to project list when in normal mode
@@ -737,6 +808,65 @@ func (m Model) saveFavoriteCmd(projectID string, isFavorite bool) tea.Cmd {
 	}
 }
 
+// startRemoveConfirmation opens the remove confirmation dialog (Story 3.9).
+func (m Model) startRemoveConfirmation() (tea.Model, tea.Cmd) {
+	selected := m.projectList.SelectedProject()
+	if selected == nil {
+		return m, nil
+	}
+
+	m.isConfirmingRemove = true
+	m.confirmTarget = selected
+
+	// Start 30-second timeout timer (AC4)
+	return m, tea.Tick(30*time.Second, func(t time.Time) tea.Msg {
+		return removeConfirmTimeoutMsg{}
+	})
+}
+
+// handleRemoveConfirmationKeyMsg processes keyboard input during remove confirmation (Story 3.9).
+func (m Model) handleRemoveConfirmationKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle Escape key by type (consistent with handleNoteEditingKeyMsg pattern)
+	if msg.Type == tea.KeyEsc {
+		m.isConfirmingRemove = false
+		m.confirmTarget = nil
+		return m, nil
+	}
+
+	// Handle character keys by string
+	switch msg.String() {
+	case "y", "Y":
+		// Confirm removal
+		m.isConfirmingRemove = false
+		target := m.confirmTarget
+		m.confirmTarget = nil
+
+		// Use shared EffectiveName for display (Story 3.9 code review fix)
+		projectName := project.EffectiveName(target)
+
+		return m, m.removeProjectCmd(target.ID, projectName)
+
+	case "n", "N":
+		// Cancel removal
+		m.isConfirmingRemove = false
+		m.confirmTarget = nil
+		return m, nil
+	}
+
+	// AC5: Ignore all other keys during confirmation
+	return m, nil
+}
+
+// removeProjectCmd creates a command that deletes a project from repository (Story 3.9).
+// Note: Reuses delete pattern from deleteProjectCmd but returns removeConfirmedMsg.
+func (m Model) removeProjectCmd(projectID, projectName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		err := m.repository.Delete(ctx, projectID)
+		return removeConfirmedMsg{projectID: projectID, projectName: projectName, err: err}
+	}
+}
+
 // View implements tea.Model. Renders the UI to a string.
 func (m Model) View() string {
 	if !m.ready {
@@ -762,6 +892,12 @@ func (m Model) View() string {
 	if m.isEditingNote && m.noteEditTarget != nil {
 		projectName := project.EffectiveName(m.noteEditTarget)
 		return renderNoteEditor(projectName, m.noteInput, m.width, m.height)
+	}
+
+	// Render remove confirmation dialog (overlays everything) (Story 3.9)
+	if m.isConfirmingRemove && m.confirmTarget != nil {
+		projectName := project.EffectiveName(m.confirmTarget)
+		return renderConfirmRemoveDialog(projectName, m.width, m.height)
 	}
 
 	// Render empty view if no projects (AC6)
