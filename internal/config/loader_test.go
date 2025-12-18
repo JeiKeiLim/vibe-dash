@@ -1,5 +1,9 @@
 package config
 
+// TODO(story:3.5.7): Update test fixture to use per-project storage structure at ~/.vibe-dash/<project>/state.db
+// Current tests assume single master config.yaml structure. After Epic 3.5 completes,
+// tests should verify master index + per-project config.yaml files work correctly.
+
 import (
 	"context"
 	"os"

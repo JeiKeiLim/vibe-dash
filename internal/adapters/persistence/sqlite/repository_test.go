@@ -1,5 +1,9 @@
 package sqlite
 
+// TODO(story:3.5.7): Update test fixture to use per-project storage structure at ~/.vibe-dash/<project>/state.db
+// Current tests use single centralized database pattern. After Epic 3.5 completes,
+// tests should verify per-project SQLite databases are created correctly.
+
 import (
 	"context"
 	"errors"

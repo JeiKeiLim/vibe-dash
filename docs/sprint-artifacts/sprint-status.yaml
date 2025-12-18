@@ -86,7 +86,7 @@ development_status:
   # Discovered during Epic 3 retrospective - storage structure doesn't match PRD spec
   # Architecture planning completed 2025-12-18 - Full PRD compliance, clean implementation
   epic-3-5: in-progress
-  3-5-0-cleanup-existing-storage: backlog
+  3-5-0-cleanup-existing-storage: done
   3-5-1-directory-manager: backlog
   3-5-2-per-project-sqlite-repository: backlog
   3-5-3-per-project-config-files: backlog

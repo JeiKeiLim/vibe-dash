@@ -548,3 +548,4 @@ AC4: Given 20 projects
 | Date | Change |
 |------|--------|
 | 2025-12-18 | Epic created by Architect (Winston) based on Epic 3 retrospective findings |
+| 2025-12-18 | **Story 3.5.0 COMPLETE:** Manual cleanup performed - `~/.vibe-dash/` deleted. Users with existing installations must run `rm -rf ~/.vibe-dash/` before upgrading. |
