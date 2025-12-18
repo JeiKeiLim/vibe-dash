@@ -1,6 +1,6 @@
 # generated: 2025-12-12
 # updated: 2025-12-18
-# updated by: Dev Agent (Amelia) - Story 3.5.2 completed with code review fixes applied
+# updated by: Dev Agent (Amelia) - Story 3.5.3 code reviewed and done
 # project: bmad-test
 # project_key: vibe-dash
 # tracking_system: file-system
@@ -89,7 +89,7 @@ development_status:
   3-5-0-cleanup-existing-storage: done
   3-5-1-directory-manager: done
   3-5-2-per-project-sqlite-repository: done
-  3-5-3-per-project-config-files: backlog
+  3-5-3-per-project-config-files: done
   3-5-4-master-config-path-index: backlog
   3-5-5-repository-coordinator: backlog
   3-5-6-update-cli-commands: backlog
