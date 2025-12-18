@@ -27,7 +27,7 @@ claude -p "/bmad:bmm:agents:sm create story $STORY"
 echo ""
 echo "✅ Step 2/4: Validating story..."
 echo "----------------------------------------"
-claude -p "/bmad:bmm:agents:sm *validate-create-story $STORY then apply all suggested improvements"
+claude -p "/bmad:bmm:agents:sm *validate-create-story $STORY then apply all suggested improvements without asking me."
 
 # Step 3: Dev Story
 echo ""
@@ -39,7 +39,7 @@ claude -p "/bmad:bmm:agents:dev *dev-story $STORY"
 echo ""
 echo "🔍 Step 4/4: Code review..."
 echo "----------------------------------------"
-claude -p "/bmad:bmm:agents:dev *code-review $STORY then apply all fixes. After that, update sprint status and commit."
+claude -p "/bmad:bmm:agents:dev 1. *code-review $STORY 2. apply all fixes.  3. update sprint status 4. commit. Must follow the order."
 
 echo ""
 echo "========================================"

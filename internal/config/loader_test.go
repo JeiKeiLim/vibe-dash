@@ -6,6 +6,7 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,6 +75,7 @@ func TestViperLoader_Load_FileContentCorrect(t *testing.T) {
 	// Verify expected content
 	contentStr := string(content)
 	expectedPhrases := []string{
+		"storage_version: 2", // Must be present for v2 format (Task 4)
 		"hibernation_days: 14",
 		"refresh_interval_seconds: 10",
 		"refresh_debounce_ms: 200",
@@ -85,6 +87,15 @@ func TestViperLoader_Load_FileContentCorrect(t *testing.T) {
 		if !strings.Contains(contentStr, phrase) {
 			t.Errorf("config file missing expected content: %s", phrase)
 		}
+	}
+
+	// Verify storage_version is near the top (before settings)
+	storageVersionIdx := strings.Index(contentStr, "storage_version: 2")
+	settingsIdx := strings.Index(contentStr, "settings:")
+	if storageVersionIdx == -1 {
+		t.Error("storage_version not found in config file")
+	} else if settingsIdx != -1 && storageVersionIdx > settingsIdx {
+		t.Error("storage_version should appear before settings section")
 	}
 }
 
@@ -347,24 +358,26 @@ func TestViperLoader_Save_ContextCancellation(t *testing.T) {
 	}
 }
 
-// TestViperLoader_Load_WithProjects tests loading config with project entries
+// TestViperLoader_Load_WithProjects tests loading config with project entries (v2 format)
 func TestViperLoader_Load_WithProjects(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
-	// Write config with projects
-	configWithProjects := `settings:
+	// Write v2 config with projects (directory_name as key)
+	configWithProjects := `storage_version: 2
+
+settings:
   hibernation_days: 14
   refresh_interval_seconds: 10
   refresh_debounce_ms: 200
   agent_waiting_threshold_minutes: 10
 
 projects:
-  project-1:
+  myapp:
     path: /home/user/projects/myapp
     display_name: My Application
     favorite: true
-  project-2:
+  other:
     path: /home/user/projects/other
 `
 	if err := os.WriteFile(configPath, []byte(configWithProjects), 0644); err != nil {
@@ -383,26 +396,32 @@ projects:
 		t.Errorf("Projects count = %d, want 2", len(cfg.Projects))
 	}
 
-	p1, ok := cfg.Projects["project-1"]
+	p1, ok := cfg.Projects["myapp"]
 	if !ok {
-		t.Fatal("project-1 not found in config")
+		t.Fatal("myapp not found in config")
 	}
 	if p1.Path != "/home/user/projects/myapp" {
-		t.Errorf("project-1 Path = %s, want /home/user/projects/myapp", p1.Path)
+		t.Errorf("myapp Path = %s, want /home/user/projects/myapp", p1.Path)
+	}
+	if p1.DirectoryName != "myapp" {
+		t.Errorf("myapp DirectoryName = %s, want myapp", p1.DirectoryName)
 	}
 	if p1.DisplayName != "My Application" {
-		t.Errorf("project-1 DisplayName = %s, want 'My Application'", p1.DisplayName)
+		t.Errorf("myapp DisplayName = %s, want 'My Application'", p1.DisplayName)
 	}
 	if !p1.IsFavorite {
-		t.Error("project-1 IsFavorite = false, want true")
+		t.Error("myapp IsFavorite = false, want true")
 	}
 
-	p2, ok := cfg.Projects["project-2"]
+	p2, ok := cfg.Projects["other"]
 	if !ok {
-		t.Fatal("project-2 not found in config")
+		t.Fatal("other not found in config")
 	}
 	if p2.Path != "/home/user/projects/other" {
-		t.Errorf("project-2 Path = %s, want /home/user/projects/other", p2.Path)
+		t.Errorf("other Path = %s, want /home/user/projects/other", p2.Path)
+	}
+	if p2.DirectoryName != "other" {
+		t.Errorf("other DirectoryName = %s, want other", p2.DirectoryName)
 	}
 }
 
@@ -560,5 +579,600 @@ func TestNewViperLoader_CustomPath(t *testing.T) {
 
 	if loader.configPath != customPath {
 		t.Errorf("configPath = %s, want %s", loader.configPath, customPath)
+	}
+}
+
+// Story 3.5.4 Tests: Master Config as Path Index
+
+// TestViperLoader_Load_ReadsStorageVersion tests reading storage_version from YAML (Subtask 2.1)
+func TestViperLoader_Load_ReadsStorageVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Write v2 config with storage_version
+	v2Config := `storage_version: 2
+
+settings:
+  hibernation_days: 14
+  refresh_interval_seconds: 10
+  refresh_debounce_ms: 200
+  agent_waiting_threshold_minutes: 10
+
+projects:
+  api-service:
+    path: "/home/user/api-service"
+    directory_name: api-service
+    favorite: false
+`
+	if err := os.WriteFile(configPath, []byte(v2Config), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	loader := NewViperLoader(configPath)
+	cfg, err := loader.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.StorageVersion != 2 {
+		t.Errorf("StorageVersion = %d, want 2", cfg.StorageVersion)
+	}
+}
+
+// TestViperLoader_Load_V2Format_DirectoryNameAsKey tests v2 format with directory_name as map key (Subtask 2.2)
+func TestViperLoader_Load_V2Format_DirectoryNameAsKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Write v2 config where key is directory_name
+	v2Config := `storage_version: 2
+
+settings:
+  hibernation_days: 14
+
+projects:
+  api-service:
+    path: "/home/user/api-service"
+    favorite: false
+  client-b-api-service:
+    path: "/home/user/client-b/api-service"
+    display_name: "Client B API"
+    favorite: true
+`
+	if err := os.WriteFile(configPath, []byte(v2Config), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	loader := NewViperLoader(configPath)
+	cfg, err := loader.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Check first project
+	p1, ok := cfg.Projects["api-service"]
+	if !ok {
+		t.Fatal("api-service not found in projects")
+	}
+	if p1.Path != "/home/user/api-service" {
+		t.Errorf("api-service Path = %s, want /home/user/api-service", p1.Path)
+	}
+	if p1.DirectoryName != "api-service" {
+		t.Errorf("api-service DirectoryName = %s, want api-service", p1.DirectoryName)
+	}
+
+	// Check second project
+	p2, ok := cfg.Projects["client-b-api-service"]
+	if !ok {
+		t.Fatal("client-b-api-service not found in projects")
+	}
+	if p2.Path != "/home/user/client-b/api-service" {
+		t.Errorf("client-b-api-service Path = %s, want /home/user/client-b/api-service", p2.Path)
+	}
+	if p2.DirectoryName != "client-b-api-service" {
+		t.Errorf("client-b-api-service DirectoryName = %s, want client-b-api-service", p2.DirectoryName)
+	}
+	if p2.DisplayName != "Client B API" {
+		t.Errorf("client-b-api-service DisplayName = %s, want 'Client B API'", p2.DisplayName)
+	}
+}
+
+// TestViperLoader_Save_WritesStorageVersion tests Save() writes storage_version at root (Subtask 2.3)
+func TestViperLoader_Save_WritesStorageVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	loader := NewViperLoader(configPath)
+
+	cfg := ports.NewConfig()
+	cfg.Projects["api-service"] = ports.ProjectConfig{
+		Path:          "/path/to/api",
+		DirectoryName: "api-service",
+	}
+
+	err := loader.Save(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Read raw YAML and verify storage_version present
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("failed to read config file: %v", err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, "storage_version: 2") {
+		t.Errorf("config file should contain 'storage_version: 2', got:\n%s", content)
+	}
+}
+
+// TestViperLoader_Save_WritesDirectoryName tests Save() writes directory_name for each project (Subtask 2.4)
+func TestViperLoader_Save_WritesDirectoryName(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	loader := NewViperLoader(configPath)
+
+	cfg := ports.NewConfig()
+	cfg.Projects["api-service"] = ports.ProjectConfig{
+		Path:          "/path/to/api-service",
+		DirectoryName: "api-service",
+		IsFavorite:    true,
+	}
+	cfg.Projects["client-b-api-service"] = ports.ProjectConfig{
+		Path:          "/path/to/client-b/api-service",
+		DirectoryName: "client-b-api-service",
+		DisplayName:   "Client B API",
+	}
+
+	err := loader.Save(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Reload and verify directory names are preserved
+	loader2 := NewViperLoader(configPath)
+	cfg2, err := loader2.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	p1, ok := cfg2.Projects["api-service"]
+	if !ok {
+		t.Fatal("api-service not found after reload")
+	}
+	if p1.DirectoryName != "api-service" {
+		t.Errorf("api-service DirectoryName = %s, want api-service", p1.DirectoryName)
+	}
+	if p1.Path != "/path/to/api-service" {
+		t.Errorf("api-service Path = %s, want /path/to/api-service", p1.Path)
+	}
+
+	p2, ok := cfg2.Projects["client-b-api-service"]
+	if !ok {
+		t.Fatal("client-b-api-service not found after reload")
+	}
+	if p2.DirectoryName != "client-b-api-service" {
+		t.Errorf("client-b-api-service DirectoryName = %s, want client-b-api-service", p2.DirectoryName)
+	}
+}
+
+// TestViperLoader_Load_MigratesV1ToV2 tests migration from v1 format (Subtask 2.5)
+func TestViperLoader_Load_MigratesV1ToV2(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Write v1 format (no storage_version, arbitrary project key)
+	v1Config := `settings:
+  hibernation_days: 14
+  refresh_interval_seconds: 10
+  refresh_debounce_ms: 200
+  agent_waiting_threshold_minutes: 10
+
+projects:
+  old-arbitrary-key:
+    path: "/home/user/my-project"
+    favorite: true
+    hibernation_days: 7
+`
+	if err := os.WriteFile(configPath, []byte(v1Config), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	loader := NewViperLoader(configPath)
+	cfg, err := loader.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Should be migrated to v2
+	if cfg.StorageVersion != 2 {
+		t.Errorf("StorageVersion = %d, want 2 (migrated)", cfg.StorageVersion)
+	}
+
+	// Project should be migrated with base name as key
+	if _, ok := cfg.Projects["my-project"]; !ok {
+		// List actual keys
+		var keys []string
+		for k := range cfg.Projects {
+			keys = append(keys, k)
+		}
+		t.Fatalf("my-project not found in migrated projects, got keys: %v", keys)
+	}
+
+	p := cfg.Projects["my-project"]
+	if p.Path != "/home/user/my-project" {
+		t.Errorf("Path = %s, want /home/user/my-project", p.Path)
+	}
+	if p.DirectoryName != "my-project" {
+		t.Errorf("DirectoryName = %s, want my-project", p.DirectoryName)
+	}
+	if !p.IsFavorite {
+		t.Error("IsFavorite = false, want true")
+	}
+}
+
+// TestViperLoader_Load_MigratesV1_CollisionWarning tests migration with collision (Subtask 2.5)
+func TestViperLoader_Load_MigratesV1_CollisionWarning(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Write v1 format with two projects that would collide (same base name)
+	v1Config := `settings:
+  hibernation_days: 14
+
+projects:
+  project-a:
+    path: "/home/user/work/api-service"
+    favorite: false
+  project-b:
+    path: "/home/user/client/api-service"
+    favorite: true
+`
+	if err := os.WriteFile(configPath, []byte(v1Config), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	loader := NewViperLoader(configPath)
+	cfg, err := loader.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// StorageVersion should be 2
+	if cfg.StorageVersion != 2 {
+		t.Errorf("StorageVersion = %d, want 2", cfg.StorageVersion)
+	}
+
+	// Only one project should remain (collision - second one skipped)
+	if len(cfg.Projects) != 1 {
+		t.Errorf("Projects count = %d, want 1 (one should be skipped due to collision)", len(cfg.Projects))
+	}
+
+	// api-service should be the key
+	if _, ok := cfg.Projects["api-service"]; !ok {
+		t.Error("api-service not found in migrated projects")
+	}
+}
+
+// TestViperLoader_Load_MigratesV1_EmptyPathSkipped tests migration skips entries with empty path (Subtask 2.5)
+func TestViperLoader_Load_MigratesV1_EmptyPathSkipped(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Write v1 format with empty path
+	v1Config := `settings:
+  hibernation_days: 14
+
+projects:
+  project-with-no-path:
+    path: ""
+    favorite: false
+  valid-project:
+    path: "/home/user/valid-project"
+    favorite: true
+`
+	if err := os.WriteFile(configPath, []byte(v1Config), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	loader := NewViperLoader(configPath)
+	cfg, err := loader.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Only valid project should remain
+	if len(cfg.Projects) != 1 {
+		t.Errorf("Projects count = %d, want 1 (empty path should be skipped)", len(cfg.Projects))
+	}
+
+	if _, ok := cfg.Projects["valid-project"]; !ok {
+		t.Error("valid-project not found in migrated projects")
+	}
+}
+
+// Story 3.5.4 Integration Tests
+
+// TestViperLoader_Integration_FullLifecycle tests add project → save → load → verify (Subtask 7.1)
+func TestViperLoader_Integration_FullLifecycle(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Step 1: Create new config and add projects
+	loader := NewViperLoader(configPath)
+	cfg := ports.NewConfig()
+
+	// Add first project
+	cfg.SetProjectEntry("api-service", "/home/user/api-service", "", false)
+
+	// Add second project with display name
+	cfg.SetProjectEntry("client-b-api-service", "/home/user/client-b/api-service", "Client B API", true)
+
+	// Step 2: Save
+	err := loader.Save(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Step 3: Create fresh loader and load
+	loader2 := NewViperLoader(configPath)
+	cfg2, err := loader2.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Step 4: Verify storage_version
+	if cfg2.StorageVersion != 2 {
+		t.Errorf("StorageVersion = %d, want 2", cfg2.StorageVersion)
+	}
+
+	// Step 5: Verify projects count
+	if len(cfg2.Projects) != 2 {
+		t.Errorf("Projects count = %d, want 2", len(cfg2.Projects))
+	}
+
+	// Step 6: Verify first project via directory mapping
+	dirName1, found := cfg2.GetDirectoryName("/home/user/api-service")
+	if !found {
+		t.Fatal("api-service path lookup failed")
+	}
+	if dirName1 != "api-service" {
+		t.Errorf("GetDirectoryName() = %s, want api-service", dirName1)
+	}
+
+	// Step 7: Verify reverse lookup
+	path1, found := cfg2.GetProjectPath("api-service")
+	if !found {
+		t.Fatal("api-service directory lookup failed")
+	}
+	if path1 != "/home/user/api-service" {
+		t.Errorf("GetProjectPath() = %s, want /home/user/api-service", path1)
+	}
+
+	// Step 8: Verify second project with display name
+	p2 := cfg2.Projects["client-b-api-service"]
+	if p2.DisplayName != "Client B API" {
+		t.Errorf("DisplayName = %s, want 'Client B API'", p2.DisplayName)
+	}
+	if !p2.IsFavorite {
+		t.Error("IsFavorite = false, want true")
+	}
+}
+
+// TestViperLoader_Integration_RemoveProject tests remove project → save → load (Subtask 7.2)
+func TestViperLoader_Integration_RemoveProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Step 1: Create config with two projects
+	loader := NewViperLoader(configPath)
+	cfg := ports.NewConfig()
+	cfg.SetProjectEntry("api-service", "/home/user/api-service", "", false)
+	cfg.SetProjectEntry("web-service", "/home/user/web-service", "Web App", true)
+
+	// Save initial state
+	err := loader.Save(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Step 2: Remove one project
+	removed := cfg.RemoveProject("api-service")
+	if !removed {
+		t.Fatal("RemoveProject() returned false")
+	}
+
+	// Step 3: Save after removal
+	err = loader.Save(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Save() after removal error = %v", err)
+	}
+
+	// Step 4: Fresh load and verify
+	loader2 := NewViperLoader(configPath)
+	cfg2, err := loader2.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Step 5: Verify project count
+	if len(cfg2.Projects) != 1 {
+		t.Errorf("Projects count = %d, want 1", len(cfg2.Projects))
+	}
+
+	// Step 6: Verify removed project is gone
+	if _, found := cfg2.GetProjectPath("api-service"); found {
+		t.Error("api-service should have been removed")
+	}
+
+	// Step 7: Verify remaining project
+	if _, found := cfg2.GetProjectPath("web-service"); !found {
+		t.Error("web-service should still exist")
+	}
+}
+
+// TestConfig_ProjectPathLookup_DeterminismWithDirectoryManager tests Config implements ProjectPathLookup (Subtask 7.3)
+func TestConfig_ProjectPathLookup_DeterminismWithDirectoryManager(t *testing.T) {
+	// This test verifies that Config satisfies the ProjectPathLookup interface
+	// and that the same path always returns the same directory name (determinism)
+
+	cfg := ports.NewConfig()
+
+	// Add project entries
+	cfg.SetProjectEntry("api-service", "/home/user/api-service", "", false)
+	cfg.SetProjectEntry("client-b-api-service", "/home/user/client-b/api-service", "", false)
+
+	// Test that Config satisfies ProjectPathLookup interface
+	var lookup ports.ProjectPathLookup = cfg
+
+	// Test 1: Same path should always return same directory name (determinism)
+	for i := 0; i < 100; i++ {
+		dirName := lookup.GetDirForPath("/home/user/api-service")
+		if dirName != "api-service" {
+			t.Errorf("iteration %d: GetDirForPath() = %s, want api-service", i, dirName)
+		}
+	}
+
+	// Test 2: Different paths should return different directory names
+	dir1 := lookup.GetDirForPath("/home/user/api-service")
+	dir2 := lookup.GetDirForPath("/home/user/client-b/api-service")
+	if dir1 == dir2 {
+		t.Errorf("Different paths returned same directory: %s", dir1)
+	}
+
+	// Test 3: Non-registered path returns empty string
+	dirName := lookup.GetDirForPath("/non/existent/path")
+	if dirName != "" {
+		t.Errorf("Non-existent path should return empty string, got %s", dirName)
+	}
+}
+
+// TestViperLoader_Save_DoesNotWriteDeprecatedFields tests Save() omits deprecated fields (Subtask 5.3)
+func TestViperLoader_Save_DoesNotWriteDeprecatedFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	loader := NewViperLoader(configPath)
+
+	// Create config with deprecated fields set
+	hibernationDays := 7
+	waitingThreshold := 5
+	cfg := ports.NewConfig()
+	cfg.Projects["api-service"] = ports.ProjectConfig{
+		Path:                         "/path/to/api",
+		DirectoryName:                "api-service",
+		HibernationDays:              &hibernationDays,  // DEPRECATED
+		AgentWaitingThresholdMinutes: &waitingThreshold, // DEPRECATED
+	}
+
+	err := loader.Save(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Reload and verify deprecated fields are NOT present in project config
+	loader2 := NewViperLoader(configPath)
+	cfg2, err := loader2.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	pc, ok := cfg2.Projects["api-service"]
+	if !ok {
+		t.Fatal("api-service not found after reload")
+	}
+
+	// Deprecated fields should be nil after reload (not written, so not read back)
+	if pc.HibernationDays != nil {
+		t.Errorf("HibernationDays should be nil after reload, got %v", *pc.HibernationDays)
+	}
+	if pc.AgentWaitingThresholdMinutes != nil {
+		t.Errorf("AgentWaitingThresholdMinutes should be nil after reload, got %v", *pc.AgentWaitingThresholdMinutes)
+	}
+}
+
+// TestViperLoader_Load_FixesInvalidStorageVersion tests fixInvalidValues handles invalid storage_version (Subtask 2.6)
+func TestViperLoader_Load_FixesInvalidStorageVersion(t *testing.T) {
+	tests := []struct {
+		name           string
+		storageVersion int
+	}{
+		{"storage_version_3", 3},
+		{"storage_version_99", 99},
+		{"storage_version_negative", -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+
+			// Write config with invalid storage_version
+			configContent := `storage_version: ` + fmt.Sprintf("%d", tt.storageVersion) + `
+
+settings:
+  hibernation_days: 14
+  refresh_interval_seconds: 10
+  refresh_debounce_ms: 200
+  agent_waiting_threshold_minutes: 10
+
+projects: {}
+`
+			if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+				t.Fatalf("failed to write test file: %v", err)
+			}
+
+			loader := NewViperLoader(configPath)
+			cfg, err := loader.Load(context.Background())
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+
+			// Should be fixed to 2
+			if cfg.StorageVersion != 2 {
+				t.Errorf("StorageVersion = %d, want 2 (fixed)", cfg.StorageVersion)
+			}
+		})
+	}
+}
+
+// TestViperLoader_Load_V2Format_KeyTakesPrecedenceOverDirectoryName tests key wins when key and directory_name mismatch
+func TestViperLoader_Load_V2Format_KeyTakesPrecedenceOverDirectoryName(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Write v2 config where key and directory_name field mismatch
+	v2Config := `storage_version: 2
+
+settings:
+  hibernation_days: 14
+
+projects:
+  correct-key:
+    path: "/home/user/my-project"
+    directory_name: "wrong-value"
+    favorite: false
+`
+	if err := os.WriteFile(configPath, []byte(v2Config), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	loader := NewViperLoader(configPath)
+	cfg, err := loader.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Map key is "correct-key", so that's what we look up
+	p, ok := cfg.Projects["correct-key"]
+	if !ok {
+		t.Fatal("correct-key not found in projects")
+	}
+
+	// DirectoryName should be set from map key, not from the field
+	if p.DirectoryName != "correct-key" {
+		t.Errorf("DirectoryName = %s, want 'correct-key' (key takes precedence)", p.DirectoryName)
 	}
 }

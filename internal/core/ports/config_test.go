@@ -57,6 +57,7 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "negative HibernationDays is invalid",
 			config: &ports.Config{
+				StorageVersion:               2,
 				HibernationDays:              -1,
 				RefreshIntervalSeconds:       10,
 				RefreshDebounceMs:            200,
@@ -68,6 +69,7 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "zero HibernationDays is valid (disabled)",
 			config: &ports.Config{
+				StorageVersion:               2,
 				HibernationDays:              0,
 				RefreshIntervalSeconds:       10,
 				RefreshDebounceMs:            200,
@@ -79,6 +81,7 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "zero RefreshIntervalSeconds is invalid",
 			config: &ports.Config{
+				StorageVersion:               2,
 				HibernationDays:              14,
 				RefreshIntervalSeconds:       0,
 				RefreshDebounceMs:            200,
@@ -90,6 +93,7 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "negative RefreshIntervalSeconds is invalid",
 			config: &ports.Config{
+				StorageVersion:               2,
 				HibernationDays:              14,
 				RefreshIntervalSeconds:       -5,
 				RefreshDebounceMs:            200,
@@ -101,6 +105,7 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "zero RefreshDebounceMs is invalid",
 			config: &ports.Config{
+				StorageVersion:               2,
 				HibernationDays:              14,
 				RefreshIntervalSeconds:       10,
 				RefreshDebounceMs:            0,
@@ -112,6 +117,7 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "negative AgentWaitingThresholdMinutes is invalid",
 			config: &ports.Config{
+				StorageVersion:               2,
 				HibernationDays:              14,
 				RefreshIntervalSeconds:       10,
 				RefreshDebounceMs:            200,
@@ -123,6 +129,7 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "zero AgentWaitingThresholdMinutes is valid (disabled)",
 			config: &ports.Config{
+				StorageVersion:               2,
 				HibernationDays:              14,
 				RefreshIntervalSeconds:       10,
 				RefreshDebounceMs:            200,
@@ -220,6 +227,7 @@ func TestConfig_Validate_ProjectConfigOverrides(t *testing.T) {
 		{
 			name: "nil Projects map is valid",
 			config: &ports.Config{
+				StorageVersion:               2,
 				HibernationDays:              14,
 				RefreshIntervalSeconds:       10,
 				RefreshDebounceMs:            200,
@@ -404,6 +412,72 @@ func (m *mockConfigLoader) Save(ctx context.Context, config *ports.Config) error
 // Compile-time interface compliance check
 var _ ports.ConfigLoader = (*mockConfigLoader)(nil)
 
+// Tests for Story 3.5.4: Master Config as Path Index
+
+func TestNewConfig_StorageVersionDefault(t *testing.T) {
+	config := ports.NewConfig()
+
+	if config.StorageVersion != 2 {
+		t.Errorf("StorageVersion = %d, want 2", config.StorageVersion)
+	}
+}
+
+func TestConfig_Validate_StorageVersion(t *testing.T) {
+	tests := []struct {
+		name           string
+		storageVersion int
+		wantErr        bool
+	}{
+		{
+			name:           "storage version 2 is valid",
+			storageVersion: 2,
+			wantErr:        false,
+		},
+		{
+			name:           "storage version 0 is invalid",
+			storageVersion: 0,
+			wantErr:        true,
+		},
+		{
+			name:           "storage version 1 is invalid",
+			storageVersion: 1,
+			wantErr:        true,
+		},
+		{
+			name:           "storage version 3 is invalid",
+			storageVersion: 3,
+			wantErr:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := ports.NewConfig()
+			config.StorageVersion = tt.storageVersion
+			err := config.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil && !errors.Is(err, domain.ErrConfigInvalid) {
+				t.Errorf("Validate() error should wrap domain.ErrConfigInvalid, got %v", err)
+			}
+		})
+	}
+}
+
+func TestProjectConfig_DirectoryName(t *testing.T) {
+	pc := ports.ProjectConfig{
+		Path:          "/home/user/api-service",
+		DirectoryName: "api-service",
+		DisplayName:   "API Service",
+		IsFavorite:    true,
+	}
+
+	if pc.DirectoryName != "api-service" {
+		t.Errorf("ProjectConfig.DirectoryName = %q, want %q", pc.DirectoryName, "api-service")
+	}
+}
+
 func TestConfigLoader_InterfaceCompliance(t *testing.T) {
 	var loader ports.ConfigLoader = &mockConfigLoader{}
 	ctx := context.Background()
@@ -456,3 +530,228 @@ func TestConfigLoader_InterfaceCompliance(t *testing.T) {
 		}
 	})
 }
+
+// Story 3.5.4: Path Index Lookup Methods Tests
+
+// TestConfig_GetDirForPath tests ProjectPathLookup interface compliance (Subtask 3.1, 6.4)
+func TestConfig_GetDirForPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		projects map[string]ports.ProjectConfig
+		path     string
+		wantDir  string
+	}{
+		{
+			name: "existing project returns directory name",
+			projects: map[string]ports.ProjectConfig{
+				"api-service": {Path: "/home/user/api-service", DirectoryName: "api-service"},
+			},
+			path:    "/home/user/api-service",
+			wantDir: "api-service",
+		},
+		{
+			name:     "non-existent path returns empty string",
+			projects: map[string]ports.ProjectConfig{},
+			path:     "/non/existent",
+			wantDir:  "",
+		},
+		{
+			name: "disambiguated directory name",
+			projects: map[string]ports.ProjectConfig{
+				"client-b-api-service": {Path: "/home/user/client-b/api-service", DirectoryName: "client-b-api-service"},
+			},
+			path:    "/home/user/client-b/api-service",
+			wantDir: "client-b-api-service",
+		},
+		{
+			name:     "nil projects returns empty string",
+			projects: nil,
+			path:     "/any/path",
+			wantDir:  "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &ports.Config{StorageVersion: 2, Projects: tt.projects}
+			got := cfg.GetDirForPath(tt.path)
+			if got != tt.wantDir {
+				t.Errorf("GetDirForPath() = %q, want %q", got, tt.wantDir)
+			}
+		})
+	}
+}
+
+// TestConfig_GetDirectoryName tests GetDirectoryName method (Subtask 3.2, 6.5)
+func TestConfig_GetDirectoryName(t *testing.T) {
+	tests := []struct {
+		name      string
+		projects  map[string]ports.ProjectConfig
+		path      string
+		wantDir   string
+		wantFound bool
+	}{
+		{
+			name: "existing project",
+			projects: map[string]ports.ProjectConfig{
+				"api-service": {Path: "/home/user/api-service", DirectoryName: "api-service"},
+			},
+			path:      "/home/user/api-service",
+			wantDir:   "api-service",
+			wantFound: true,
+		},
+		{
+			name:      "non-existent project",
+			projects:  map[string]ports.ProjectConfig{},
+			path:      "/non/existent",
+			wantDir:   "",
+			wantFound: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &ports.Config{StorageVersion: 2, Projects: tt.projects}
+			gotDir, gotFound := cfg.GetDirectoryName(tt.path)
+			if gotDir != tt.wantDir {
+				t.Errorf("GetDirectoryName() dir = %q, want %q", gotDir, tt.wantDir)
+			}
+			if gotFound != tt.wantFound {
+				t.Errorf("GetDirectoryName() found = %v, want %v", gotFound, tt.wantFound)
+			}
+		})
+	}
+}
+
+// TestConfig_GetProjectPath tests GetProjectPath method (Subtask 3.3, 6.6)
+func TestConfig_GetProjectPath(t *testing.T) {
+	tests := []struct {
+		name      string
+		projects  map[string]ports.ProjectConfig
+		dirName   string
+		wantPath  string
+		wantFound bool
+	}{
+		{
+			name: "existing project",
+			projects: map[string]ports.ProjectConfig{
+				"api-service": {Path: "/home/user/api-service", DirectoryName: "api-service"},
+			},
+			dirName:   "api-service",
+			wantPath:  "/home/user/api-service",
+			wantFound: true,
+		},
+		{
+			name:      "non-existent directory name",
+			projects:  map[string]ports.ProjectConfig{},
+			dirName:   "nonexistent",
+			wantPath:  "",
+			wantFound: false,
+		},
+		{
+			name:      "nil projects",
+			projects:  nil,
+			dirName:   "any",
+			wantPath:  "",
+			wantFound: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &ports.Config{StorageVersion: 2, Projects: tt.projects}
+			gotPath, gotFound := cfg.GetProjectPath(tt.dirName)
+			if gotPath != tt.wantPath {
+				t.Errorf("GetProjectPath() path = %q, want %q", gotPath, tt.wantPath)
+			}
+			if gotFound != tt.wantFound {
+				t.Errorf("GetProjectPath() found = %v, want %v", gotFound, tt.wantFound)
+			}
+		})
+	}
+}
+
+// TestConfig_SetProjectEntry tests SetProjectEntry method (Subtask 3.4, 6.7)
+func TestConfig_SetProjectEntry(t *testing.T) {
+	t.Run("adds new project to nil map", func(t *testing.T) {
+		cfg := &ports.Config{StorageVersion: 2, Projects: nil}
+		cfg.SetProjectEntry("api-service", "/path/to/api", "API Service", true)
+
+		if cfg.Projects == nil {
+			t.Fatal("Projects map should be initialized")
+		}
+
+		pc, ok := cfg.Projects["api-service"]
+		if !ok {
+			t.Fatal("api-service not found in projects")
+		}
+		if pc.Path != "/path/to/api" {
+			t.Errorf("Path = %q, want %q", pc.Path, "/path/to/api")
+		}
+		if pc.DirectoryName != "api-service" {
+			t.Errorf("DirectoryName = %q, want %q", pc.DirectoryName, "api-service")
+		}
+		if pc.DisplayName != "API Service" {
+			t.Errorf("DisplayName = %q, want %q", pc.DisplayName, "API Service")
+		}
+		if !pc.IsFavorite {
+			t.Error("IsFavorite = false, want true")
+		}
+	})
+
+	t.Run("updates existing project", func(t *testing.T) {
+		cfg := &ports.Config{
+			StorageVersion: 2,
+			Projects: map[string]ports.ProjectConfig{
+				"api-service": {Path: "/old/path", DirectoryName: "api-service"},
+			},
+		}
+		cfg.SetProjectEntry("api-service", "/new/path", "New Name", false)
+
+		pc := cfg.Projects["api-service"]
+		if pc.Path != "/new/path" {
+			t.Errorf("Path = %q, want %q", pc.Path, "/new/path")
+		}
+		if pc.DisplayName != "New Name" {
+			t.Errorf("DisplayName = %q, want %q", pc.DisplayName, "New Name")
+		}
+	})
+}
+
+// TestConfig_RemoveProject tests RemoveProject method (Subtask 3.5, 6.8)
+func TestConfig_RemoveProject(t *testing.T) {
+	t.Run("removes existing project", func(t *testing.T) {
+		cfg := &ports.Config{
+			StorageVersion: 2,
+			Projects: map[string]ports.ProjectConfig{
+				"api-service": {Path: "/path/to/api", DirectoryName: "api-service"},
+			},
+		}
+		removed := cfg.RemoveProject("api-service")
+
+		if !removed {
+			t.Error("RemoveProject() = false, want true")
+		}
+		if _, ok := cfg.Projects["api-service"]; ok {
+			t.Error("api-service should be removed from projects")
+		}
+	})
+
+	t.Run("returns false for non-existent project", func(t *testing.T) {
+		cfg := &ports.Config{StorageVersion: 2, Projects: map[string]ports.ProjectConfig{}}
+		removed := cfg.RemoveProject("nonexistent")
+
+		if removed {
+			t.Error("RemoveProject() = true for non-existent, want false")
+		}
+	})
+
+	t.Run("handles nil projects", func(t *testing.T) {
+		cfg := &ports.Config{StorageVersion: 2, Projects: nil}
+		removed := cfg.RemoveProject("any")
+
+		if removed {
+			t.Error("RemoveProject() = true for nil projects, want false")
+		}
+	})
+}
+
+// Compile-time interface compliance check (Subtask 3.6)
+var _ ports.ProjectPathLookup = (*ports.Config)(nil)
