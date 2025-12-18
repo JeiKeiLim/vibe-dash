@@ -328,6 +328,37 @@ cd vibe-dash && go mod init github.com/JeiKeiLim/vibe-dash
 
 Viper merges these layers automatically. CLI flags always win.
 
+### Project Directory Collision Handling
+
+**Problem:** Multiple projects may have the same directory name (e.g., two different `api-service` projects).
+
+**Resolution Algorithm (Recursive):**
+
+```
+1. Use project directory name
+   /home/user/work/api-service → ~/.vibe-dash/api-service/
+
+2. On collision: prepend parent directory
+   /home/user/client-b/api-service → ~/.vibe-dash/client-b-api-service/
+
+3. Still collision: prepend grandparent
+   /other/client-b/api-service → ~/.vibe-dash/other-client-b-api-service/
+
+4. Continue up directory tree until unique
+```
+
+**Implementation Details:**
+
+| Aspect | Approach |
+|--------|----------|
+| Canonical paths | Use `filepath.EvalSymlinks()` to resolve symlinks before comparison |
+| Determinism | Same project path always produces same directory name |
+| Performance | Resolution occurs only at `vibe add` time, not runtime |
+| Location | `internal/adapters/filesystem/directory.go` |
+| Interface | `DirectoryManager` in `internal/core/ports/` |
+
+**PRD Reference:** Lines 647-659
+
 ### Error Handling Strategy
 
 **Approach: Standard Go errors with domain types**

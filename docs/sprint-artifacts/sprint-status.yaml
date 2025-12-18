@@ -1,6 +1,6 @@
 # generated: 2025-12-12
 # updated: 2025-12-18
-# updated by: SM Agent (Epic 3 retrospective complete, Epic 3.5 identified)
+# updated by: Architect (Winston) - Epic 3.5 stories created, architecture planning complete
 # project: bmad-test
 # project_key: vibe-dash
 # tracking_system: file-system
@@ -84,8 +84,16 @@ development_status:
 
   # Epic 3.5: Storage Structure Alignment (Critical - must complete before Epic 4)
   # Discovered during Epic 3 retrospective - storage structure doesn't match PRD spec
-  # Requires Architect planning session before stories can be created
-  epic-3-5: backlog
+  # Architecture planning completed 2025-12-18 - Full PRD compliance, clean implementation
+  epic-3-5: in-progress
+  3-5-0-cleanup-existing-storage: backlog
+  3-5-1-directory-manager: backlog
+  3-5-2-per-project-sqlite-repository: backlog
+  3-5-3-per-project-config-files: backlog
+  3-5-4-master-config-path-index: backlog
+  3-5-5-repository-coordinator: backlog
+  3-5-6-update-cli-commands: backlog
+  3-5-7-integration-testing: backlog
   epic-3-5-retrospective: optional
 
   # Epic 4: Agent Waiting Detection (Killer Feature)
