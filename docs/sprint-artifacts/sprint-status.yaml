@@ -1,6 +1,6 @@
 # generated: 2025-12-12
 # updated: 2025-12-18
-# updated by: Architect (Winston) - Epic 3.5 stories created, architecture planning complete
+# updated by: Dev Agent (Amelia) - Story 3.5.2 completed with code review fixes applied
 # project: bmad-test
 # project_key: vibe-dash
 # tracking_system: file-system
@@ -88,7 +88,7 @@ development_status:
   epic-3-5: in-progress
   3-5-0-cleanup-existing-storage: done
   3-5-1-directory-manager: done
-  3-5-2-per-project-sqlite-repository: backlog
+  3-5-2-per-project-sqlite-repository: done
   3-5-3-per-project-config-files: backlog
   3-5-4-master-config-path-index: backlog
   3-5-5-repository-coordinator: backlog
