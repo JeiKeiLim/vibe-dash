@@ -41,4 +41,10 @@ type DirectoryManager interface {
 	//   - Directory creation fails - permission denied, disk full (domain.ErrPathNotAccessible)
 	//   - Collision unresolvable (domain.ErrCollisionUnresolvable)
 	EnsureProjectDir(ctx context.Context, projectPath string) (string, error)
+
+	// DeleteProjectDir removes the project directory and all its contents.
+	// The projectPath is the canonical project path (used to look up directory name).
+	// Returns nil if directory doesn't exist (idempotent).
+	// Returns error if deletion fails for reasons other than non-existence.
+	DeleteProjectDir(ctx context.Context, projectPath string) error
 }

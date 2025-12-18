@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -122,9 +123,20 @@ func runRemove(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Delete from repository
+	// Store path before delete (needed for directory cleanup)
+	projectPath := project.Path
+
+	// Delete from repository (removes from DB and config)
 	if err := repository.Delete(ctx, project.ID); err != nil {
 		return fmt.Errorf("failed to remove project: %w", err)
+	}
+
+	// Delete project directory using DirectoryManager (non-fatal if fails)
+	if directoryManager != nil {
+		if err := directoryManager.DeleteProjectDir(ctx, projectPath); err != nil {
+			slog.Warn("failed to delete project directory", "path", projectPath, "error", err)
+			// Continue - project removed from tracking, directory left behind
+		}
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "✓ Removed: %s\n", displayName)

@@ -408,3 +408,96 @@ func TestRemove_MultipleInvalidInputs_Reprompts(t *testing.T) {
 		t.Error("expected project to be deleted after valid input")
 	}
 }
+
+// ============================================================================
+// Task 10: New storage structure tests (AC: 1, 2, 4 from Story 3.5.6)
+// ============================================================================
+
+func TestRemove_CallsDeleteProjectDir(t *testing.T) {
+	// AC2: Verify DeleteProjectDir is called after repository.Delete()
+	mock := NewMockRepository()
+	p, _ := domain.NewProject("/path/to/test-project", "")
+	mock.projects[p.Path] = p
+	cli.SetRepository(mock)
+
+	// Set up mock directory manager
+	mockDM := NewMockDirectoryManager()
+	SetMockDirectoryManager(mockDM)
+	defer ClearMockDirectoryManager()
+
+	output, err := executeRemoveCommand(t, []string{"test-project", "--force"}, "")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if !strings.Contains(output, "✓ Removed: test-project") {
+		t.Errorf("expected success message, got: %s", output)
+	}
+
+	// Verify DeleteProjectDir was called with the project path
+	if len(mockDM.deleteCalls) != 1 {
+		t.Errorf("expected 1 DeleteProjectDir call, got %d", len(mockDM.deleteCalls))
+	} else if mockDM.deleteCalls[0] != "/path/to/test-project" {
+		t.Errorf("DeleteProjectDir called with wrong path: got %s, want /path/to/test-project", mockDM.deleteCalls[0])
+	}
+}
+
+func TestRemove_DirectoryDeletionErrorIsNonFatal(t *testing.T) {
+	// AC2: Verify directory deletion failure doesn't fail the remove command
+	mock := NewMockRepository()
+	p, _ := domain.NewProject("/path/to/test-project", "")
+	mock.projects[p.Path] = p
+	cli.SetRepository(mock)
+
+	// Set up mock directory manager with error
+	mockDM := NewMockDirectoryManager()
+	mockDM.deleteErr = errors.New("permission denied")
+	SetMockDirectoryManager(mockDM)
+	defer ClearMockDirectoryManager()
+
+	output, err := executeRemoveCommand(t, []string{"test-project", "--force"}, "")
+
+	// Remove should succeed even when directory deletion fails
+	if err != nil {
+		t.Fatalf("expected no error (directory deletion is non-fatal), got: %v", err)
+	}
+
+	if !strings.Contains(output, "✓ Removed: test-project") {
+		t.Errorf("expected success message despite directory deletion error, got: %s", output)
+	}
+
+	// Verify project was removed from repository
+	if len(mock.projects) != 0 {
+		t.Error("expected project to be removed from repository")
+	}
+
+	// Verify DeleteProjectDir was still called
+	if len(mockDM.deleteCalls) != 1 {
+		t.Errorf("expected DeleteProjectDir to be called, got %d calls", len(mockDM.deleteCalls))
+	}
+}
+
+func TestRemove_NoDirectoryManagerIsGraceful(t *testing.T) {
+	// Verify remove works when directoryManager is nil (backward compatibility)
+	mock := NewMockRepository()
+	p, _ := domain.NewProject("/path/to/test-project", "")
+	mock.projects[p.Path] = p
+	cli.SetRepository(mock)
+
+	// Explicitly clear directory manager
+	ClearMockDirectoryManager()
+
+	output, err := executeRemoveCommand(t, []string{"test-project", "--force"}, "")
+	if err != nil {
+		t.Fatalf("expected no error without directory manager, got: %v", err)
+	}
+
+	if !strings.Contains(output, "✓ Removed: test-project") {
+		t.Errorf("expected success message, got: %s", output)
+	}
+
+	// Verify project was removed from repository
+	if len(mock.projects) != 0 {
+		t.Error("expected project to be removed from repository")
+	}
+}

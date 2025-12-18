@@ -799,6 +799,7 @@ func (m *mockConfigLoader) Save(ctx context.Context, config *ports.Config) error
 type mockDirectoryManager struct {
 	getProjectDirNameFunc func(ctx context.Context, projectPath string) (string, error)
 	ensureProjectDirFunc  func(ctx context.Context, projectPath string) (string, error)
+	deleteProjectDirFunc  func(ctx context.Context, projectPath string) error
 }
 
 func (m *mockDirectoryManager) GetProjectDirName(ctx context.Context, projectPath string) (string, error) {
@@ -813,4 +814,11 @@ func (m *mockDirectoryManager) EnsureProjectDir(ctx context.Context, projectPath
 		return m.ensureProjectDirFunc(ctx, projectPath)
 	}
 	return "", nil
+}
+
+func (m *mockDirectoryManager) DeleteProjectDir(ctx context.Context, projectPath string) error {
+	if m.deleteProjectDirFunc != nil {
+		return m.deleteProjectDirFunc(ctx, projectPath)
+	}
+	return nil
 }

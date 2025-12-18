@@ -838,3 +838,175 @@ func TestGetProjectDirName_RelativePath(t *testing.T) {
 		t.Errorf("got %q, want %q", got, expected)
 	}
 }
+
+// Test DeleteProjectDir basic functionality
+func TestDeleteProjectDir_DeletesDirectory(t *testing.T) {
+	tempDir := t.TempDir()
+	basePath := filepath.Join(tempDir, "vibe-dash")
+
+	// Create project source directory
+	projectPath := filepath.Join(tempDir, "my-project")
+	if err := os.MkdirAll(projectPath, 0755); err != nil {
+		t.Fatalf("failed to create project dir: %v", err)
+	}
+
+	// Get canonical path for lookup
+	canonicalPath, err := CanonicalPath(projectPath)
+	if err != nil {
+		t.Fatalf("failed to get canonical path: %v", err)
+	}
+
+	// Create lookup that maps canonical path to directory name
+	lookup := &mockPathLookup{
+		paths: map[string]string{
+			canonicalPath: "my-project",
+		},
+	}
+
+	dm := NewDirectoryManager(basePath, lookup)
+
+	// Create the project directory structure using EnsureProjectDir first
+	projDir, err := dm.EnsureProjectDir(context.Background(), projectPath)
+	if err != nil {
+		t.Fatalf("failed to ensure project dir: %v", err)
+	}
+
+	// Verify directory exists
+	if _, err := os.Stat(projDir); err != nil {
+		t.Fatalf("project directory not created: %v", err)
+	}
+
+	// Delete the project directory
+	err = dm.DeleteProjectDir(context.Background(), projectPath)
+	if err != nil {
+		t.Fatalf("DeleteProjectDir failed: %v", err)
+	}
+
+	// Verify directory is deleted
+	if _, err := os.Stat(projDir); !os.IsNotExist(err) {
+		t.Errorf("project directory still exists after deletion")
+	}
+}
+
+// Test DeleteProjectDir is idempotent (returns nil if directory doesn't exist)
+func TestDeleteProjectDir_Idempotent(t *testing.T) {
+	tempDir := t.TempDir()
+	basePath := filepath.Join(tempDir, "vibe-dash")
+
+	// Create project source directory
+	projectPath := filepath.Join(tempDir, "my-project")
+	if err := os.MkdirAll(projectPath, 0755); err != nil {
+		t.Fatalf("failed to create project dir: %v", err)
+	}
+
+	canonicalPath, _ := CanonicalPath(projectPath)
+	lookup := &mockPathLookup{
+		paths: map[string]string{
+			canonicalPath: "my-project",
+		},
+	}
+
+	dm := NewDirectoryManager(basePath, lookup)
+
+	// Don't create the project directory - just call delete
+	// Should return nil (idempotent)
+	err := dm.DeleteProjectDir(context.Background(), projectPath)
+	if err != nil {
+		t.Errorf("DeleteProjectDir should be idempotent, got error: %v", err)
+	}
+}
+
+// Test DeleteProjectDir returns nil when path not tracked
+func TestDeleteProjectDir_NotTracked(t *testing.T) {
+	tempDir := t.TempDir()
+	basePath := filepath.Join(tempDir, "vibe-dash")
+
+	// Create project source directory
+	projectPath := filepath.Join(tempDir, "my-project")
+	if err := os.MkdirAll(projectPath, 0755); err != nil {
+		t.Fatalf("failed to create project dir: %v", err)
+	}
+
+	// Empty lookup - path not tracked
+	lookup := &mockPathLookup{
+		paths: map[string]string{},
+	}
+
+	dm := NewDirectoryManager(basePath, lookup)
+
+	// Should return nil when path not tracked
+	err := dm.DeleteProjectDir(context.Background(), projectPath)
+	if err != nil {
+		t.Errorf("DeleteProjectDir should return nil for untracked path, got: %v", err)
+	}
+}
+
+// Test DeleteProjectDir returns nil when configLookup is nil
+func TestDeleteProjectDir_NilLookup(t *testing.T) {
+	tempDir := t.TempDir()
+	basePath := filepath.Join(tempDir, "vibe-dash")
+
+	projectPath := filepath.Join(tempDir, "my-project")
+	if err := os.MkdirAll(projectPath, 0755); err != nil {
+		t.Fatalf("failed to create project dir: %v", err)
+	}
+
+	dm := NewDirectoryManager(basePath, nil)
+
+	// Should return nil when lookup is nil
+	err := dm.DeleteProjectDir(context.Background(), projectPath)
+	if err != nil {
+		t.Errorf("DeleteProjectDir should return nil with nil lookup, got: %v", err)
+	}
+}
+
+// Test DeleteProjectDir respects context cancellation
+func TestDeleteProjectDir_ContextCancellation(t *testing.T) {
+	tempDir := t.TempDir()
+	basePath := filepath.Join(tempDir, "vibe-dash")
+
+	projectPath := filepath.Join(tempDir, "my-project")
+	if err := os.MkdirAll(projectPath, 0755); err != nil {
+		t.Fatalf("failed to create project dir: %v", err)
+	}
+
+	canonicalPath, _ := CanonicalPath(projectPath)
+	lookup := &mockPathLookup{
+		paths: map[string]string{
+			canonicalPath: "my-project",
+		},
+	}
+
+	dm := NewDirectoryManager(basePath, lookup)
+
+	// Create cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := dm.DeleteProjectDir(ctx, projectPath)
+	if err == nil {
+		t.Fatal("expected error for cancelled context")
+	}
+
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got: %v", err)
+	}
+}
+
+// Test DeleteProjectDir returns nil for nonexistent source path
+func TestDeleteProjectDir_NonexistentSourcePath(t *testing.T) {
+	tempDir := t.TempDir()
+	basePath := filepath.Join(tempDir, "vibe-dash")
+
+	lookup := &mockPathLookup{
+		paths: map[string]string{},
+	}
+
+	dm := NewDirectoryManager(basePath, lookup)
+
+	// Path doesn't exist - should return nil (graceful handling)
+	err := dm.DeleteProjectDir(context.Background(), "/nonexistent/path")
+	if err != nil {
+		t.Errorf("DeleteProjectDir should return nil for nonexistent path, got: %v", err)
+	}
+}

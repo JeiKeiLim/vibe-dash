@@ -244,3 +244,47 @@ func (dm *FilesystemDirectoryManager) writeProjectMarker(dirPath, canonicalPath 
 	}
 	return nil
 }
+
+// DeleteProjectDir removes the project directory for the given project path.
+// Returns nil if directory doesn't exist (idempotent).
+func (dm *FilesystemDirectoryManager) DeleteProjectDir(ctx context.Context, projectPath string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	// Look up directory name for this project path
+	if dm.configLookup == nil {
+		return nil // No lookup available, nothing to delete
+	}
+
+	canonicalPath, err := CanonicalPath(projectPath)
+	if err != nil {
+		return nil // Path doesn't exist, nothing to delete
+	}
+
+	dirName := dm.configLookup.GetDirForPath(canonicalPath)
+	if dirName == "" {
+		return nil // Not tracked, nothing to delete
+	}
+
+	dirPath := filepath.Join(dm.basePath, dirName)
+
+	// Safety check - only delete within base path
+	cleanDirPath := filepath.Clean(dirPath)
+	cleanBasePath := filepath.Clean(dm.basePath)
+	if !strings.HasPrefix(cleanDirPath, cleanBasePath) {
+		return fmt.Errorf("%w: directory %s is outside base path", domain.ErrPathNotAccessible, dirPath)
+	}
+
+	// Check if directory exists
+	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
+		return nil // Already deleted, idempotent
+	}
+
+	if err := os.RemoveAll(dirPath); err != nil {
+		return fmt.Errorf("%w: failed to delete project directory %s: %v", domain.ErrPathNotAccessible, dirPath, err)
+	}
+	return nil
+}

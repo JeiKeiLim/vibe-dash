@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -10,10 +11,25 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/cli"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/detectors"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/detectors/speckit"
-	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence/sqlite"
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/filesystem"
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence"
 	"github.com/JeiKeiLim/vibe-dash/internal/config"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/services"
 )
+
+// configPathAdapter implements ports.ProjectPathLookup for DirectoryManager.
+type configPathAdapter struct {
+	loader *config.ViperLoader
+}
+
+func (a *configPathAdapter) GetDirForPath(path string) string {
+	cfg, err := a.loader.Load(context.Background())
+	if err != nil {
+		return ""
+	}
+	dirName, _ := cfg.GetDirectoryName(path)
+	return dirName
+}
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -50,12 +66,29 @@ func run(ctx context.Context) error {
 		"agent_waiting_threshold_minutes", cfg.AgentWaitingThresholdMinutes,
 	)
 
-	// Initialize repository for CLI commands (Story 2.3)
-	repo, err := sqlite.NewSQLiteRepository("")
-	if err != nil {
-		return err
+	// Get base path with safety check (Story 3.5.6)
+	basePath := config.GetDefaultBasePath()
+	if basePath == "" {
+		return fmt.Errorf("failed to determine base path: cannot access home directory")
 	}
-	cli.SetRepository(repo)
+
+	// Create config adapter for DirectoryManager
+	configAdapter := &configPathAdapter{loader: loader}
+
+	// Create DirectoryManager with nil check
+	dirMgr := filesystem.NewDirectoryManager(basePath, configAdapter)
+	if dirMgr == nil {
+		return fmt.Errorf("failed to initialize directory manager: cannot determine base path")
+	}
+
+	// Create RepositoryCoordinator (replaces single-DB sqlite.NewSQLiteRepository)
+	coordinator := persistence.NewRepositoryCoordinator(loader, dirMgr, basePath)
+
+	// Set repository (coordinator implements ports.ProjectRepository)
+	cli.SetRepository(coordinator)
+
+	// Set DirectoryManager for remove command
+	cli.SetDirectoryManager(dirMgr)
 
 	// Initialize detection service with registry (Story 2.5)
 	registry := detectors.NewRegistry()
