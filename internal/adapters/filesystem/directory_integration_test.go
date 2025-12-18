@@ -113,6 +113,102 @@ func TestIntegration_EnsureProjectDir_CollisionResolution(t *testing.T) {
 	}
 }
 
+// TestIntegration_EnsureProjectDir_CollisionResolution_ThreeProjects tests AC2: 3 projects with 2 name collisions
+// Verifies that given 3 projects with same name (api) in different workspaces,
+// each gets a unique directory with correct disambiguation.
+func TestIntegration_EnsureProjectDir_CollisionResolution_ThreeProjects(t *testing.T) {
+	tempDir := t.TempDir()
+	basePath := filepath.Join(tempDir, "vibe-dash")
+
+	// Create three project directories with same name
+	project1 := filepath.Join(tempDir, "workspace-a", "api")
+	project2 := filepath.Join(tempDir, "workspace-b", "api")
+	project3 := filepath.Join(tempDir, "workspace-c", "api")
+
+	if err := os.MkdirAll(project1, 0755); err != nil {
+		t.Fatalf("failed to create project1: %v", err)
+	}
+	if err := os.MkdirAll(project2, 0755); err != nil {
+		t.Fatalf("failed to create project2: %v", err)
+	}
+	if err := os.MkdirAll(project3, 0755); err != nil {
+		t.Fatalf("failed to create project3: %v", err)
+	}
+
+	dm := NewDirectoryManager(basePath, &mockPathLookup{})
+	ctx := context.Background()
+
+	// Add first project
+	dir1, err := dm.EnsureProjectDir(ctx, project1)
+	if err != nil {
+		t.Fatalf("first project failed: %v", err)
+	}
+
+	// Add second project - should get disambiguation
+	dir2, err := dm.EnsureProjectDir(ctx, project2)
+	if err != nil {
+		t.Fatalf("second project failed: %v", err)
+	}
+
+	// Add third project - should get disambiguation
+	dir3, err := dm.EnsureProjectDir(ctx, project3)
+	if err != nil {
+		t.Fatalf("third project failed: %v", err)
+	}
+
+	// All directories should exist
+	if _, err := os.Stat(dir1); err != nil {
+		t.Errorf("dir1 doesn't exist: %v", err)
+	}
+	if _, err := os.Stat(dir2); err != nil {
+		t.Errorf("dir2 doesn't exist: %v", err)
+	}
+	if _, err := os.Stat(dir3); err != nil {
+		t.Errorf("dir3 doesn't exist: %v", err)
+	}
+
+	// All should be different directories
+	if dir1 == dir2 || dir1 == dir3 || dir2 == dir3 {
+		t.Errorf("collision not resolved: dir1=%q, dir2=%q, dir3=%q", dir1, dir2, dir3)
+	}
+
+	// Log directories for debugging
+	t.Logf("Created directories: dir1=%q, dir2=%q, dir3=%q", filepath.Base(dir1), filepath.Base(dir2), filepath.Base(dir3))
+
+	// Verify naming: first should be "api", second should be "workspace-b-api", third should be "workspace-c-api"
+	if filepath.Base(dir1) != "api" {
+		t.Errorf("first dir name: got %q, want %q", filepath.Base(dir1), "api")
+	}
+	if filepath.Base(dir2) != "workspace-b-api" {
+		t.Errorf("second dir name: got %q, want %q", filepath.Base(dir2), "workspace-b-api")
+	}
+	if filepath.Base(dir3) != "workspace-c-api" {
+		t.Errorf("third dir name: got %q, want %q", filepath.Base(dir3), "workspace-c-api")
+	}
+
+	// Verify marker files have correct content
+	for i, test := range []struct {
+		dir         string
+		projectPath string
+	}{
+		{dir1, project1},
+		{dir2, project2},
+		{dir3, project3},
+	} {
+		markerPath := filepath.Join(test.dir, ".project-path")
+		data, err := os.ReadFile(markerPath)
+		if err != nil {
+			t.Errorf("project %d: marker file not readable: %v", i+1, err)
+			continue
+		}
+
+		canonicalPath, _ := CanonicalPath(test.projectPath)
+		if string(data) != canonicalPath {
+			t.Errorf("project %d: marker content mismatch: got %q, want %q", i+1, string(data), canonicalPath)
+		}
+	}
+}
+
 // Subtask 5.3: Test permission error handling with read-only directory
 func TestIntegration_EnsureProjectDir_PermissionError(t *testing.T) {
 	// Skip if running as root (permissions won't apply)

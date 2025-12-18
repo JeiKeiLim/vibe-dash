@@ -809,7 +809,11 @@ func TestGetProjectDirName_RelativePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get working directory: %v", err)
 	}
-	defer os.Chdir(origWd)
+	defer func() {
+		if err := os.Chdir(origWd); err != nil {
+			t.Logf("warning: failed to restore working directory: %v", err)
+		}
+	}()
 
 	tempDir := t.TempDir()
 	basePath := filepath.Join(tempDir, "vibe-dash")

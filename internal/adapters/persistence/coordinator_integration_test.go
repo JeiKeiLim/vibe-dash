@@ -197,18 +197,33 @@ func TestIntegration_ServiceLayerCompatibility(t *testing.T) {
 }
 
 // TestIntegration_LazyLoading tests AC5: connections opened lazily on-demand
+// AC4: Given 20 projects tracked, verify lazy loading behavior by checking cache state
 func TestIntegration_LazyLoading(t *testing.T) {
 	basePath := t.TempDir()
 	ctx := context.Background()
 
-	// Setup 5 project directories
-	for i := 1; i <= 5; i++ {
-		setupIntegrationProjectDir(t, basePath, "lazy-proj-"+strconv.Itoa(i))
+	// AC4 requires 20 projects tracked
+	const projectCount = 20
+
+	// Setup 20 project directories (AC4 requirement)
+	for i := 1; i <= projectCount; i++ {
+		dirName := "lazy-proj-" + strconv.Itoa(i)
+		projDir := setupIntegrationProjectDir(t, basePath, dirName)
+
+		// Pre-populate each database with a project
+		repo, err := sqlite.NewProjectRepository(projDir)
+		if err != nil {
+			t.Fatalf("failed to create repo for %s: %v", dirName, err)
+		}
+		project := createIntegrationTestProject("/integration/lazy/" + dirName)
+		if err := repo.Save(ctx, project); err != nil {
+			t.Fatalf("failed to save project %s: %v", dirName, err)
+		}
 	}
 
-	// Setup config with 5 projects
+	// Setup config with 20 projects
 	cfg := ports.NewConfig()
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= projectCount; i++ {
 		dirName := "lazy-proj-" + strconv.Itoa(i)
 		cfg.SetProjectEntry(dirName, "/integration/lazy/"+dirName, "", false)
 	}
@@ -219,7 +234,7 @@ func TestIntegration_LazyLoading(t *testing.T) {
 
 	coord := NewRepositoryCoordinator(mockLoader, &integrationMockDirectoryManager{basePath: basePath}, basePath)
 
-	// Initially cache should be empty
+	// Initially cache should be empty (lazy loading)
 	coord.mu.RLock()
 	initialCacheLen := len(coord.repoCache)
 	coord.mu.RUnlock()
@@ -227,31 +242,47 @@ func TestIntegration_LazyLoading(t *testing.T) {
 		t.Errorf("expected empty cache initially, got %d entries", initialCacheLen)
 	}
 
-	// Access one project
-	// First we need a project in that DB, so let's setup one dir properly
-	singleDir := setupIntegrationProjectDir(t, basePath, "lazy-single")
-	cfg.SetProjectEntry("lazy-single", "/integration/lazy-single", "", false)
-
-	repo, _ := sqlite.NewProjectRepository(singleDir)
-	singleProject := createIntegrationTestProject("/integration/lazy-single")
-	repo.Save(ctx, singleProject)
-
-	// Find the single project
-	_, err := coord.FindByID(ctx, singleProject.ID)
+	// Access one project via FindByID
+	targetProject := createIntegrationTestProject("/integration/lazy/lazy-proj-1")
+	_, err := coord.FindByID(ctx, targetProject.ID)
 	if err != nil {
 		t.Fatalf("FindByID returned error: %v", err)
 	}
 
-	// Now cache should have entry for the accessed project
+	// Cache should have entry for the accessed project
 	coord.mu.RLock()
-	_, hasSingle := coord.repoCache["lazy-single"]
+	_, hasTarget := coord.repoCache["lazy-proj-1"]
+	cacheSizeAfterFind := len(coord.repoCache)
 	coord.mu.RUnlock()
-	if !hasSingle {
-		t.Error("expected cache to have lazy-single after access")
+	if !hasTarget {
+		t.Error("expected cache to have lazy-proj-1 after access")
 	}
 
-	// But not all projects should be loaded (some might be loaded during FindByID iteration)
-	// The key test is that NOT all 6 projects are loaded - only those accessed during search
+	// Not all 20 should be loaded after accessing just one (FindByID searches sequentially until found)
+	// Some will be loaded during iteration, but we verify lazy behavior exists
+	t.Logf("Cache size after FindByID: %d / %d projects", cacheSizeAfterFind, projectCount)
+
+	// Close and verify cache is cleared
+	err = coord.Close(ctx)
+	if err != nil {
+		t.Fatalf("Close returned error: %v", err)
+	}
+
+	coord.mu.RLock()
+	cacheSizeAfterClose := len(coord.repoCache)
+	coord.mu.RUnlock()
+	if cacheSizeAfterClose != 0 {
+		t.Errorf("expected cache to be empty after Close, got %d entries", cacheSizeAfterClose)
+	}
+
+	// FindAll should work after Close (lazy reload)
+	projects, err := coord.FindAll(ctx)
+	if err != nil {
+		t.Fatalf("FindAll after Close returned error: %v", err)
+	}
+	if len(projects) != projectCount {
+		t.Errorf("expected %d projects, got %d", projectCount, len(projects))
+	}
 }
 
 // TestIntegration_NewProjectCreation tests AC13: new project creation via Save
@@ -425,6 +456,7 @@ func (m *integrationMockConfigLoader) Save(ctx context.Context, config *ports.Co
 type integrationMockDirectoryManager struct {
 	basePath   string
 	ensureFunc func(ctx context.Context, projectPath string) (string, error)
+	deleteFunc func(ctx context.Context, projectPath string) error
 }
 
 func (m *integrationMockDirectoryManager) GetProjectDirName(ctx context.Context, projectPath string) (string, error) {
@@ -437,4 +469,11 @@ func (m *integrationMockDirectoryManager) EnsureProjectDir(ctx context.Context, 
 	}
 	dirName := filepath.Base(projectPath)
 	return filepath.Join(m.basePath, dirName), nil
+}
+
+func (m *integrationMockDirectoryManager) DeleteProjectDir(ctx context.Context, projectPath string) error {
+	if m.deleteFunc != nil {
+		return m.deleteFunc(ctx, projectPath)
+	}
+	return nil // Default: no-op
 }

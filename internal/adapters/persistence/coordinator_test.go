@@ -121,8 +121,12 @@ func TestFindActive_FiltersCorrectly(t *testing.T) {
 	hibernatedProject := createTestProject("/path/to/hibernated")
 	hibernatedProject.State = domain.StateHibernated
 
-	activeRepo.Save(ctx, activeProject)
-	hibernatedRepo.Save(ctx, hibernatedProject)
+	if err := activeRepo.Save(ctx, activeProject); err != nil {
+		t.Fatalf("failed to save active project: %v", err)
+	}
+	if err := hibernatedRepo.Save(ctx, hibernatedProject); err != nil {
+		t.Fatalf("failed to save hibernated project: %v", err)
+	}
 
 	// Setup config
 	cfg := ports.NewConfig()
@@ -170,8 +174,12 @@ func TestFindHibernated_FiltersCorrectly(t *testing.T) {
 	hibernatedProject := createTestProject("/path/to/hibernated")
 	hibernatedProject.State = domain.StateHibernated
 
-	activeRepo.Save(ctx, activeProject)
-	hibernatedRepo.Save(ctx, hibernatedProject)
+	if err := activeRepo.Save(ctx, activeProject); err != nil {
+		t.Fatalf("failed to save active project: %v", err)
+	}
+	if err := hibernatedRepo.Save(ctx, hibernatedProject); err != nil {
+		t.Fatalf("failed to save hibernated project: %v", err)
+	}
 
 	// Setup config
 	cfg := ports.NewConfig()
@@ -298,7 +306,9 @@ func TestDelete_RemovesAndInvalidatesCache(t *testing.T) {
 	// Create repo and save project
 	repo, _ := sqlite.NewProjectRepository(projDir)
 	project := createTestProject("/path/to/delete")
-	repo.Save(ctx, project)
+	if err := repo.Save(ctx, project); err != nil {
+		t.Fatalf("failed to save project: %v", err)
+	}
 
 	// Setup config
 	cfg := ports.NewConfig()
@@ -368,10 +378,14 @@ func TestFindByID_SearchesAcrossDBs(t *testing.T) {
 	// Save project only in proj2
 	repo2, _ := sqlite.NewProjectRepository(proj2Dir)
 	project := createTestProject("/path/to/project2")
-	repo2.Save(ctx, project)
+	if err := repo2.Save(ctx, project); err != nil {
+		t.Fatalf("failed to save project: %v", err)
+	}
 
 	// Setup empty repo for proj1
-	sqlite.NewProjectRepository(proj1Dir)
+	if _, err := sqlite.NewProjectRepository(proj1Dir); err != nil {
+		t.Fatalf("failed to create proj1 repo: %v", err)
+	}
 
 	// Setup config
 	cfg := ports.NewConfig()
@@ -407,7 +421,9 @@ func TestFindByPath_FastPathAndFallback(t *testing.T) {
 	// Create repo and save project
 	repo, _ := sqlite.NewProjectRepository(projDir)
 	project := createTestProject("/path/to/findme")
-	repo.Save(ctx, project)
+	if err := repo.Save(ctx, project); err != nil {
+		t.Fatalf("failed to save project: %v", err)
+	}
 
 	// Setup config with project registered
 	cfg := ports.NewConfig()
@@ -440,11 +456,15 @@ func TestGracefulDegradation_CorruptedDBLogged(t *testing.T) {
 	validDir := setupProjectDir(t, basePath, "valid-proj")
 	repo, _ := sqlite.NewProjectRepository(validDir)
 	project := createTestProject("/path/to/valid")
-	repo.Save(ctx, project)
+	if err := repo.Save(ctx, project); err != nil {
+		t.Fatalf("failed to save project: %v", err)
+	}
 
 	// Setup an invalid directory (no marker file)
 	invalidDir := filepath.Join(basePath, "invalid-proj")
-	os.MkdirAll(invalidDir, 0755)
+	if err := os.MkdirAll(invalidDir, 0755); err != nil {
+		t.Fatalf("failed to create invalid dir: %v", err)
+	}
 	// No .project-path marker - will fail NewProjectRepository
 
 	// Setup config with both
@@ -620,7 +640,9 @@ func TestClose_ClearsCache(t *testing.T) {
 	projDir := setupProjectDir(t, basePath, "close-proj")
 	repo, _ := sqlite.NewProjectRepository(projDir)
 	project := createTestProject("/path/to/close")
-	repo.Save(ctx, project)
+	if err := repo.Save(ctx, project); err != nil {
+		t.Fatalf("failed to save project: %v", err)
+	}
 
 	// Setup config
 	cfg := ports.NewConfig()
@@ -635,7 +657,9 @@ func TestClose_ClearsCache(t *testing.T) {
 	coord := NewRepositoryCoordinator(mockLoader, &mockDirectoryManager{}, basePath)
 
 	// Populate cache
-	coord.FindAll(ctx)
+	if _, err := coord.FindAll(ctx); err != nil {
+		t.Fatalf("FindAll returned error: %v", err)
+	}
 
 	// Verify cache has entry
 	coord.mu.RLock()
@@ -716,7 +740,9 @@ func TestUpdateState_RoutesToCorrectDB(t *testing.T) {
 	repo, _ := sqlite.NewProjectRepository(projDir)
 	project := createTestProject("/path/to/stateful")
 	project.State = domain.StateActive
-	repo.Save(ctx, project)
+	if err := repo.Save(ctx, project); err != nil {
+		t.Fatalf("failed to save project: %v", err)
+	}
 
 	// Setup config
 	cfg := ports.NewConfig()
