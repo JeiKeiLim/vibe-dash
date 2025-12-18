@@ -45,6 +45,7 @@ type StatusBarModel struct {
 	waitingCount     int
 	width            int
 	inHibernatedView bool // Placeholder for Story 5.4
+	isCondensed      bool // True when height < 20 (Story 3.10 AC5)
 
 	// Refresh state (Story 3.6)
 	isRefreshing    bool
@@ -78,6 +79,11 @@ func (s *StatusBarModel) SetInHibernatedView(inView bool) {
 	s.inHibernatedView = inView
 }
 
+// SetCondensed sets the condensed mode for short terminals (Story 3.10 AC5).
+func (s *StatusBarModel) SetCondensed(condensed bool) {
+	s.isCondensed = condensed
+}
+
 // SetRefreshing updates the refresh state (Story 3.6).
 func (s *StatusBarModel) SetRefreshing(isRefreshing bool, progress, total int) {
 	s.isRefreshing = isRefreshing
@@ -92,10 +98,39 @@ func (s *StatusBarModel) SetRefreshComplete(msg string) {
 
 // View renders the status bar to a string.
 // Returns two lines: counts line and shortcuts line (AC1).
+// Returns single line when condensed mode is active (Story 3.10 AC5).
 func (s StatusBarModel) View() string {
+	if s.isCondensed {
+		// Single line: abbreviated counts + shortcuts (AC5)
+		return s.renderCondensed()
+	}
 	countsLine := s.renderCounts()
 	shortcutsLine := s.renderShortcuts()
 	return countsLine + "\n" + shortcutsLine
+}
+
+// renderCondensed renders a single-line status bar for short terminals (Story 3.10 AC5).
+// Must preserve all features from renderCounts() to avoid regression (Story 3.6).
+func (s StatusBarModel) renderCondensed() string {
+	// Show refresh spinner when refreshing (Story 3.6)
+	if s.isRefreshing {
+		return fmt.Sprintf("│ Refreshing %d/%d │ [j/k][?][q] │", s.refreshProgress, s.refreshTotal)
+	}
+
+	// Abbreviated counts (Story 3.10)
+	counts := fmt.Sprintf("%dA %dH", s.activeCount, s.hibernatedCount)
+
+	// Waiting count with styling (Story 3.10)
+	if s.waitingCount > 0 {
+		counts += " " + statusBarWaitingStyle.Render(fmt.Sprintf("%dW", s.waitingCount))
+	}
+
+	// Include refresh message if present (Story 3.6)
+	if s.lastRefreshMsg != "" {
+		counts += " " + s.lastRefreshMsg
+	}
+
+	return "│ " + counts + " │ [j/k][?][q] │"
 }
 
 // renderCounts renders the counts line with pipe separators (AC1, AC4, AC5).

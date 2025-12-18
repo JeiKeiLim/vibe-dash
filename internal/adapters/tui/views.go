@@ -14,6 +14,15 @@ const (
 	MinHeight = 20
 )
 
+// NarrowWarning is shown when terminal width is 60-79 (Story 3.10 AC2).
+const NarrowWarning = "⚠ Narrow terminal - some info hidden"
+
+// MaxContentWidth is the maximum width for content (centered in wider terminals) (Story 3.10 AC4).
+const MaxContentWidth = 120
+
+// HeightThresholdTall is the terminal height at which detail panel opens by default (Story 3.10 AC6/AC7).
+const HeightThresholdTall = 35
+
 // renderEmptyView renders the welcome screen when no projects are present.
 func renderEmptyView(width, height int) string {
 	// Build the content
@@ -207,4 +216,15 @@ func renderConfirmRemoveDialog(projectName string, width, height int) string {
 
 	// Center in terminal
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
+}
+
+// renderNarrowWarning renders the narrow terminal warning bar (Story 3.10 AC2).
+func renderNarrowWarning(width int) string {
+	// Use yellow (ANSI 3) for warning text, consistent with WarningStyle
+	warningStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("3")). // Yellow (ANSI 3)
+		Bold(true)
+
+	warning := warningStyle.Render(NarrowWarning)
+	return lipgloss.PlaceHorizontal(width, lipgloss.Center, warning)
 }

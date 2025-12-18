@@ -417,3 +417,134 @@ func TestStatusBar_SetRefreshing_EndRefresh(t *testing.T) {
 		t.Errorf("expected normal counts after refresh ends, got: %s", view)
 	}
 }
+
+// ============================================================================
+// Story 3.10: Condensed Mode Tests
+// ============================================================================
+
+func TestStatusBarModel_CondensedMode(t *testing.T) {
+	sb := NewStatusBarModel(80)
+	sb.SetCounts(5, 3, 2)
+	sb.SetCondensed(true)
+
+	view := sb.View()
+
+	// Should be single line
+	if strings.Count(view, "\n") > 0 {
+		t.Error("condensed view should be single line")
+	}
+
+	// Should contain abbreviated counts
+	if !strings.Contains(view, "5A") {
+		t.Error("expected abbreviated active count '5A'")
+	}
+	if !strings.Contains(view, "3H") {
+		t.Error("expected abbreviated hibernated count '3H'")
+	}
+	if !strings.Contains(view, "2W") {
+		t.Error("expected abbreviated waiting count '2W'")
+	}
+}
+
+func TestStatusBarModel_CondensedMode_NoWaiting(t *testing.T) {
+	sb := NewStatusBarModel(80)
+	sb.SetCounts(5, 3, 0) // No waiting projects
+	sb.SetCondensed(true)
+
+	view := sb.View()
+
+	// Should not contain waiting indicator
+	if strings.Contains(view, "W") {
+		t.Error("condensed view should not show waiting when count is 0")
+	}
+}
+
+func TestStatusBarModel_NormalMode(t *testing.T) {
+	sb := NewStatusBarModel(80)
+	sb.SetCounts(5, 3, 2)
+	sb.SetCondensed(false)
+
+	view := sb.View()
+
+	// Should be two lines
+	if strings.Count(view, "\n") != 1 {
+		t.Error("normal view should have exactly one newline (two lines)")
+	}
+}
+
+// C1 FIX VERIFICATION: Condensed mode must preserve refresh features
+func TestStatusBarModel_CondensedMode_ShowsRefreshSpinner(t *testing.T) {
+	sb := NewStatusBarModel(80)
+	sb.SetCounts(5, 3, 0)
+	sb.SetCondensed(true)
+	sb.SetRefreshing(true, 2, 5)
+
+	view := sb.View()
+
+	// Should show refresh progress even in condensed mode
+	if !strings.Contains(view, "Refreshing") {
+		t.Error("condensed view should show refresh spinner when refreshing")
+	}
+	if !strings.Contains(view, "2/5") {
+		t.Error("condensed view should show refresh progress")
+	}
+	// Should include navigation shortcuts (code review fix)
+	if !strings.Contains(view, "[j/k]") {
+		t.Error("condensed view should include navigation shortcuts [j/k]")
+	}
+}
+
+func TestStatusBarModel_CondensedMode_ShowsRefreshMessage(t *testing.T) {
+	sb := NewStatusBarModel(80)
+	sb.SetCounts(5, 3, 0)
+	sb.SetCondensed(true)
+	sb.SetRefreshComplete("Refreshed 3 projects")
+
+	view := sb.View()
+
+	// Should show refresh message even in condensed mode
+	if !strings.Contains(view, "Refreshed 3 projects") {
+		t.Error("condensed view should show refresh completion message")
+	}
+}
+
+func TestStatusBarModel_SetCondensed(t *testing.T) {
+	sb := NewStatusBarModel(80)
+
+	// Initially not condensed
+	if sb.isCondensed {
+		t.Error("expected isCondensed to be false initially")
+	}
+
+	// Set to condensed
+	sb.SetCondensed(true)
+	if !sb.isCondensed {
+		t.Error("expected isCondensed to be true after SetCondensed(true)")
+	}
+
+	// Set back to normal
+	sb.SetCondensed(false)
+	if sb.isCondensed {
+		t.Error("expected isCondensed to be false after SetCondensed(false)")
+	}
+}
+
+// Code review fix: Condensed mode must include navigation shortcuts
+func TestStatusBarModel_CondensedMode_IncludesNavigationShortcuts(t *testing.T) {
+	sb := NewStatusBarModel(80)
+	sb.SetCounts(5, 3, 0)
+	sb.SetCondensed(true)
+
+	view := sb.View()
+
+	// Should include navigation shortcuts even in condensed mode
+	if !strings.Contains(view, "[j/k]") {
+		t.Error("condensed view should include navigation shortcuts [j/k]")
+	}
+	if !strings.Contains(view, "[?]") {
+		t.Error("condensed view should include help shortcut [?]")
+	}
+	if !strings.Contains(view, "[q]") {
+		t.Error("condensed view should include quit shortcut [q]")
+	}
+}

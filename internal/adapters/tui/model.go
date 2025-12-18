@@ -174,9 +174,30 @@ func (m *Model) SetDetectionService(svc ports.Detector) {
 }
 
 // shouldShowDetailPanelByDefault returns true if detail panel should be open by default
-// based on terminal height. Per AC5: >= 35 rows = open, otherwise closed.
+// based on terminal height. Per AC7: >= HeightThresholdTall (35) rows = open, otherwise closed.
 func shouldShowDetailPanelByDefault(height int) bool {
-	return height >= 35
+	return height >= HeightThresholdTall
+}
+
+// isNarrowWidth returns true if terminal width is in narrow range (60-79).
+// Used for Story 3.10 AC2 narrow warning display.
+func isNarrowWidth(width int) bool {
+	return width >= MinWidth && width < 80
+}
+
+// isWideWidth returns true if terminal width exceeds MaxContentWidth (>120).
+// Used for Story 3.10 AC4 content capping and centering.
+func isWideWidth(width int) bool {
+	return width > MaxContentWidth
+}
+
+// statusBarHeight returns the status bar height based on terminal height.
+// Returns 1 for condensed mode (height < 20), 2 for normal mode.
+func statusBarHeight(height int) int {
+	if height < MinHeight {
+		return 1
+	}
+	return 2
 }
 
 // Init implements tea.Model. Returns a command to validate project paths.
@@ -303,14 +324,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.detailPanel.SetVisible(m.showDetailPanel)
 			}
 
-			// Update status bar width (Story 3.4)
-			m.statusBar.SetWidth(m.width)
+			// FIRST: Set condensed mode (affects status bar height) - Story 3.10 AC5
+			m.statusBar.SetCondensed(m.height < MinHeight)
 
-			// Update component dimensions with adjusted height (subtract 2 for status bar)
+			// Calculate effective width for components (cap at MaxContentWidth - Story 3.10 AC4)
+			effectiveWidth := m.width
+			if isWideWidth(m.width) {
+				effectiveWidth = MaxContentWidth
+			}
+
+			// Update status bar width with effective width (Story 3.4, 3.10)
+			m.statusBar.SetWidth(effectiveWidth)
+
+			// Calculate content height using helper (Story 3.10 AC5)
+			contentHeight := m.height - statusBarHeight(m.height)
+
+			// Update component dimensions with effective width (Story 3.10)
 			if len(m.projects) > 0 {
-				contentHeight := m.height - 2 // Reserve 2 lines for status bar
-				m.projectList.SetSize(m.width, contentHeight)
-				m.detailPanel.SetSize(m.width, contentHeight)
+				m.projectList.SetSize(effectiveWidth, contentHeight)
+				m.detailPanel.SetSize(effectiveWidth, contentHeight)
 			}
 		}
 		return m, nil
@@ -915,17 +947,56 @@ func (m Model) View() string {
 
 // renderDashboard renders the main dashboard with project list, optional detail panel, and status bar.
 func (m Model) renderDashboard() string {
-	contentHeight := m.height - 2 // Reserve 2 lines for status bar
-	mainContent := m.renderMainContent(contentHeight)
-	statusBar := m.statusBar.View()
-	return lipgloss.JoinVertical(lipgloss.Left, mainContent, statusBar)
+	// Calculate effective width (cap at MaxContentWidth for wide terminals - Story 3.10 AC4)
+	// Note: isNarrowWidth (60-79) and isWideWidth (>120) are mutually exclusive
+	effectiveWidth := m.width
+	if isWideWidth(m.width) {
+		effectiveWidth = MaxContentWidth
+	}
+
+	// Reserve lines for status bar using helper (Story 3.10 AC5)
+	contentHeight := m.height - statusBarHeight(m.height)
+
+	// Adjust content height if narrow warning is shown (Story 3.10 AC2)
+	if isNarrowWidth(m.width) {
+		contentHeight-- // Reserve 1 more line for warning
+	}
+
+	// Create a temporary model copy with effective width for rendering
+	renderModel := m
+	renderModel.width = effectiveWidth
+
+	mainContent := renderModel.renderMainContent(contentHeight)
+
+	// Build output parts
+	var parts []string
+	parts = append(parts, mainContent)
+
+	// Add narrow warning if applicable (Story 3.10 AC2)
+	if isNarrowWidth(m.width) {
+		parts = append(parts, renderNarrowWarning(effectiveWidth))
+	}
+
+	// Use m.statusBar directly - width already set in resizeTickMsg
+	parts = append(parts, m.statusBar.View())
+
+	// Join content
+	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
+
+	// Center content if terminal is wider than MaxContentWidth (Story 3.10 AC4)
+	if isWideWidth(m.width) {
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Top, content)
+	}
+
+	return content
 }
 
 // renderMainContent renders the main content area (project list and optional detail panel).
 func (m Model) renderMainContent(height int) string {
-	// Handle height < 30 case - show hint when panel closed (AC4 from Story 3.3)
-	// Note: using height-2 threshold since we've already subtracted status bar
-	if height < 28 && !m.showDetailPanel { // 30-2 for status bar
+	// Show hint when terminal height MinHeight-HeightThresholdTall and detail panel closed (Story 3.10 AC6)
+	// IMPORTANT: Use m.height (terminal height) not height parameter (contentHeight)
+	// because AC6 defines behavior based on user-visible terminal size
+	if m.height >= MinHeight && m.height < HeightThresholdTall && !m.showDetailPanel {
 		hint := DimStyle.Render("Press [d] for details")
 		return m.projectList.View() + "\n" + hint
 	}
