@@ -1,6 +1,6 @@
 # generated: 2025-12-12
 # updated: 2025-12-19
-# updated by: Dev Agent (Amelia) - Story 3.5.9 done, Epic 3.5 complete
+# updated by: SM (Bob) - Epic 3.5 retrospective completed
 # project: bmad-test
 # project_key: vibe-dash
 # tracking_system: file-system
@@ -97,7 +97,7 @@ development_status:
   3-5-7-integration-testing: done
   3-5-8-fix-tui-repository-wiring: done
   3-5-9-remove-project-path-redundancy: done
-  epic-3-5-retrospective: optional
+  epic-3-5-retrospective: completed
 
   # Epic 4: Agent Waiting Detection (Killer Feature)
   epic-4: backlog
