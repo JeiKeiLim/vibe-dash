@@ -49,3 +49,22 @@ func RecencyIndicator(lastActivity time.Time) string {
 		return "" // Older
 	}
 }
+
+// FormatWaitingDuration returns a compact duration string for the WAITING indicator.
+// Format: "15m" (minutes), "2h" (hours), "1d" (days)
+// Used in TUI status column: "⏸️ WAITING 2h"
+// Negative durations are clamped to "0m".
+func FormatWaitingDuration(d time.Duration) string {
+	// Clamp negative durations to zero (defensive)
+	if d < 0 {
+		d = 0
+	}
+	switch {
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	}
+}

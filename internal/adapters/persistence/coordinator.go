@@ -21,12 +21,12 @@ var _ ports.ProjectRepository = (*RepositoryCoordinator)(nil)
 // Implements ports.ProjectRepository for seamless service layer integration.
 // Thread safety is achieved through sync.RWMutex protecting the repo cache.
 type RepositoryCoordinator struct {
-	configLoader     ports.ConfigLoader
-	directoryManager ports.DirectoryManager
-	basePath         string
-	repoCache        map[string]*sqlite.ProjectRepository
+	configLoader       ports.ConfigLoader
+	directoryManager   ports.DirectoryManager
+	basePath           string
+	repoCache          map[string]*sqlite.ProjectRepository
 	projectIDToDirName map[string]string // project ID -> dirName for O(1) lookup in UpdateLastActivity
-	mu               sync.RWMutex
+	mu                 sync.RWMutex
 }
 
 // NewRepositoryCoordinator creates a new coordinator with lazy-loaded repositories.

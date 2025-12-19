@@ -41,14 +41,16 @@ func (m *mockProjectRepo) getLastActivity(id string) (time.Time, bool) {
 }
 
 // Unused interface methods - minimal implementation
-func (m *mockProjectRepo) Save(context.Context, *domain.Project) error                      { return nil }
-func (m *mockProjectRepo) FindByID(context.Context, string) (*domain.Project, error)        { return nil, nil }
-func (m *mockProjectRepo) FindByPath(context.Context, string) (*domain.Project, error)      { return nil, nil }
-func (m *mockProjectRepo) FindAll(context.Context) ([]*domain.Project, error)               { return nil, nil }
-func (m *mockProjectRepo) FindActive(context.Context) ([]*domain.Project, error)            { return nil, nil }
-func (m *mockProjectRepo) FindHibernated(context.Context) ([]*domain.Project, error)        { return nil, nil }
-func (m *mockProjectRepo) Delete(context.Context, string) error                             { return nil }
-func (m *mockProjectRepo) UpdateState(context.Context, string, domain.ProjectState) error   { return nil }
+func (m *mockProjectRepo) Save(context.Context, *domain.Project) error               { return nil }
+func (m *mockProjectRepo) FindByID(context.Context, string) (*domain.Project, error) { return nil, nil }
+func (m *mockProjectRepo) FindByPath(context.Context, string) (*domain.Project, error) {
+	return nil, nil
+}
+func (m *mockProjectRepo) FindAll(context.Context) ([]*domain.Project, error)             { return nil, nil }
+func (m *mockProjectRepo) FindActive(context.Context) ([]*domain.Project, error)          { return nil, nil }
+func (m *mockProjectRepo) FindHibernated(context.Context) ([]*domain.Project, error)      { return nil, nil }
+func (m *mockProjectRepo) Delete(context.Context, string) error                           { return nil }
+func (m *mockProjectRepo) UpdateState(context.Context, string, domain.ProjectState) error { return nil }
 
 func TestNewActivityTracker(t *testing.T) {
 	repo := newMockProjectRepo()
