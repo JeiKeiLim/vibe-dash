@@ -171,17 +171,28 @@ func (s StatusBarModel) renderShortcuts() string {
 }
 
 // CalculateCounts returns active, hibernated, and waiting counts from projects.
+// Backward-compatible: waiting is always 0.
+// Use CalculateCountsWithWaiting() for actual waiting detection (Story 4.5).
 // NOTE: Called from model.go via components.CalculateCounts()
 func CalculateCounts(projects []*domain.Project) (active, hibernated, waiting int) {
+	return CalculateCountsWithWaiting(projects, nil)
+}
+
+// CalculateCountsWithWaiting returns active, hibernated, and waiting counts.
+// Story 4.5: Accepts a WaitingChecker callback to determine if active projects are waiting.
+// Only active projects can be waiting (hibernated projects never show as waiting).
+// If checker is nil, waiting count is always 0 (backward compatible).
+func CalculateCountsWithWaiting(projects []*domain.Project, checker WaitingChecker) (active, hibernated, waiting int) {
 	for _, p := range projects {
 		switch p.State {
 		case domain.StateActive:
 			active++
+			if checker != nil && checker(p) {
+				waiting++
+			}
 		case domain.StateHibernated:
 			hibernated++
 		}
-		// TODO(Story-4.3): Add waiting detection when p.IsWaiting field exists
-		// For now, waiting count is always 0
 	}
 	return
 }

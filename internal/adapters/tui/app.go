@@ -12,10 +12,15 @@ import (
 // The context is used for graceful shutdown on Ctrl+C.
 // The repository parameter is used for project persistence operations.
 // The detector parameter is optional - if nil, refresh will be disabled.
-func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detector) error {
+// The waitingDetector parameter is optional - if nil, waiting indicators are disabled (Story 4.5).
+func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detector, waitingDetector ports.WaitingDetector) error {
 	m := NewModel(repo)
 	if detector != nil {
 		m.SetDetectionService(detector)
+	}
+	// Story 4.5: Wire waiting detector for WAITING indicator display
+	if waitingDetector != nil {
+		m.SetWaitingDetector(waitingDetector)
 	}
 
 	p := tea.NewProgram(

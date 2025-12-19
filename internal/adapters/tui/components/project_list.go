@@ -134,3 +134,10 @@ func (m ProjectListModel) Index() int {
 func (m ProjectListModel) Len() int {
 	return len(m.projects)
 }
+
+// SetDelegateWaitingCallbacks sets the waiting detection callbacks on the delegate.
+// Story 4.5: Enables WAITING indicator display in project list rows.
+func (m *ProjectListModel) SetDelegateWaitingCallbacks(checker WaitingChecker, getter WaitingDurationGetter) {
+	m.delegate.SetWaitingCallbacks(checker, getter)
+	m.list.SetDelegate(m.delegate)
+}

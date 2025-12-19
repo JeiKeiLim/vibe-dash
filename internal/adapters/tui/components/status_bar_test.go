@@ -548,3 +548,149 @@ func TestStatusBarModel_CondensedMode_IncludesNavigationShortcuts(t *testing.T) 
 		t.Error("condensed view should include quit shortcut [q]")
 	}
 }
+
+// ============================================================================
+// Story 4.5: CalculateCountsWithWaiting Tests
+// ============================================================================
+
+func TestCalculateCountsWithWaiting_SomeWaiting(t *testing.T) {
+	projects := []*domain.Project{
+		{ID: "1", State: domain.StateActive}, // waiting
+		{ID: "2", State: domain.StateActive}, // not waiting
+		{ID: "3", State: domain.StateActive}, // waiting
+		{ID: "4", State: domain.StateHibernated},
+	}
+
+	// Checker that marks projects 1 and 3 as waiting
+	checker := func(p *domain.Project) bool {
+		return p.ID == "1" || p.ID == "3"
+	}
+
+	active, hibernated, waiting := CalculateCountsWithWaiting(projects, checker)
+
+	if active != 3 {
+		t.Errorf("expected active=3, got %d", active)
+	}
+	if hibernated != 1 {
+		t.Errorf("expected hibernated=1, got %d", hibernated)
+	}
+	if waiting != 2 {
+		t.Errorf("expected waiting=2 (projects 1 and 3), got %d", waiting)
+	}
+}
+
+func TestCalculateCountsWithWaiting_NilChecker(t *testing.T) {
+	projects := []*domain.Project{
+		{ID: "1", State: domain.StateActive},
+		{ID: "2", State: domain.StateActive},
+	}
+
+	// nil checker should behave like CalculateCounts (waiting=0)
+	active, hibernated, waiting := CalculateCountsWithWaiting(projects, nil)
+
+	if active != 2 {
+		t.Errorf("expected active=2, got %d", active)
+	}
+	if hibernated != 0 {
+		t.Errorf("expected hibernated=0, got %d", hibernated)
+	}
+	if waiting != 0 {
+		t.Errorf("expected waiting=0 with nil checker, got %d", waiting)
+	}
+}
+
+func TestCalculateCountsWithWaiting_AllWaiting(t *testing.T) {
+	projects := []*domain.Project{
+		{ID: "1", State: domain.StateActive},
+		{ID: "2", State: domain.StateActive},
+		{ID: "3", State: domain.StateActive},
+	}
+
+	// All active projects are waiting
+	checker := func(p *domain.Project) bool { return true }
+
+	active, hibernated, waiting := CalculateCountsWithWaiting(projects, checker)
+
+	if active != 3 {
+		t.Errorf("expected active=3, got %d", active)
+	}
+	if hibernated != 0 {
+		t.Errorf("expected hibernated=0, got %d", hibernated)
+	}
+	if waiting != 3 {
+		t.Errorf("expected waiting=3 (all active), got %d", waiting)
+	}
+}
+
+func TestCalculateCountsWithWaiting_NoWaiting(t *testing.T) {
+	projects := []*domain.Project{
+		{ID: "1", State: domain.StateActive},
+		{ID: "2", State: domain.StateActive},
+	}
+
+	// No projects are waiting
+	checker := func(p *domain.Project) bool { return false }
+
+	active, _, waiting := CalculateCountsWithWaiting(projects, checker)
+
+	if active != 2 {
+		t.Errorf("expected active=2, got %d", active)
+	}
+	if waiting != 0 {
+		t.Errorf("expected waiting=0, got %d", waiting)
+	}
+}
+
+func TestCalculateCountsWithWaiting_HibernatedNeverWaiting(t *testing.T) {
+	projects := []*domain.Project{
+		{ID: "1", State: domain.StateHibernated},
+		{ID: "2", State: domain.StateHibernated},
+	}
+
+	// Checker always returns true, but hibernated projects shouldn't count
+	checker := func(p *domain.Project) bool { return true }
+
+	active, hibernated, waiting := CalculateCountsWithWaiting(projects, checker)
+
+	if active != 0 {
+		t.Errorf("expected active=0, got %d", active)
+	}
+	if hibernated != 2 {
+		t.Errorf("expected hibernated=2, got %d", hibernated)
+	}
+	if waiting != 0 {
+		t.Errorf("expected waiting=0 (hibernated never wait), got %d", waiting)
+	}
+}
+
+func TestCalculateCountsWithWaiting_Empty(t *testing.T) {
+	var projects []*domain.Project
+	checker := func(p *domain.Project) bool { return true }
+
+	active, hibernated, waiting := CalculateCountsWithWaiting(projects, checker)
+
+	if active != 0 || hibernated != 0 || waiting != 0 {
+		t.Errorf("expected all zeros for empty projects, got active=%d hibernated=%d waiting=%d", active, hibernated, waiting)
+	}
+}
+
+func TestCalculateCounts_BackwardCompatible(t *testing.T) {
+	// CalculateCounts should continue to work without waiting detection
+	projects := []*domain.Project{
+		{State: domain.StateActive},
+		{State: domain.StateActive},
+		{State: domain.StateHibernated},
+	}
+
+	active, hibernated, waiting := CalculateCounts(projects)
+
+	if active != 2 {
+		t.Errorf("expected active=2, got %d", active)
+	}
+	if hibernated != 1 {
+		t.Errorf("expected hibernated=1, got %d", hibernated)
+	}
+	if waiting != 0 {
+		t.Errorf("CalculateCounts should always return waiting=0, got %d", waiting)
+	}
+}

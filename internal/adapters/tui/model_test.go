@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -950,5 +952,202 @@ func TestModel_Update_TickMsg_DoesNotAffectRefreshing(t *testing.T) {
 	// Should still schedule next tick during refresh
 	if cmd == nil {
 		t.Error("tickMsg should return next tick command even during refresh")
+	}
+}
+
+// =============================================================================
+// Story 4.5: WaitingDetector Integration Tests
+// =============================================================================
+
+// mockWaitingDetector implements ports.WaitingDetector for testing.
+type mockWaitingDetector struct {
+	isWaitingFunc      func(p *domain.Project) bool
+	durationFunc       func(p *domain.Project) time.Duration
+	isWaitingCalls     int
+	waitingDurCalls    int
+	lastCheckedProject *domain.Project
+}
+
+func (m *mockWaitingDetector) IsWaiting(ctx context.Context, p *domain.Project) bool {
+	m.isWaitingCalls++
+	m.lastCheckedProject = p
+	if m.isWaitingFunc != nil {
+		return m.isWaitingFunc(p)
+	}
+	return false
+}
+
+func (m *mockWaitingDetector) WaitingDuration(ctx context.Context, p *domain.Project) time.Duration {
+	m.waitingDurCalls++
+	if m.durationFunc != nil {
+		return m.durationFunc(p)
+	}
+	return 0
+}
+
+func TestModel_SetWaitingDetector(t *testing.T) {
+	m := NewModel(nil)
+	mock := &mockWaitingDetector{}
+
+	// Initially should be nil
+	if m.waitingDetector != nil {
+		t.Error("waitingDetector should be nil initially")
+	}
+
+	// Set detector
+	m.SetWaitingDetector(mock)
+
+	if m.waitingDetector != mock {
+		t.Error("SetWaitingDetector should set the detector")
+	}
+}
+
+func TestModel_IsProjectWaiting_WithNilDetector(t *testing.T) {
+	m := NewModel(nil)
+	// No detector set
+
+	project := &domain.Project{ID: "test", Name: "test"}
+	result := m.isProjectWaiting(project)
+
+	if result != false {
+		t.Error("isProjectWaiting should return false when detector is nil")
+	}
+}
+
+func TestModel_IsProjectWaiting_WithDetector(t *testing.T) {
+	m := NewModel(nil)
+	mock := &mockWaitingDetector{
+		isWaitingFunc: func(p *domain.Project) bool {
+			return p.ID == "waiting-project"
+		},
+	}
+	m.SetWaitingDetector(mock)
+
+	// Test project that is waiting
+	waitingProject := &domain.Project{ID: "waiting-project", Name: "waiting"}
+	result := m.isProjectWaiting(waitingProject)
+	if result != true {
+		t.Error("isProjectWaiting should return true for waiting project")
+	}
+	if mock.isWaitingCalls != 1 {
+		t.Errorf("expected 1 IsWaiting call, got %d", mock.isWaitingCalls)
+	}
+
+	// Test project that is not waiting
+	activeProject := &domain.Project{ID: "active-project", Name: "active"}
+	result = m.isProjectWaiting(activeProject)
+	if result != false {
+		t.Error("isProjectWaiting should return false for active project")
+	}
+}
+
+func TestModel_GetWaitingDuration_WithNilDetector(t *testing.T) {
+	m := NewModel(nil)
+	// No detector set
+
+	project := &domain.Project{ID: "test", Name: "test"}
+	result := m.getWaitingDuration(project)
+
+	if result != 0 {
+		t.Error("getWaitingDuration should return 0 when detector is nil")
+	}
+}
+
+func TestModel_GetWaitingDuration_WithDetector(t *testing.T) {
+	m := NewModel(nil)
+	mock := &mockWaitingDetector{
+		durationFunc: func(p *domain.Project) time.Duration {
+			if p.ID == "waiting-project" {
+				return 2 * time.Hour
+			}
+			return 0
+		},
+	}
+	m.SetWaitingDetector(mock)
+
+	project := &domain.Project{ID: "waiting-project", Name: "waiting"}
+	result := m.getWaitingDuration(project)
+
+	if result != 2*time.Hour {
+		t.Errorf("getWaitingDuration should return 2h, got %v", result)
+	}
+	if mock.waitingDurCalls != 1 {
+		t.Errorf("expected 1 WaitingDuration call, got %d", mock.waitingDurCalls)
+	}
+}
+
+func TestModel_ProjectsLoadedMsg_WiresWaitingCallbacks(t *testing.T) {
+	// Create mock waiting detector that tracks calls
+	mock := &mockWaitingDetector{
+		isWaitingFunc: func(p *domain.Project) bool {
+			return true // All projects waiting for test
+		},
+		durationFunc: func(p *domain.Project) time.Duration {
+			return 30 * time.Minute
+		},
+	}
+
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.SetWaitingDetector(mock)
+
+	// Create test projects
+	projects := []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/a", State: domain.StateActive},
+		{ID: "b", Name: "project-b", Path: "/b", State: domain.StateActive},
+	}
+
+	// Simulate ProjectsLoadedMsg
+	msg := ProjectsLoadedMsg{projects: projects}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Verify projects were loaded
+	if len(updated.projects) != 2 {
+		t.Errorf("expected 2 projects, got %d", len(updated.projects))
+	}
+
+	// Verify status bar has waiting counts (calculated via CalculateCountsWithWaiting)
+	// The status bar should show 2 waiting projects
+	view := updated.statusBar.View()
+	if !strings.Contains(view, "WAITING") {
+		t.Errorf("status bar should show WAITING indicator, got: %s", view)
+	}
+
+	// Verify the mock was called during CalculateCountsWithWaiting
+	// Each project should be checked once
+	if mock.isWaitingCalls != 2 {
+		t.Errorf("expected 2 IsWaiting calls during count calculation, got %d", mock.isWaitingCalls)
+	}
+}
+
+func TestModel_WaitingCallbacksWiring_NilDetector(t *testing.T) {
+	// Verify no panic when detector is nil
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	// No detector set - should not panic
+
+	projects := []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/a", State: domain.StateActive},
+	}
+
+	// Should not panic
+	msg := ProjectsLoadedMsg{projects: projects}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Verify project list was created without crash
+	if len(updated.projects) != 1 {
+		t.Errorf("expected 1 project, got %d", len(updated.projects))
+	}
+
+	// Status bar should show no waiting (since no detector)
+	view := updated.statusBar.View()
+	if strings.Contains(view, "WAITING") {
+		t.Error("status bar should NOT show WAITING when detector is nil")
 	}
 }

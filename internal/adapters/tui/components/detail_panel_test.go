@@ -222,3 +222,134 @@ func TestDetailPanel_View_LikelyConfidence(t *testing.T) {
 		t.Errorf("view should show 'Likely' for likely confidence, got:\n%s", view)
 	}
 }
+
+// ============================================================================
+// Story 4.5: Waiting Field Tests
+// ============================================================================
+
+func TestDetailPanel_View_WaitingField_Shown(t *testing.T) {
+	project := &domain.Project{
+		ID:             "abc123",
+		Name:           "waiting-project",
+		Path:           "/home/user/test",
+		DetectedMethod: "speckit",
+		CurrentStage:   domain.StageImplement,
+		Confidence:     domain.ConfidenceCertain,
+		CreatedAt:      time.Now(),
+		LastActivityAt: time.Now().Add(-2*time.Hour - 15*time.Minute),
+	}
+
+	// Create panel with waiting callbacks
+	checker := func(p *domain.Project) bool { return true }
+	getter := func(p *domain.Project) time.Duration { return 2*time.Hour + 15*time.Minute }
+
+	panel := NewDetailPanelModel(60, 20)
+	panel.SetProject(project)
+	panel.SetWaitingCallbacks(checker, getter)
+	panel.SetVisible(true)
+
+	view := panel.View()
+
+	// Should contain Waiting field with detailed duration
+	if !strings.Contains(view, "Waiting") {
+		t.Errorf("view should contain 'Waiting' field when project is waiting, got:\n%s", view)
+	}
+	// Detailed format: "2h 15m"
+	if !strings.Contains(view, "2h 15m") {
+		t.Errorf("view should contain detailed duration '2h 15m', got:\n%s", view)
+	}
+}
+
+func TestDetailPanel_View_WaitingField_Hidden(t *testing.T) {
+	project := &domain.Project{
+		ID:             "abc123",
+		Name:           "active-project",
+		Path:           "/home/user/test",
+		DetectedMethod: "speckit",
+		CurrentStage:   domain.StageImplement,
+		Confidence:     domain.ConfidenceCertain,
+		CreatedAt:      time.Now(),
+		LastActivityAt: time.Now(),
+	}
+
+	// Create panel with waiting callbacks - not waiting
+	checker := func(p *domain.Project) bool { return false }
+	getter := func(p *domain.Project) time.Duration { return 0 }
+
+	panel := NewDetailPanelModel(60, 20)
+	panel.SetProject(project)
+	panel.SetWaitingCallbacks(checker, getter)
+	panel.SetVisible(true)
+
+	view := panel.View()
+
+	// Should NOT contain Waiting field when not waiting
+	if strings.Contains(view, "Waiting:") {
+		t.Errorf("view should NOT contain 'Waiting:' field when project is not waiting, got:\n%s", view)
+	}
+}
+
+func TestDetailPanel_View_WaitingField_NilCallbacks(t *testing.T) {
+	project := &domain.Project{
+		ID:             "abc123",
+		Name:           "test-project",
+		Path:           "/home/user/test",
+		DetectedMethod: "speckit",
+		CurrentStage:   domain.StageImplement,
+		Confidence:     domain.ConfidenceCertain,
+		CreatedAt:      time.Now(),
+		LastActivityAt: time.Now().Add(-2 * time.Hour),
+	}
+
+	// No callbacks set - should not show waiting
+	panel := NewDetailPanelModel(60, 20)
+	panel.SetProject(project)
+	panel.SetVisible(true)
+
+	view := panel.View()
+
+	// Should NOT contain Waiting field when no callbacks
+	if strings.Contains(view, "Waiting:") {
+		t.Errorf("view should NOT contain 'Waiting:' when no callbacks set, got:\n%s", view)
+	}
+}
+
+func TestDetailPanel_View_WaitingField_DurationFormats(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		{"15 minutes", 15 * time.Minute, "15m"},
+		{"1 hour", 1 * time.Hour, "1h 0m"},
+		{"2h 15m", 2*time.Hour + 15*time.Minute, "2h 15m"},
+		{"1 day 5h", 24*time.Hour + 5*time.Hour, "1d 5h"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			project := &domain.Project{
+				ID:             "abc123",
+				Name:           "test-project",
+				Path:           "/home/user/test",
+				CurrentStage:   domain.StageImplement,
+				CreatedAt:      time.Now(),
+				LastActivityAt: time.Now().Add(-tt.duration),
+			}
+
+			checker := func(p *domain.Project) bool { return true }
+			getter := func(p *domain.Project) time.Duration { return tt.duration }
+
+			panel := NewDetailPanelModel(60, 20)
+			panel.SetProject(project)
+			panel.SetWaitingCallbacks(checker, getter)
+			panel.SetVisible(true)
+
+			view := panel.View()
+
+			if !strings.Contains(view, tt.expected) {
+				t.Errorf("view should contain %q for %v duration, got:\n%s", tt.expected, tt.duration, view)
+			}
+		})
+	}
+}

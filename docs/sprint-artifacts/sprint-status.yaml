@@ -35,7 +35,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-19
-updated_by: Dev (Amelia) - Story 4.4 code review complete with fixes applied, moved to done
+updated_by: Dev (Amelia) - Story 4.5 done with code review fixes
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -106,7 +106,7 @@ development_status:
   4-2-activity-timestamp-tracking: done
   4-3-agent-waiting-detection-logic: done
   4-4-waiting-threshold-configuration: done
-  4-5-waiting-indicator-display: backlog
+  4-5-waiting-indicator-display: done
   4-6-real-time-dashboard-updates: backlog
   epic-4-retrospective: optional
 

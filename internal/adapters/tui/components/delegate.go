@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -47,14 +48,42 @@ var (
 			Foreground(lipgloss.Color("5")) // Magenta
 )
 
+// WaitingChecker checks if a project is waiting.
+// Used by components to check waiting state without importing ports.
+type WaitingChecker func(p *domain.Project) bool
+
+// WaitingDurationGetter gets waiting duration for a project.
+// Used by components to get waiting duration without importing ports.
+type WaitingDurationGetter func(p *domain.Project) time.Duration
+
 // ProjectItemDelegate is a custom delegate for rendering project rows.
 type ProjectItemDelegate struct {
-	width int
+	width          int
+	waitingChecker WaitingChecker        // nil = no waiting display (Story 4.5)
+	durationGetter WaitingDurationGetter // nil = no duration display (Story 4.5)
 }
 
 // NewProjectItemDelegate creates a new ProjectItemDelegate with the given width.
+// Backward-compatible constructor (waiting callbacks = nil).
 func NewProjectItemDelegate(width int) ProjectItemDelegate {
 	return ProjectItemDelegate{width: width}
+}
+
+// NewProjectItemDelegateWithWaiting creates a delegate with waiting detection callbacks.
+// Story 4.5: Enables WAITING indicator display in project rows.
+func NewProjectItemDelegateWithWaiting(width int, checker WaitingChecker, getter WaitingDurationGetter) ProjectItemDelegate {
+	return ProjectItemDelegate{
+		width:          width,
+		waitingChecker: checker,
+		durationGetter: getter,
+	}
+}
+
+// SetWaitingCallbacks sets the waiting detection callbacks.
+// Story 4.5: Used when model wires callbacks after construction.
+func (d *ProjectItemDelegate) SetWaitingCallbacks(checker WaitingChecker, getter WaitingDurationGetter) {
+	d.waitingChecker = checker
+	d.durationGetter = getter
 }
 
 // SetWidth updates the delegate's width for responsive layout.
@@ -161,8 +190,8 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 	sb.WriteString(stageStr)
 	sb.WriteString(" ")
 
-	// WAITING indicator (placeholder for Story 4.x)
-	waiting := waitingIndicator(item.Project)
+	// WAITING indicator (Story 4.5)
+	waiting := d.waitingIndicator(item.Project)
 	if waiting != "" {
 		waitingStr := fmt.Sprintf("%-*s", colWaiting, waiting)
 		sb.WriteString(waitingStyle.Render(waitingStr))
@@ -179,19 +208,16 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 	return sb.String()
 }
 
-// isWaiting checks if a project is in waiting state.
-// Placeholder: waiting detection comes in Story 4.3
-func isWaiting(_ *domain.Project) bool {
-	// TODO: Implement in Story 4.3
-	// For now, always return false
-	return false
-}
-
 // waitingIndicator returns the waiting indicator string for a project.
-func waitingIndicator(p *domain.Project) string {
-	if !isWaiting(p) {
+// Story 4.5: Uses callbacks to determine waiting state and duration.
+// Format: "⏸️ WAITING Xh" where X is the compact duration.
+func (d ProjectItemDelegate) waitingIndicator(p *domain.Project) string {
+	if d.waitingChecker == nil || !d.waitingChecker(p) {
 		return ""
 	}
-	// Duration will come from Story 4.3 implementation
-	return "⏸️ WAITING"
+	duration := time.Duration(0)
+	if d.durationGetter != nil {
+		duration = d.durationGetter(p)
+	}
+	return fmt.Sprintf("⏸️ WAITING %s", timeformat.FormatWaitingDuration(duration, false))
 }

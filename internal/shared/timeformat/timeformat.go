@@ -50,21 +50,37 @@ func RecencyIndicator(lastActivity time.Time) string {
 	}
 }
 
-// FormatWaitingDuration returns a compact duration string for the WAITING indicator.
-// Format: "15m" (minutes), "2h" (hours), "1d" (days)
+// FormatWaitingDuration returns a duration string for the WAITING indicator.
+// If detailed is false, returns compact format: "15m", "2h", "1d" (for project list)
+// If detailed is true, returns precise format: "2h 15m", "1d 5h" (for detail panel)
 // Used in TUI status column: "⏸️ WAITING 2h"
 // Negative durations are clamped to "0m".
-func FormatWaitingDuration(d time.Duration) string {
+//
+// Note on d=0 behavior: Returns "0m" in both modes rather than "0h 0m" for detailed.
+// This is intentional - zero duration means "just started waiting" which is best
+// expressed as "0m" (minimal time unit) rather than the verbose "0h 0m".
+func FormatWaitingDuration(d time.Duration, detailed bool) string {
 	// Clamp negative durations to zero (defensive)
 	if d < 0 {
 		d = 0
 	}
-	switch {
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh", int(d.Hours()))
-	default:
-		return fmt.Sprintf("%dd", int(d.Hours()/24))
+
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+
+	if hours >= 24 {
+		days := hours / 24
+		if detailed {
+			remainingHours := hours % 24
+			return fmt.Sprintf("%dd %dh", days, remainingHours)
+		}
+		return fmt.Sprintf("%dd", days)
 	}
+	if hours >= 1 {
+		if detailed {
+			return fmt.Sprintf("%dh %dm", hours, minutes)
+		}
+		return fmt.Sprintf("%dh", hours)
+	}
+	return fmt.Sprintf("%dm", minutes)
 }

@@ -10,13 +10,13 @@ import (
 
 // mockThresholdResolver implements ports.ThresholdResolver for testing.
 type mockThresholdResolver struct {
-	defaultThreshold int
+	defaultThreshold  int
 	projectThresholds map[string]int
 }
 
 func newMockResolver(threshold int) *mockThresholdResolver {
 	return &mockThresholdResolver{
-		defaultThreshold: threshold,
+		defaultThreshold:  threshold,
 		projectThresholds: make(map[string]int),
 	}
 }
@@ -145,7 +145,7 @@ func TestIsWaiting_BoundaryPrecision(t *testing.T) {
 }
 
 func TestIsWaiting_PerProjectThreshold(t *testing.T) {
-	resolver := newMockResolver(10) // Global threshold
+	resolver := newMockResolver(10)                   // Global threshold
 	resolver.setProjectThreshold("custom-project", 5) // Per-project override
 
 	detector := NewWaitingDetector(resolver)

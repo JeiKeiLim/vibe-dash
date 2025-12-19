@@ -3,6 +3,7 @@ package components
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -30,25 +31,40 @@ var (
 	uncertainStyle = lipgloss.NewStyle().
 			Faint(true).
 			Foreground(lipgloss.Color("8")) // Bright black (gray)
+
+	// detailWaitingStyle mirrors tui.WaitingStyle - keep in sync with styles.go (Story 4.5)
+	detailWaitingStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("1")) // Red
 )
 
 const labelWidth = 12
 
 // DetailPanelModel displays detailed information about a selected project.
 type DetailPanelModel struct {
-	project *domain.Project
-	width   int
-	height  int
-	visible bool
+	project        *domain.Project
+	width          int
+	height         int
+	visible        bool
+	waitingChecker WaitingChecker        // nil = no waiting display (Story 4.5)
+	durationGetter WaitingDurationGetter // nil = no duration display (Story 4.5)
 }
 
 // NewDetailPanelModel creates a new DetailPanelModel with the given dimensions.
+// Backward-compatible constructor (waiting callbacks = nil).
 func NewDetailPanelModel(width, height int) DetailPanelModel {
 	return DetailPanelModel{
 		width:   width,
 		height:  height,
 		visible: false,
 	}
+}
+
+// SetWaitingCallbacks sets the waiting detection callbacks.
+// Story 4.5: Enables waiting status display in detail panel.
+func (m *DetailPanelModel) SetWaitingCallbacks(checker WaitingChecker, getter WaitingDurationGetter) {
+	m.waitingChecker = checker
+	m.durationGetter = getter
 }
 
 // SetProject updates the displayed project.
@@ -158,6 +174,17 @@ func (m DetailPanelModel) renderProject() string {
 	// Last Active (relative time)
 	lastActive := timeformat.FormatRelativeTime(p.LastActivityAt)
 	lines = append(lines, formatField("Last Active", lastActive))
+
+	// Waiting status (Story 4.5) - only shown when project is waiting
+	if m.waitingChecker != nil && m.waitingChecker(p) {
+		duration := time.Duration(0)
+		if m.durationGetter != nil {
+			duration = m.durationGetter(p)
+		}
+		waitingText := fmt.Sprintf("⏸️ %s", timeformat.FormatWaitingDuration(duration, true))
+		styledWaiting := detailWaitingStyle.Render(waitingText)
+		lines = append(lines, formatField("Waiting", styledWaiting))
+	}
 
 	// Join lines
 	content := strings.Join(lines, "\n")

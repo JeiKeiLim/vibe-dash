@@ -65,7 +65,8 @@ type Model struct {
 
 	// Dependencies (injected)
 	repository       ports.ProjectRepository
-	detectionService ports.Detector // Optional - may be nil if not wired
+	detectionService ports.Detector        // Optional - may be nil if not wired
+	waitingDetector  ports.WaitingDetector // Story 4.5: Optional - for WAITING indicator
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -174,6 +175,32 @@ func NewModel(repo ports.ProjectRepository) Model {
 // This is optional - if not set, refresh will show "Detection service not available".
 func (m *Model) SetDetectionService(svc ports.Detector) {
 	m.detectionService = svc
+}
+
+// SetWaitingDetector sets the waiting detector for WAITING indicators (Story 4.5).
+// This is optional - if not set, waiting indicators will not be shown.
+func (m *Model) SetWaitingDetector(detector ports.WaitingDetector) {
+	m.waitingDetector = detector
+}
+
+// isProjectWaiting wraps WaitingDetector.IsWaiting for component callbacks.
+// Uses context.Background() since Bubble Tea Render() doesn't provide ctx.
+// Story 4.5: Returns false if detector is nil.
+func (m Model) isProjectWaiting(p *domain.Project) bool {
+	if m.waitingDetector == nil {
+		return false
+	}
+	return m.waitingDetector.IsWaiting(context.Background(), p)
+}
+
+// getWaitingDuration wraps WaitingDetector.WaitingDuration for component callbacks.
+// Uses context.Background() since Bubble Tea Render() doesn't provide ctx.
+// Story 4.5: Returns 0 if detector is nil.
+func (m Model) getWaitingDuration(p *domain.Project) time.Duration {
+	if m.waitingDetector == nil {
+		return 0
+	}
+	return m.waitingDetector.WaitingDuration(context.Background(), p)
 }
 
 // shouldShowDetailPanelByDefault returns true if detail panel should be open by default
@@ -417,13 +444,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.projects) > 0 {
 			contentHeight := m.height - 2 // Reserve 2 lines for status bar
 			m.projectList = components.NewProjectListModel(m.projects, m.width, contentHeight)
+
+			// Story 4.5: Wire waiting callbacks to project list delegate
+			m.projectList.SetDelegateWaitingCallbacks(m.isProjectWaiting, m.getWaitingDuration)
+
 			// Initialize detail panel with selected project
 			m.detailPanel = components.NewDetailPanelModel(m.width, contentHeight)
 			m.detailPanel.SetProject(m.projectList.SelectedProject())
 			m.detailPanel.SetVisible(m.showDetailPanel)
 
-			// Update status bar counts (Story 3.4)
-			active, hibernated, waiting := components.CalculateCounts(m.projects)
+			// Story 4.5: Wire waiting callbacks to detail panel
+			m.detailPanel.SetWaitingCallbacks(m.isProjectWaiting, m.getWaitingDuration)
+
+			// Update status bar counts (Story 3.4, 4.5)
+			active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
 			m.statusBar.SetCounts(active, hibernated, waiting)
 		}
 		return m, nil
@@ -537,8 +571,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.projectList.SetProjects(newProjects)
 		// Update detail panel with new selection
 		m.detailPanel.SetProject(m.projectList.SelectedProject())
-		// Update status bar counts
-		active, hibernated, waiting := components.CalculateCounts(m.projects)
+		// Update status bar counts (Story 4.5)
+		active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
 		m.statusBar.SetCounts(active, hibernated, waiting)
 		// Show success feedback
 		m.statusBar.SetRefreshComplete("✓ Removed: " + msg.projectName)

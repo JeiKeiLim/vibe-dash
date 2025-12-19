@@ -112,8 +112,8 @@ func run(ctx context.Context) error {
 		"cli_override", cli.GetWaitingThreshold(),
 	)
 
-	// TODO(Story 4.5): Pass waitingDetector to TUI for WAITING indicator display
-	_ = waitingDetector
+	// Story 4.5: Pass waitingDetector to TUI for WAITING indicator display
+	cli.SetWaitingDetector(waitingDetector)
 
 	return cli.Execute(ctx)
 }

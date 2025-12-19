@@ -25,6 +25,10 @@ var repository ports.ProjectRepository
 // Used by add command to detect project methodology.
 var detectionService ports.Detector
 
+// waitingDetector is the waiting detector injected at startup.
+// Story 4.5: Used by TUI for WAITING indicator display.
+var waitingDetector ports.WaitingDetector
+
 // SetRepository sets the project repository for the add command.
 // Used by main.go for production and tests for mocking.
 func SetRepository(repo ports.ProjectRepository) {
@@ -35,6 +39,12 @@ func SetRepository(repo ports.ProjectRepository) {
 // Used by main.go for production and tests for mocking.
 func SetDetectionService(svc ports.Detector) {
 	detectionService = svc
+}
+
+// SetWaitingDetector sets the waiting detector for the TUI.
+// Story 4.5: Used by main.go to inject the WaitingDetector for WAITING indicators.
+func SetWaitingDetector(detector ports.WaitingDetector) {
+	waitingDetector = detector
 }
 
 // addName holds the --name flag value
