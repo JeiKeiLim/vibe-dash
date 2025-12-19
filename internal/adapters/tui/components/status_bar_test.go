@@ -694,3 +694,69 @@ func TestCalculateCounts_BackwardCompatible(t *testing.T) {
 		t.Errorf("CalculateCounts should always return waiting=0, got %d", waiting)
 	}
 }
+
+// ============================================================================
+// Story 4.6: Watcher Warning Tests
+// ============================================================================
+
+func TestStatusBarModel_SetWatcherWarning(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+
+	// Initially no warning
+	view := sb.View()
+	if strings.Contains(view, "unavailable") {
+		t.Error("expected no warning initially")
+	}
+
+	// Set warning
+	sb.SetWatcherWarning("⚠️ File watching unavailable")
+	view = sb.View()
+	if !strings.Contains(view, "File watching unavailable") {
+		t.Errorf("expected warning to appear, got: %s", view)
+	}
+}
+
+func TestStatusBarModel_WatcherWarning_CondensedMode(t *testing.T) {
+	sb := NewStatusBarModel(80)
+	sb.SetCounts(5, 3, 0)
+	sb.SetCondensed(true)
+	sb.SetWatcherWarning("⚠️ File watching unavailable")
+
+	view := sb.View()
+
+	// Should show abbreviated warning emoji in condensed mode
+	if !strings.Contains(view, "⚠️") {
+		t.Error("condensed view should show warning emoji")
+	}
+}
+
+func TestStatusBarModel_WatcherWarning_ClearWarning(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetWatcherWarning("⚠️ File watching unavailable")
+
+	// Clear warning
+	sb.SetWatcherWarning("")
+	view := sb.View()
+	if strings.Contains(view, "unavailable") {
+		t.Error("expected warning to be cleared")
+	}
+}
+
+func TestStatusBarModel_WatcherWarning_WithRefreshMessage(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetRefreshComplete("Refreshed 5 projects")
+	sb.SetWatcherWarning("⚠️ File watching unavailable")
+
+	view := sb.View()
+
+	// Both messages should appear
+	if !strings.Contains(view, "Refreshed 5 projects") {
+		t.Error("expected refresh message to appear")
+	}
+	if !strings.Contains(view, "File watching unavailable") {
+		t.Error("expected watcher warning to appear")
+	}
+}

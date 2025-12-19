@@ -67,6 +67,13 @@ type Model struct {
 	repository       ports.ProjectRepository
 	detectionService ports.Detector        // Optional - may be nil if not wired
 	waitingDetector  ports.WaitingDetector // Story 4.5: Optional - for WAITING indicator
+
+	// Story 4.6: File watcher for real-time dashboard updates
+	fileWatcher          ports.FileWatcher
+	eventCh              <-chan ports.FileEvent
+	watchCtx             context.Context
+	watchCancel          context.CancelFunc
+	fileWatcherAvailable bool // false if watcher failed to start
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -158,6 +165,18 @@ type clearRemoveFeedbackMsg struct{}
 // tickMsg is sent every 60 seconds to trigger timestamp recalculation (Story 4.2, AC4).
 type tickMsg time.Time
 
+// fileEventMsg wraps file system events for Bubble Tea message passing (Story 4.6).
+type fileEventMsg struct {
+	Path      string
+	Operation ports.FileOperation
+	Timestamp time.Time
+}
+
+// fileWatcherErrorMsg signals a file watcher error (Story 4.6).
+type fileWatcherErrorMsg struct {
+	err error
+}
+
 // NewModel creates a new Model with default values.
 // The repository parameter is used for project persistence operations.
 func NewModel(repo ports.ProjectRepository) Model {
@@ -181,6 +200,13 @@ func (m *Model) SetDetectionService(svc ports.Detector) {
 // This is optional - if not set, waiting indicators will not be shown.
 func (m *Model) SetWaitingDetector(detector ports.WaitingDetector) {
 	m.waitingDetector = detector
+}
+
+// SetFileWatcher sets the file watcher for real-time updates (Story 4.6).
+// This is optional - if not set, file watching is disabled.
+func (m *Model) SetFileWatcher(watcher ports.FileWatcher) {
+	m.fileWatcher = watcher
+	m.fileWatcherAvailable = true // Assume available until proven otherwise
 }
 
 // isProjectWaiting wraps WaitingDetector.IsWaiting for component callbacks.
@@ -264,6 +290,29 @@ func tickCmd() tea.Cmd {
 	return tea.Tick(time.Minute, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
+}
+
+// waitForNextFileEventCmd waits for the next file event from the stored channel (Story 4.6).
+// Returns nil if channel is not set or context is cancelled.
+func (m Model) waitForNextFileEventCmd() tea.Cmd {
+	if m.eventCh == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		select {
+		case <-m.watchCtx.Done():
+			return nil // Context cancelled, stop listening
+		case event, ok := <-m.eventCh:
+			if !ok {
+				return fileWatcherErrorMsg{err: fmt.Errorf("watcher channel closed")}
+			}
+			return fileEventMsg{
+				Path:      event.Path,
+				Operation: event.Operation,
+				Timestamp: event.Timestamp,
+			}
+		}
+	}
 }
 
 // startRefresh initiates async refresh of all projects (Story 3.6).
@@ -459,6 +508,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Update status bar counts (Story 3.4, 4.5)
 			active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
 			m.statusBar.SetCounts(active, hibernated, waiting)
+
+			// Story 4.6: Start file watcher for real-time updates
+			if m.fileWatcher != nil && m.fileWatcherAvailable {
+				// Collect project paths
+				paths := make([]string, len(m.projects))
+				for i, p := range m.projects {
+					paths[i] = p.Path
+				}
+
+				// Create watch context for cancellation
+				m.watchCtx, m.watchCancel = context.WithCancel(context.Background())
+
+				// Start watching
+				eventCh, err := m.fileWatcher.Watch(m.watchCtx, paths)
+				if err != nil {
+					slog.Warn("failed to start file watcher", "error", err)
+					m.fileWatcherAvailable = false
+					m.statusBar.SetWatcherWarning("⚠️ File watching unavailable")
+				} else {
+					m.eventCh = eventCh
+					return m, m.waitForNextFileEventCmd()
+				}
+			}
 		}
 		return m, nil
 
@@ -597,6 +669,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The View() method calls FormatRelativeTime which recalculates on each render.
 		// We just need to schedule the next tick.
 		return m, tickCmd()
+
+	case fileEventMsg:
+		// Story 4.6: Handle file system event
+		m.handleFileEvent(msg)
+		// Re-subscribe to wait for next event
+		return m, m.waitForNextFileEventCmd()
+
+	case fileWatcherErrorMsg:
+		// Story 4.6: Handle file watcher error (AC3)
+		slog.Warn("file watcher error", "error", msg.err)
+		m.fileWatcherAvailable = false
+		m.statusBar.SetWatcherWarning("⚠️ File watching unavailable")
+		return m, nil
 	}
 
 	return m, nil
@@ -619,6 +704,13 @@ func (m Model) handleValidationKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Allow quit even in validation mode
 	switch msg.String() {
 	case KeyQuit, KeyForceQuit:
+		// Story 4.6: Clean up file watcher on quit (AC10)
+		if m.watchCancel != nil {
+			m.watchCancel()
+		}
+		if m.fileWatcher != nil {
+			m.fileWatcher.Close()
+		}
 		return m, tea.Quit
 	}
 
@@ -723,8 +815,22 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case KeyQuit:
+		// Story 4.6: Clean up file watcher on quit (AC10)
+		if m.watchCancel != nil {
+			m.watchCancel()
+		}
+		if m.fileWatcher != nil {
+			m.fileWatcher.Close()
+		}
 		return m, tea.Quit
 	case KeyForceQuit:
+		// Story 4.6: Clean up file watcher on force quit (AC10)
+		if m.watchCancel != nil {
+			m.watchCancel()
+		}
+		if m.fileWatcher != nil {
+			m.fileWatcher.Close()
+		}
 		return m, tea.Quit
 	case KeyHelp:
 		m.showHelp = !m.showHelp
@@ -1075,4 +1181,50 @@ func (m Model) renderMainContent(height int) string {
 	detailView := detailPanel.View()
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, listView, detailView)
+}
+
+// handleFileEvent processes a file system event and updates project state (Story 4.6).
+func (m *Model) handleFileEvent(msg fileEventMsg) {
+	// Find project by path prefix
+	project := m.findProjectByPath(msg.Path)
+	if project == nil {
+		slog.Debug("event path not matched to project", "path", msg.Path)
+		return
+	}
+
+	// Update repository (skip if nil - e.g., in tests without mocked repo)
+	ctx := context.Background()
+	if m.repository == nil {
+		slog.Debug("repository is nil, skipping activity update", "project_id", project.ID)
+		return
+	}
+	if err := m.repository.UpdateLastActivity(ctx, project.ID, msg.Timestamp); err != nil {
+		slog.Warn("failed to update activity", "project_id", project.ID, "error", err)
+		return
+	}
+
+	// Update local state
+	project.LastActivityAt = msg.Timestamp
+
+	// Update detail panel if this is selected project
+	if m.detailPanel.Project() != nil && m.detailPanel.Project().ID == project.ID {
+		m.detailPanel.SetProject(project)
+	}
+
+	// Recalculate status bar (waiting may have cleared)
+	active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
+	m.statusBar.SetCounts(active, hibernated, waiting)
+}
+
+// findProjectByPath finds the project that owns the given file path (Story 4.6).
+// Uses path prefix matching - returns the project whose Path is a prefix of eventPath.
+func (m Model) findProjectByPath(eventPath string) *domain.Project {
+	eventPath = strings.TrimSuffix(eventPath, "/")
+	for _, p := range m.projects {
+		projectPath := strings.TrimSuffix(p.Path, "/")
+		if eventPath == projectPath || strings.HasPrefix(eventPath, projectPath+"/") {
+			return p
+		}
+	}
+	return nil
 }

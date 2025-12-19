@@ -29,6 +29,10 @@ var detectionService ports.Detector
 // Story 4.5: Used by TUI for WAITING indicator display.
 var waitingDetector ports.WaitingDetector
 
+// fileWatcher is the file watcher injected at startup.
+// Story 4.6: Used by TUI for real-time dashboard updates.
+var fileWatcher ports.FileWatcher
+
 // SetRepository sets the project repository for the add command.
 // Used by main.go for production and tests for mocking.
 func SetRepository(repo ports.ProjectRepository) {
@@ -45,6 +49,12 @@ func SetDetectionService(svc ports.Detector) {
 // Story 4.5: Used by main.go to inject the WaitingDetector for WAITING indicators.
 func SetWaitingDetector(detector ports.WaitingDetector) {
 	waitingDetector = detector
+}
+
+// SetFileWatcher sets the file watcher for the TUI.
+// Story 4.6: Used by main.go to inject the FileWatcher for real-time updates.
+func SetFileWatcher(watcher ports.FileWatcher) {
+	fileWatcher = watcher
 }
 
 // addName holds the --name flag value

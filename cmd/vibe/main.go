@@ -15,6 +15,7 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence"
 	"github.com/JeiKeiLim/vibe-dash/internal/config"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/services"
+	"time"
 )
 
 // configPathAdapter implements ports.ProjectPathLookup for DirectoryManager.
@@ -114,6 +115,19 @@ func run(ctx context.Context) error {
 
 	// Story 4.5: Pass waitingDetector to TUI for WAITING indicator display
 	cli.SetWaitingDetector(waitingDetector)
+
+	// Story 4.6: Create FileWatcher for real-time dashboard updates
+	debounce := time.Duration(cfg.RefreshDebounceMs) * time.Millisecond
+	if debounce == 0 {
+		debounce = filesystem.DefaultDebounce // 200ms
+	}
+	fileWatcher := filesystem.NewFsnotifyWatcher(debounce)
+	defer fileWatcher.Close()
+
+	slog.Debug("file watcher initialized", "debounce_ms", cfg.RefreshDebounceMs)
+
+	// Pass to CLI for TUI integration
+	cli.SetFileWatcher(fileWatcher)
 
 	return cli.Execute(ctx)
 }

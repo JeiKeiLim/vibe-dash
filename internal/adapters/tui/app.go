@@ -13,7 +13,8 @@ import (
 // The repository parameter is used for project persistence operations.
 // The detector parameter is optional - if nil, refresh will be disabled.
 // The waitingDetector parameter is optional - if nil, waiting indicators are disabled (Story 4.5).
-func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detector, waitingDetector ports.WaitingDetector) error {
+// The fileWatcher parameter is optional - if nil, real-time updates are disabled (Story 4.6).
+func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detector, waitingDetector ports.WaitingDetector, fileWatcher ports.FileWatcher) error {
 	m := NewModel(repo)
 	if detector != nil {
 		m.SetDetectionService(detector)
@@ -21,6 +22,10 @@ func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detec
 	// Story 4.5: Wire waiting detector for WAITING indicator display
 	if waitingDetector != nil {
 		m.SetWaitingDetector(waitingDetector)
+	}
+	// Story 4.6: Wire file watcher for real-time dashboard updates
+	if fileWatcher != nil {
+		m.SetFileWatcher(fileWatcher)
 	}
 
 	p := tea.NewProgram(

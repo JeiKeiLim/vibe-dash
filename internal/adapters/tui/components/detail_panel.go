@@ -72,6 +72,12 @@ func (m *DetailPanelModel) SetProject(p *domain.Project) {
 	m.project = p
 }
 
+// Project returns the currently displayed project.
+// Story 4.6: Used to check if file events affect the displayed project.
+func (m DetailPanelModel) Project() *domain.Project {
+	return m.project
+}
+
 // SetSize updates the panel dimensions for responsive layout.
 func (m *DetailPanelModel) SetSize(width, height int) {
 	m.width = width

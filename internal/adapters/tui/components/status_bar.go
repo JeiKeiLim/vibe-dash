@@ -52,6 +52,9 @@ type StatusBarModel struct {
 	refreshProgress int
 	refreshTotal    int
 	lastRefreshMsg  string // "Refreshed N projects" or error message
+
+	// Watcher warning (Story 4.6)
+	watcherWarning string // Empty means no warning, "⚠️ File watching unavailable" on error
 }
 
 // NewStatusBarModel creates a new StatusBarModel with the given width.
@@ -96,6 +99,12 @@ func (s *StatusBarModel) SetRefreshComplete(msg string) {
 	s.lastRefreshMsg = msg
 }
 
+// SetWatcherWarning sets the file watcher warning message (Story 4.6).
+// Pass empty string to clear the warning.
+func (s *StatusBarModel) SetWatcherWarning(warning string) {
+	s.watcherWarning = warning
+}
+
 // View renders the status bar to a string.
 // Returns two lines: counts line and shortcuts line (AC1).
 // Returns single line when condensed mode is active (Story 3.10 AC5).
@@ -130,6 +139,11 @@ func (s StatusBarModel) renderCondensed() string {
 		counts += " " + s.lastRefreshMsg
 	}
 
+	// Show abbreviated watcher warning if present (Story 4.6 AC3)
+	if s.watcherWarning != "" {
+		counts += " ⚠️"
+	}
+
 	return "│ " + counts + " │ [j/k][?][q] │"
 }
 
@@ -156,6 +170,11 @@ func (s StatusBarModel) renderCounts() string {
 	// Show refresh result for 3 seconds after completion (Story 3.6)
 	if s.lastRefreshMsg != "" {
 		parts = append(parts, s.lastRefreshMsg)
+	}
+
+	// Show watcher warning if present (Story 4.6 AC3)
+	if s.watcherWarning != "" {
+		parts = append(parts, s.watcherWarning)
 	}
 
 	return "│ " + strings.Join(parts, " │ ") + " │"
