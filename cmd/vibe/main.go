@@ -96,5 +96,24 @@ func run(ctx context.Context) error {
 	detectionSvc := services.NewDetectionService(registry)
 	cli.SetDetectionService(detectionSvc)
 
+	// Initialize WaitingThresholdResolver with cascade support (Story 4.4)
+	// Priority: CLI flag > per-project config file > global config > default (10)
+	thresholdResolver := config.NewWaitingThresholdResolver(
+		cfg,
+		basePath, // ~/.vibe-dash
+		cli.GetWaitingThreshold(),
+	)
+
+	// Create WaitingDetector with resolver (Story 4.3/4.4)
+	waitingDetector := services.NewWaitingDetector(thresholdResolver)
+
+	// Log debug info about waiting detector initialization
+	slog.Debug("waiting detector initialized",
+		"cli_override", cli.GetWaitingThreshold(),
+	)
+
+	// TODO(Story 4.5): Pass waitingDetector to TUI for WAITING indicator display
+	_ = waitingDetector
+
 	return cli.Execute(ctx)
 }

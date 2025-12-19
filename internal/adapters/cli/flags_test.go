@@ -202,3 +202,88 @@ func TestInitLogging_DefaultLevel(t *testing.T) {
 	// Default should be error level only
 	slog.Error("test error message", "key", "value")
 }
+
+func TestWaitingThresholdFlag(t *testing.T) {
+	resetTestState()
+
+	buf := new(bytes.Buffer)
+	RootCmd.SetOut(buf)
+	RootCmd.SetErr(buf)
+	RootCmd.SetArgs([]string{"--waiting-threshold", "15", "--help"})
+
+	if err := RootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if waitingThreshold != 15 {
+		t.Errorf("--waiting-threshold flag should set waitingThreshold = 15, got %d", waitingThreshold)
+	}
+}
+
+func TestWaitingThresholdFlag_Disabled(t *testing.T) {
+	resetTestState()
+
+	buf := new(bytes.Buffer)
+	RootCmd.SetOut(buf)
+	RootCmd.SetErr(buf)
+	RootCmd.SetArgs([]string{"--waiting-threshold", "0", "--help"})
+
+	if err := RootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if waitingThreshold != 0 {
+		t.Errorf("--waiting-threshold=0 should set waitingThreshold = 0 (disabled), got %d", waitingThreshold)
+	}
+}
+
+func TestWaitingThresholdFlag_DefaultUnset(t *testing.T) {
+	resetTestState()
+
+	// Verify default is -1 (sentinel for "use config")
+	if got := GetWaitingThreshold(); got != -1 {
+		t.Errorf("GetWaitingThreshold() default = %d, want -1", got)
+	}
+}
+
+func TestGetWaitingThreshold(t *testing.T) {
+	tests := []struct {
+		name     string
+		flagVal  int
+		expected int
+	}{
+		{"not set (sentinel)", -1, -1},
+		{"disabled", 0, 0},
+		{"custom value", 15, 15},
+		{"invalid negative -5", -5, -1}, // Should warn and return -1
+		{"invalid negative -100", -100, -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetTestState()
+			waitingThreshold = tt.flagVal
+
+			got := GetWaitingThreshold()
+			if got != tt.expected {
+				t.Errorf("GetWaitingThreshold() = %d, want %d", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestWaitingThresholdFlagInHelpOutput(t *testing.T) {
+	buf := new(bytes.Buffer)
+	RootCmd.SetOut(buf)
+	RootCmd.SetErr(buf)
+	RootCmd.SetArgs([]string{"--help"})
+
+	if err := RootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "--waiting-threshold") {
+		t.Errorf("Help output missing flag --waiting-threshold")
+	}
+}

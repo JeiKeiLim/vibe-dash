@@ -6,12 +6,35 @@ import (
 	"time"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
-	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 )
 
+// mockThresholdResolver implements ports.ThresholdResolver for testing.
+type mockThresholdResolver struct {
+	defaultThreshold int
+	projectThresholds map[string]int
+}
+
+func newMockResolver(threshold int) *mockThresholdResolver {
+	return &mockThresholdResolver{
+		defaultThreshold: threshold,
+		projectThresholds: make(map[string]int),
+	}
+}
+
+func (m *mockThresholdResolver) Resolve(projectID string) int {
+	if threshold, ok := m.projectThresholds[projectID]; ok {
+		return threshold
+	}
+	return m.defaultThreshold
+}
+
+func (m *mockThresholdResolver) setProjectThreshold(projectID string, threshold int) {
+	m.projectThresholds[projectID] = threshold
+}
+
 func TestIsWaiting_NilProject(t *testing.T) {
-	config := ports.NewConfig()
-	detector := NewWaitingDetector(config)
+	resolver := newMockResolver(10)
+	detector := NewWaitingDetector(resolver)
 
 	// Must not panic, should return false
 	result := detector.IsWaiting(context.Background(), nil)
@@ -21,10 +44,9 @@ func TestIsWaiting_NilProject(t *testing.T) {
 }
 
 func TestIsWaiting_ThresholdDisabled(t *testing.T) {
-	config := ports.NewConfig()
-	config.AgentWaitingThresholdMinutes = 0 // Disabled
+	resolver := newMockResolver(0) // Disabled
 
-	detector := NewWaitingDetector(config)
+	detector := NewWaitingDetector(resolver)
 
 	now := time.Now()
 	project := &domain.Project{
@@ -41,10 +63,9 @@ func TestIsWaiting_ThresholdDisabled(t *testing.T) {
 }
 
 func TestIsWaiting_NewlyAddedProject(t *testing.T) {
-	config := ports.NewConfig()
-	config.AgentWaitingThresholdMinutes = 10
+	resolver := newMockResolver(10)
 
-	detector := NewWaitingDetector(config)
+	detector := NewWaitingDetector(resolver)
 
 	// Newly added project: LastActivityAt == CreatedAt
 	now := time.Now()
@@ -66,10 +87,9 @@ func TestIsWaiting_NewlyAddedProject(t *testing.T) {
 }
 
 func TestIsWaiting_HibernatedProject(t *testing.T) {
-	config := ports.NewConfig()
-	config.AgentWaitingThresholdMinutes = 10
+	resolver := newMockResolver(10)
 
-	detector := NewWaitingDetector(config)
+	detector := NewWaitingDetector(resolver)
 
 	now := time.Now()
 	project := &domain.Project{
@@ -85,10 +105,9 @@ func TestIsWaiting_HibernatedProject(t *testing.T) {
 }
 
 func TestIsWaiting_BoundaryPrecision(t *testing.T) {
-	config := ports.NewConfig()
-	config.AgentWaitingThresholdMinutes = 10
+	resolver := newMockResolver(10)
 
-	detector := NewWaitingDetector(config)
+	detector := NewWaitingDetector(resolver)
 
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -126,18 +145,10 @@ func TestIsWaiting_BoundaryPrecision(t *testing.T) {
 }
 
 func TestIsWaiting_PerProjectThreshold(t *testing.T) {
-	config := ports.NewConfig()
-	config.AgentWaitingThresholdMinutes = 10 // Global threshold
+	resolver := newMockResolver(10) // Global threshold
+	resolver.setProjectThreshold("custom-project", 5) // Per-project override
 
-	// Set per-project override to 5 minutes
-	fiveMinutes := 5
-	config.Projects = map[string]ports.ProjectConfig{
-		"custom-project": {
-			AgentWaitingThresholdMinutes: &fiveMinutes,
-		},
-	}
-
-	detector := NewWaitingDetector(config)
+	detector := NewWaitingDetector(resolver)
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	// Project with custom threshold
@@ -173,10 +184,9 @@ func TestIsWaiting_PerProjectThreshold(t *testing.T) {
 }
 
 func TestIsWaiting_ActiveProjectWithInactivity(t *testing.T) {
-	config := ports.NewConfig()
-	config.AgentWaitingThresholdMinutes = 10
+	resolver := newMockResolver(10)
 
-	detector := NewWaitingDetector(config)
+	detector := NewWaitingDetector(resolver)
 
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -198,10 +208,9 @@ func TestIsWaiting_ActiveProjectWithInactivity(t *testing.T) {
 }
 
 func TestWaitingDuration_NotWaiting(t *testing.T) {
-	config := ports.NewConfig()
-	config.AgentWaitingThresholdMinutes = 10
+	resolver := newMockResolver(10)
 
-	detector := NewWaitingDetector(config)
+	detector := NewWaitingDetector(resolver)
 
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -224,10 +233,9 @@ func TestWaitingDuration_NotWaiting(t *testing.T) {
 }
 
 func TestWaitingDuration_WhenWaiting(t *testing.T) {
-	config := ports.NewConfig()
-	config.AgentWaitingThresholdMinutes = 10
+	resolver := newMockResolver(10)
 
-	detector := NewWaitingDetector(config)
+	detector := NewWaitingDetector(resolver)
 
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -251,8 +259,8 @@ func TestWaitingDuration_WhenWaiting(t *testing.T) {
 }
 
 func TestWaitingDuration_NilProject(t *testing.T) {
-	config := ports.NewConfig()
-	detector := NewWaitingDetector(config)
+	resolver := newMockResolver(10)
+	detector := NewWaitingDetector(resolver)
 
 	// Must not panic, should return 0
 	duration := detector.WaitingDuration(context.Background(), nil)
@@ -292,10 +300,9 @@ func TestIsWaiting_TableDriven(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := ports.NewConfig()
-			config.AgentWaitingThresholdMinutes = tt.thresholdMinutes
+			resolver := newMockResolver(tt.thresholdMinutes)
 
-			detector := NewWaitingDetector(config)
+			detector := NewWaitingDetector(resolver)
 
 			baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 

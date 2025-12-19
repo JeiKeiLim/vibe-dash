@@ -13,15 +13,15 @@ import (
 // WaitingDetector determines if a project's AI agent is waiting for user input.
 // Stateless service - safe for concurrent use.
 type WaitingDetector struct {
-	config *ports.Config
-	now    func() time.Time // Injected for testing
+	resolver ports.ThresholdResolver
+	now      func() time.Time // Injected for testing
 }
 
-// NewWaitingDetector creates a new WaitingDetector with config dependency.
-func NewWaitingDetector(config *ports.Config) *WaitingDetector {
+// NewWaitingDetector creates a new WaitingDetector with threshold resolver.
+func NewWaitingDetector(resolver ports.ThresholdResolver) *WaitingDetector {
 	return &WaitingDetector{
-		config: config,
-		now:    time.Now,
+		resolver: resolver,
+		now:      time.Now,
 	}
 }
 
@@ -40,8 +40,8 @@ func (d *WaitingDetector) IsWaiting(ctx context.Context, project *domain.Project
 		return false
 	}
 
-	// Get effective threshold (per-project override or global)
-	thresholdMinutes := d.config.GetEffectiveWaitingThreshold(project.ID)
+	// Get effective threshold via resolver (CLI > per-project file > global > default)
+	thresholdMinutes := d.resolver.Resolve(project.ID)
 
 	// Threshold of 0 means detection is disabled
 	if thresholdMinutes == 0 {

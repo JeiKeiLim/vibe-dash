@@ -11,10 +11,12 @@ func resetTestState() {
 	verbose = false
 	debug = false
 	configFile = ""
+	waitingThreshold = -1
 	// Reset persistent flags to their defaults (ignore errors as flags always exist)
 	_ = RootCmd.PersistentFlags().Set("verbose", "false")
 	_ = RootCmd.PersistentFlags().Set("debug", "false")
 	_ = RootCmd.PersistentFlags().Set("config", "")
+	_ = RootCmd.PersistentFlags().Set("waiting-threshold", "-1")
 	// Clear any previous args
 	RootCmd.SetArgs(nil)
 }
