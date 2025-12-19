@@ -6,7 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence/sqlite"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui"
 )
 
@@ -23,16 +22,15 @@ Run 'vibe' with no arguments to launch the interactive dashboard.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		slog.Info("vibe-dash starting")
 
-		// Initialize repository for path validation at launch
-		repo, err := sqlite.NewSQLiteRepository("")
-		if err != nil {
-			slog.Error("Failed to initialize repository", "error", err)
+		// Use package-level repository (injected via SetRepository in main.go)
+		if repository == nil {
+			slog.Error("Repository not initialized")
 			return
 		}
 
 		// Pass detection service to TUI for refresh functionality (Story 3.6)
 		// Uses existing detectionService package variable from add.go
-		if err := tui.Run(cmd.Context(), repo, detectionService); err != nil {
+		if err := tui.Run(cmd.Context(), repository, detectionService); err != nil {
 			slog.Error("TUI error", "error", err)
 		}
 	},

@@ -54,7 +54,7 @@ func TestFindAll_AggregatesFromMultipleDBs(t *testing.T) {
 	basePath := t.TempDir()
 	ctx := context.Background()
 
-	// Setup 2 project directories with marker files
+	// Setup 2 project directories
 	proj1Dir := setupProjectDir(t, basePath, "proj1")
 	proj2Dir := setupProjectDir(t, basePath, "proj2")
 
@@ -460,14 +460,8 @@ func TestGracefulDegradation_CorruptedDBLogged(t *testing.T) {
 		t.Fatalf("failed to save project: %v", err)
 	}
 
-	// Setup an invalid directory (no marker file)
-	invalidDir := filepath.Join(basePath, "invalid-proj")
-	if err := os.MkdirAll(invalidDir, 0755); err != nil {
-		t.Fatalf("failed to create invalid dir: %v", err)
-	}
-	// No .project-path marker - will fail NewProjectRepository
-
-	// Setup config with both
+	// Setup config with both - "invalid-proj" directory doesn't exist
+	// This will fail NewProjectRepository because directory doesn't exist
 	cfg := ports.NewConfig()
 	cfg.SetProjectEntry("valid-proj", "/path/to/valid", "", false)
 	cfg.SetProjectEntry("invalid-proj", "/path/to/invalid", "", false)
@@ -779,11 +773,6 @@ func setupProjectDir(t *testing.T, basePath, dirName string) string {
 	projDir := filepath.Join(basePath, dirName)
 	if err := os.MkdirAll(projDir, 0755); err != nil {
 		t.Fatalf("failed to create project dir: %v", err)
-	}
-	// Create marker file
-	markerPath := filepath.Join(projDir, ".project-path")
-	if err := os.WriteFile(markerPath, []byte("/test/path"), 0644); err != nil {
-		t.Fatalf("failed to create marker file: %v", err)
 	}
 	return projDir
 }

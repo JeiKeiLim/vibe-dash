@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence/sqlite"
+	"github.com/JeiKeiLim/vibe-dash/internal/config"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 )
@@ -232,6 +233,17 @@ func (c *RepositoryCoordinator) Save(ctx context.Context, project *domain.Projec
 			return fmt.Errorf("failed to create project directory: %w", err)
 		}
 		dirName = filepath.Base(fullPath)
+
+		// Create per-project config.yaml (Story 3.5.9: removes .project-path redundancy)
+		projectConfigLoader, err := config.NewProjectConfigLoader(fullPath)
+		if err != nil {
+			return fmt.Errorf("failed to create project config loader: %w", err)
+		}
+		if _, err := projectConfigLoader.Load(ctx); err != nil {
+			slog.Warn("failed to create project config.yaml", "path", fullPath, "error", err)
+			// Non-fatal - continue without per-project config
+		}
+
 		cfg.SetProjectEntry(dirName, project.Path, project.DisplayName, project.IsFavorite)
 		if err := c.configLoader.Save(ctx, cfg); err != nil {
 			return fmt.Errorf("failed to save config: %w", err)

@@ -16,14 +16,10 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 )
 
-// Helper function to create a valid project directory with marker file
+// Helper function to create a valid project directory
 func setupProjectDir(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	markerPath := filepath.Join(dir, ".project-path")
-	err := os.WriteFile(markerPath, []byte("/path/to/project"), 0644)
-	require.NoError(t, err)
-	return dir
+	return t.TempDir()
 }
 
 func TestNewProjectConfigLoader(t *testing.T) {
@@ -33,21 +29,11 @@ func TestNewProjectConfigLoader(t *testing.T) {
 		expectError error
 	}{
 		{
-			name: "valid directory with marker",
-			setup: func(t *testing.T) string {
-				dir := t.TempDir()
-				err := os.WriteFile(filepath.Join(dir, ".project-path"), []byte("/path"), 0644)
-				require.NoError(t, err)
-				return dir
-			},
-			expectError: nil,
-		},
-		{
-			name: "directory without marker",
+			name: "valid directory",
 			setup: func(t *testing.T) string {
 				return t.TempDir()
 			},
-			expectError: domain.ErrPathNotAccessible,
+			expectError: nil,
 		},
 		{
 			name: "non-existent directory",

@@ -98,7 +98,7 @@ func (dm *FilesystemDirectoryManager) GetProjectDirName(ctx context.Context, pro
 			return name, nil
 		}
 
-		// Directory exists - check if it's the same project (determinism check via marker file)
+		// Directory exists - check if it's the same project (determinism check via config lookup)
 		if dm.isSameProject(dirPath, canonicalPath) {
 			return name, nil
 		}
@@ -130,12 +130,6 @@ func (dm *FilesystemDirectoryManager) EnsureProjectDir(ctx context.Context, proj
 	// Create directory atomically (MkdirAll handles existing directories)
 	if err := os.MkdirAll(fullPath, 0755); err != nil {
 		return "", fmt.Errorf("%w: failed to create directory %s: %v", domain.ErrPathNotAccessible, fullPath, err)
-	}
-
-	// Write marker file to track which canonical path this directory belongs to
-	canonicalPath, _ := CanonicalPath(projectPath)
-	if err := dm.writeProjectMarker(fullPath, canonicalPath); err != nil {
-		return "", err
 	}
 
 	return fullPath, nil
@@ -226,23 +220,13 @@ func (dm *FilesystemDirectoryManager) directoryExists(path string) (bool, error)
 }
 
 // isSameProject checks if the directory at dirPath belongs to the given canonical project path.
-// Uses a marker file to track the original project path.
+// Uses global config lookup to determine project mapping.
 func (dm *FilesystemDirectoryManager) isSameProject(dirPath, canonicalPath string) bool {
-	markerPath := filepath.Join(dirPath, ".project-path")
-	data, err := os.ReadFile(markerPath)
-	if err != nil {
+	if dm.configLookup == nil {
 		return false
 	}
-	return strings.TrimSpace(string(data)) == canonicalPath
-}
-
-// writeProjectMarker writes the canonical project path to a marker file.
-func (dm *FilesystemDirectoryManager) writeProjectMarker(dirPath, canonicalPath string) error {
-	markerPath := filepath.Join(dirPath, ".project-path")
-	if err := os.WriteFile(markerPath, []byte(canonicalPath), 0644); err != nil {
-		return fmt.Errorf("%w: failed to write project marker %s: %v", domain.ErrPathNotAccessible, markerPath, err)
-	}
-	return nil
+	expectedDir := dm.configLookup.GetDirForPath(canonicalPath)
+	return expectedDir != "" && filepath.Base(dirPath) == expectedDir
 }
 
 // DeleteProjectDir removes the project directory for the given project path.

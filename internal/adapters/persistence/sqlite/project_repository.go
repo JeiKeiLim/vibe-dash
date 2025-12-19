@@ -29,9 +29,7 @@ type ProjectRepository struct {
 }
 
 // NewProjectRepository creates a new per-project repository with fail-fast schema initialization.
-// The projectDir must:
-// 1. Exist as a directory
-// 2. Contain a .project-path marker file (created by DirectoryManager)
+// The projectDir must exist as a directory.
 //
 // On success, the state.db is created and schema is initialized.
 // Returns domain.ErrPathNotAccessible on validation failures.
@@ -39,13 +37,6 @@ func NewProjectRepository(projectDir string) (*ProjectRepository, error) {
 	// Validate projectDir exists
 	if _, err := os.Stat(projectDir); os.IsNotExist(err) {
 		return nil, fmt.Errorf("%w: project directory does not exist: %s",
-			domain.ErrPathNotAccessible, projectDir)
-	}
-
-	// Verify DirectoryManager created this directory (marker file check)
-	markerPath := filepath.Join(projectDir, ".project-path")
-	if _, err := os.Stat(markerPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("%w: directory not created by DirectoryManager (missing .project-path): %s",
 			domain.ErrPathNotAccessible, projectDir)
 	}
 

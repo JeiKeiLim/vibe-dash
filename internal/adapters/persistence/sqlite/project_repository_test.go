@@ -24,13 +24,7 @@ func TestNewProjectRepository(t *testing.T) {
 			name: "creates state.db in correct location",
 			setup: func(t *testing.T) string {
 				t.Helper()
-				dir := t.TempDir()
-				// Create .project-path marker
-				markerPath := filepath.Join(dir, ".project-path")
-				if err := os.WriteFile(markerPath, []byte("/some/project/path"), 0644); err != nil {
-					t.Fatalf("failed to create marker file: %v", err)
-				}
-				return dir
+				return t.TempDir()
 			},
 			wantErr: false,
 		},
@@ -42,17 +36,6 @@ func TestNewProjectRepository(t *testing.T) {
 			},
 			wantErr:     true,
 			errContains: "project directory does not exist",
-		},
-		{
-			name: "fails if .project-path marker missing",
-			setup: func(t *testing.T) string {
-				t.Helper()
-				dir := t.TempDir()
-				// Don't create .project-path marker
-				return dir
-			},
-			wantErr:     true,
-			errContains: "missing .project-path",
 		},
 	}
 
@@ -94,10 +77,6 @@ func TestNewProjectRepository(t *testing.T) {
 
 func TestProjectRepository_WALMode(t *testing.T) {
 	dir := t.TempDir()
-	markerPath := filepath.Join(dir, ".project-path")
-	if err := os.WriteFile(markerPath, []byte("/test/path"), 0644); err != nil {
-		t.Fatalf("failed to create marker: %v", err)
-	}
 
 	repo, err := NewProjectRepository(dir)
 	if err != nil {
@@ -123,10 +102,6 @@ func TestProjectRepository_WALMode(t *testing.T) {
 
 func TestProjectRepository_SchemaVersion(t *testing.T) {
 	dir := t.TempDir()
-	markerPath := filepath.Join(dir, ".project-path")
-	if err := os.WriteFile(markerPath, []byte("/test/path"), 0644); err != nil {
-		t.Fatalf("failed to create marker: %v", err)
-	}
 
 	repo, err := NewProjectRepository(dir)
 	if err != nil {
@@ -190,10 +165,6 @@ func (e *mockError) Error() string {
 func setupProjectRepo(t *testing.T) (*ProjectRepository, string) {
 	t.Helper()
 	dir := t.TempDir()
-	markerPath := filepath.Join(dir, ".project-path")
-	if err := os.WriteFile(markerPath, []byte("/test/project/path"), 0644); err != nil {
-		t.Fatalf("failed to create marker: %v", err)
-	}
 
 	repo, err := NewProjectRepository(dir)
 	if err != nil {

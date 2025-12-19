@@ -208,7 +208,7 @@ func TestGetProjectDirName_SpecialCharacters(t *testing.T) {
 	}
 }
 
-// Subtask 4.6: Test determinism (same path = same result)
+// Subtask 4.6: Test determinism (same path = same result via config lookup)
 func TestGetProjectDirName_Determinism(t *testing.T) {
 	tempDir := t.TempDir()
 	basePath := filepath.Join(tempDir, "vibe-dash")
@@ -218,16 +218,24 @@ func TestGetProjectDirName_Determinism(t *testing.T) {
 		t.Fatalf("failed to create test dir: %v", err)
 	}
 
-	dm := NewDirectoryManager(basePath, &mockPathLookup{})
+	// Get canonical path for lookup
+	canonicalPath, _ := CanonicalPath(projectPath)
+
+	// Create a mutable lookup that simulates the coordinator updating config after EnsureProjectDir
+	lookup := &mockPathLookup{paths: make(map[string]string)}
+	dm := NewDirectoryManager(basePath, lookup)
 	ctx := context.Background()
 
-	// First call
+	// First call - creates the directory
 	dir1, err := dm.EnsureProjectDir(ctx, projectPath)
 	if err != nil {
 		t.Fatalf("first call failed: %v", err)
 	}
 
-	// Second call with same path - should return same directory
+	// Simulate coordinator updating config after EnsureProjectDir (this is what happens in real flow)
+	lookup.paths[canonicalPath] = filepath.Base(dir1)
+
+	// Second call with same path - should return same directory via config lookup
 	dir2, err := dm.GetProjectDirName(ctx, projectPath)
 	if err != nil {
 		t.Fatalf("second call failed: %v", err)
@@ -564,12 +572,6 @@ func TestEnsureProjectDir_CreatesDirectory(t *testing.T) {
 	}
 	if !info.IsDir() {
 		t.Error("created path is not a directory")
-	}
-
-	// Verify marker file exists
-	markerPath := filepath.Join(fullPath, ".project-path")
-	if _, err := os.Stat(markerPath); err != nil {
-		t.Errorf("marker file not created: %v", err)
 	}
 }
 

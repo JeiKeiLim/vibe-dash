@@ -15,11 +15,11 @@ import (
 )
 
 // setupTestRepo creates a test repository in a temporary directory
-func setupTestRepo(t *testing.T) *sqlite.SQLiteRepository {
+func setupTestRepo(t *testing.T) *sqlite.ProjectRepository {
 	t.Helper()
 	tmpDir := t.TempDir()
-	dbPath := tmpDir + "/test.db"
-	repo, err := sqlite.NewSQLiteRepository(dbPath)
+
+	repo, err := sqlite.NewProjectRepository(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create test repository: %v", err)
 	}

@@ -33,18 +33,11 @@ type ViperProjectConfigLoader struct {
 }
 
 // NewProjectConfigLoader creates a loader for project-specific config.
-// projectDir must exist and contain .project-path marker (created by DirectoryManager).
+// projectDir must exist as a directory.
 func NewProjectConfigLoader(projectDir string) (*ViperProjectConfigLoader, error) {
 	// Validate projectDir exists
 	if _, err := os.Stat(projectDir); os.IsNotExist(err) {
 		return nil, fmt.Errorf("%w: project directory does not exist: %s",
-			domain.ErrPathNotAccessible, projectDir)
-	}
-
-	// Verify DirectoryManager created this directory
-	markerPath := filepath.Join(projectDir, ".project-path")
-	if _, err := os.Stat(markerPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("%w: directory not created by DirectoryManager (missing .project-path): %s",
 			domain.ErrPathNotAccessible, projectDir)
 	}
 
