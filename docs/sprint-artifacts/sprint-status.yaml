@@ -1,6 +1,6 @@
 # generated: 2025-12-12
 # updated: 2025-12-19
-# updated by: SM (Bob) - Epic 3.5 retrospective completed
+# updated by: Dev Agent - Story 4.1 code review completed, status: done
 # project: bmad-test
 # project_key: vibe-dash
 # tracking_system: file-system
@@ -100,8 +100,8 @@ development_status:
   epic-3-5-retrospective: completed
 
   # Epic 4: Agent Waiting Detection (Killer Feature)
-  epic-4: backlog
-  4-1-file-watcher-service: backlog
+  epic-4: in-progress
+  4-1-file-watcher-service: done
   4-2-activity-timestamp-tracking: backlog
   4-3-agent-waiting-detection-logic: backlog
   4-4-waiting-threshold-configuration: backlog
