@@ -154,6 +154,9 @@ type removeConfirmTimeoutMsg struct{}
 // clearRemoveFeedbackMsg signals to clear remove feedback message (Story 3.9).
 type clearRemoveFeedbackMsg struct{}
 
+// tickMsg is sent every 60 seconds to trigger timestamp recalculation (Story 4.2, AC4).
+type tickMsg time.Time
+
 // NewModel creates a new Model with default values.
 // The repository parameter is used for project persistence operations.
 func NewModel(repo ports.ProjectRepository) Model {
@@ -200,9 +203,12 @@ func statusBarHeight(height int) int {
 	return 2
 }
 
-// Init implements tea.Model. Returns a command to validate project paths.
+// Init implements tea.Model. Returns commands to validate project paths and start periodic tick.
 func (m Model) Init() tea.Cmd {
-	return m.validatePathsCmd()
+	return tea.Batch(
+		m.validatePathsCmd(),
+		tickCmd(), // Start periodic timestamp refresh (Story 4.2, AC4)
+	)
 }
 
 // validatePathsCmd creates a command that validates all project paths.
@@ -224,6 +230,13 @@ func (m Model) loadProjectsCmd() tea.Cmd {
 		projects, err := m.repository.FindAll(ctx)
 		return ProjectsLoadedMsg{projects: projects, err: err}
 	}
+}
+
+// tickCmd returns a command that ticks every 60 seconds for timestamp refresh (Story 4.2, AC4).
+func tickCmd() tea.Cmd {
+	return tea.Tick(time.Minute, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 // startRefresh initiates async refresh of all projects (Story 3.6).
@@ -544,6 +557,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clearRemoveFeedbackMsg:
 		m.statusBar.SetRefreshComplete("")
 		return m, nil
+
+	case tickMsg:
+		// Periodic tick to trigger timestamp recalculation (Story 4.2, AC4).
+		// The View() method calls FormatRelativeTime which recalculates on each render.
+		// We just need to schedule the next tick.
+		return m, tickCmd()
 	}
 
 	return m, nil

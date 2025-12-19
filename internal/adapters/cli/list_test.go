@@ -600,3 +600,7 @@ func (m *MockRepositoryWithFindAllError) Delete(_ context.Context, _ string) err
 func (m *MockRepositoryWithFindAllError) UpdateState(_ context.Context, _ string, _ domain.ProjectState) error {
 	return nil
 }
+
+func (m *MockRepositoryWithFindAllError) UpdateLastActivity(_ context.Context, _ string, _ time.Time) error {
+	return nil
+}

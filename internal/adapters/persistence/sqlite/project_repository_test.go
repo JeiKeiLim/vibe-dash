@@ -582,3 +582,175 @@ func TestProjectRepository_ConcurrentAccess(t *testing.T) {
 		t.Errorf("concurrent operation failed: %v", err)
 	}
 }
+
+// =============================================================================
+// Story 4.2: UpdateLastActivity Tests
+// =============================================================================
+
+func TestUpdateLastActivity_Success(t *testing.T) {
+	projectDir := t.TempDir()
+
+	repo, err := NewProjectRepository(projectDir)
+	if err != nil {
+		t.Fatalf("failed to create repo: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Create a project first
+	project, err := domain.NewProject("/test/path", "test-project")
+	if err != nil {
+		t.Fatalf("failed to create project: %v", err)
+	}
+
+	if err := repo.Save(ctx, project); err != nil {
+		t.Fatalf("failed to save project: %v", err)
+	}
+
+	// Record original LastActivityAt
+	originalActivity := project.LastActivityAt
+
+	// Wait a bit to ensure time difference
+	time.Sleep(10 * time.Millisecond)
+
+	// Update last activity
+	newActivityTime := time.Now().UTC()
+	if err := repo.UpdateLastActivity(ctx, project.ID, newActivityTime); err != nil {
+		t.Fatalf("UpdateLastActivity() error = %v", err)
+	}
+
+	// Verify the update
+	updated, err := repo.FindByID(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("FindByID() after UpdateLastActivity error = %v", err)
+	}
+
+	// Check LastActivityAt was updated
+	if updated.LastActivityAt.Equal(originalActivity) {
+		t.Error("LastActivityAt was not updated")
+	}
+
+	// Check the timestamp is approximately correct (within 1 second tolerance for RFC3339 rounding)
+	timeDiff := updated.LastActivityAt.Sub(newActivityTime)
+	if timeDiff < -time.Second || timeDiff > time.Second {
+		t.Errorf("LastActivityAt = %v, want approximately %v (diff: %v)", updated.LastActivityAt, newActivityTime, timeDiff)
+	}
+
+	// Verify UpdatedAt was also updated
+	if updated.UpdatedAt.Before(updated.LastActivityAt) {
+		t.Error("UpdatedAt should be at or after LastActivityAt")
+	}
+}
+
+func TestUpdateLastActivity_NotFound(t *testing.T) {
+	projectDir := t.TempDir()
+
+	repo, err := NewProjectRepository(projectDir)
+	if err != nil {
+		t.Fatalf("failed to create repo: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Try to update non-existent project
+	err = repo.UpdateLastActivity(ctx, "nonexistent-id", time.Now())
+	if !errors.Is(err, domain.ErrProjectNotFound) {
+		t.Errorf("UpdateLastActivity() error = %v, want %v", err, domain.ErrProjectNotFound)
+	}
+}
+
+func TestUpdateLastActivity_OnlyUpdatesLastActivityAt(t *testing.T) {
+	projectDir := t.TempDir()
+
+	repo, err := NewProjectRepository(projectDir)
+	if err != nil {
+		t.Fatalf("failed to create repo: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Create a project with specific fields
+	project, err := domain.NewProject("/test/path", "test-project")
+	if err != nil {
+		t.Fatalf("failed to create project: %v", err)
+	}
+	project.Notes = "test notes"
+	project.IsFavorite = true
+	project.State = domain.StateHibernated
+
+	if err := repo.Save(ctx, project); err != nil {
+		t.Fatalf("failed to save project: %v", err)
+	}
+
+	// Update only LastActivityAt
+	newActivityTime := time.Now().Add(time.Hour) // Future time
+	if err := repo.UpdateLastActivity(ctx, project.ID, newActivityTime); err != nil {
+		t.Fatalf("UpdateLastActivity() error = %v", err)
+	}
+
+	// Verify other fields are unchanged
+	updated, err := repo.FindByID(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+
+	if updated.Notes != "test notes" {
+		t.Errorf("Notes was changed: got %q, want 'test notes'", updated.Notes)
+	}
+	if !updated.IsFavorite {
+		t.Error("IsFavorite was changed: got false, want true")
+	}
+	if updated.State != domain.StateHibernated {
+		t.Errorf("State was changed: got %v, want StateHibernated", updated.State)
+	}
+	if updated.Path != "/test/path" {
+		t.Errorf("Path was changed: got %q, want '/test/path'", updated.Path)
+	}
+	if updated.Name != "test-project" {
+		t.Errorf("Name was changed: got %q, want 'test-project'", updated.Name)
+	}
+}
+
+func TestUpdateLastActivity_ConcurrentUpdates(t *testing.T) {
+	projectDir := t.TempDir()
+
+	repo, err := NewProjectRepository(projectDir)
+	if err != nil {
+		t.Fatalf("failed to create repo: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Create a project
+	project, err := domain.NewProject("/test/path", "test-project")
+	if err != nil {
+		t.Fatalf("failed to create project: %v", err)
+	}
+
+	if err := repo.Save(ctx, project); err != nil {
+		t.Fatalf("failed to save project: %v", err)
+	}
+
+	// Run concurrent updates
+	var wg sync.WaitGroup
+	errors := make(chan error, 10)
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			updateTime := time.Now().Add(time.Duration(i) * time.Millisecond)
+			if err := repo.UpdateLastActivity(ctx, project.ID, updateTime); err != nil {
+				errors <- err
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errors)
+
+	// Check for any errors
+	for err := range errors {
+		t.Errorf("concurrent UpdateLastActivity failed: %v", err)
+	}
+}

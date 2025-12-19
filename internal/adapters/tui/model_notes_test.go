@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -100,6 +101,10 @@ func (m *notesMockRepository) UpdateState(_ context.Context, id string, state do
 		}
 	}
 	return domain.ErrProjectNotFound
+}
+
+func (m *notesMockRepository) UpdateLastActivity(_ context.Context, _ string, _ time.Time) error {
+	return nil
 }
 
 var _ ports.ProjectRepository = (*notesMockRepository)(nil)

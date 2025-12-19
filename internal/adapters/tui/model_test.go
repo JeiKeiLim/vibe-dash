@@ -882,3 +882,73 @@ func TestModel_StatusBarWidthUpdate(t *testing.T) {
 		t.Error("Status bar should use abbreviated shortcuts at width 60")
 	}
 }
+
+// =============================================================================
+// Story 4.2: Tick Tests for Periodic Timestamp Refresh
+// =============================================================================
+
+func TestModel_Init_IncludesTickCmd(t *testing.T) {
+	m := NewModel(nil)
+	cmd := m.Init()
+
+	// Init returns a batch command that includes tick
+	if cmd == nil {
+		t.Error("Init() should return a batch command including tick")
+	}
+	// We can't inspect the batch directly, but we verify it's not nil
+	// and the behavior is tested in the tick message handler test
+}
+
+func TestModel_Update_TickMsg_ReturnsNextTick(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+
+	// Send a tick message
+	newModel, cmd := m.Update(tickMsg{})
+
+	// Model should be returned unchanged
+	updated := newModel.(Model)
+	if updated.width != 80 || updated.height != 40 {
+		t.Error("tickMsg should not modify model state")
+	}
+
+	// A new tick command should be returned to schedule next tick
+	if cmd == nil {
+		t.Error("tickMsg should return next tick command")
+	}
+}
+
+func TestModel_Update_TickMsg_DoesNotAffectEditing(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.isEditingNote = true // In note editing mode
+
+	// Send a tick message - should still schedule next tick
+	_, cmd := m.Update(tickMsg{})
+
+	// Note editing mode doesn't intercept tickMsg - it goes to the switch
+	// tickMsg should return next tick regardless of editing state
+	if cmd == nil {
+		t.Error("tickMsg should return next tick command even during editing")
+	}
+}
+
+func TestModel_Update_TickMsg_DoesNotAffectRefreshing(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.isRefreshing = true
+
+	// Send a tick message
+	_, cmd := m.Update(tickMsg{})
+
+	// Should still schedule next tick during refresh
+	if cmd == nil {
+		t.Error("tickMsg should return next tick command even during refresh")
+	}
+}

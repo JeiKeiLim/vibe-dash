@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 )
@@ -56,4 +57,9 @@ type ProjectRepository interface {
 	// Used for manual hibernation (FR31) and auto-hibernation (FR28).
 	// Returns domain.ErrProjectNotFound if no project exists with the given ID.
 	UpdateState(ctx context.Context, id string, state domain.ProjectState) error
+
+	// UpdateLastActivity updates only the LastActivityAt timestamp.
+	// This is an optimized update for high-frequency activity tracking (FR34-38).
+	// Returns domain.ErrProjectNotFound if no project exists with the given ID.
+	UpdateLastActivity(ctx context.Context, id string, timestamp time.Time) error
 }

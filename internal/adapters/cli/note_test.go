@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/cli"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
@@ -106,6 +107,10 @@ func (m *noteMockRepository) UpdateState(_ context.Context, id string, state dom
 		}
 	}
 	return domain.ErrProjectNotFound
+}
+
+func (m *noteMockRepository) UpdateLastActivity(_ context.Context, _ string, _ time.Time) error {
+	return nil
 }
 
 // executeNoteCommand runs the note command with given args and returns output/error

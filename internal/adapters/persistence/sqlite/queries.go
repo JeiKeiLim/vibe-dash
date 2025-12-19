@@ -30,3 +30,6 @@ const deleteByIDSQL = `DELETE FROM projects WHERE id = ?`
 
 // updateStateSQL updates only the state and updated_at fields
 const updateStateSQL = `UPDATE projects SET state = ?, updated_at = ? WHERE id = ?`
+
+// updateLastActivitySQL updates only the last_activity_at and updated_at fields
+const updateLastActivitySQL = `UPDATE projects SET last_activity_at = ?, updated_at = ? WHERE id = ?`

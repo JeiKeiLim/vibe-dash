@@ -3,6 +3,7 @@ package ports_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
@@ -82,6 +83,15 @@ func (m *mockRepository) UpdateState(ctx context.Context, id string, state domai
 		return domain.ErrProjectNotFound
 	}
 	p.State = state
+	return nil
+}
+
+func (m *mockRepository) UpdateLastActivity(ctx context.Context, id string, timestamp time.Time) error {
+	p, ok := m.projects[id]
+	if !ok {
+		return domain.ErrProjectNotFound
+	}
+	p.LastActivityAt = timestamp
 	return nil
 }
 

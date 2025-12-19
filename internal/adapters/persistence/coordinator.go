@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence/sqlite"
 	"github.com/JeiKeiLim/vibe-dash/internal/config"
@@ -24,6 +25,7 @@ type RepositoryCoordinator struct {
 	directoryManager ports.DirectoryManager
 	basePath         string
 	repoCache        map[string]*sqlite.ProjectRepository
+	projectIDToDirName map[string]string // project ID -> dirName for O(1) lookup in UpdateLastActivity
 	mu               sync.RWMutex
 }
 
@@ -35,10 +37,11 @@ func NewRepositoryCoordinator(
 	basePath string,
 ) *RepositoryCoordinator {
 	return &RepositoryCoordinator{
-		configLoader:     configLoader,
-		directoryManager: directoryManager,
-		basePath:         basePath,
-		repoCache:        make(map[string]*sqlite.ProjectRepository),
+		configLoader:       configLoader,
+		directoryManager:   directoryManager,
+		basePath:           basePath,
+		repoCache:          make(map[string]*sqlite.ProjectRepository),
+		projectIDToDirName: make(map[string]string),
 	}
 }
 
@@ -99,6 +102,7 @@ func (c *RepositoryCoordinator) Close(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.repoCache = make(map[string]*sqlite.ProjectRepository)
+	c.projectIDToDirName = make(map[string]string)
 	return nil
 }
 
@@ -132,6 +136,7 @@ func (c *RepositoryCoordinator) getAllRepos(ctx context.Context) ([]*sqlite.Proj
 
 // FindAll retrieves all projects from all project databases.
 // Returns empty slice (not nil) if no projects exist.
+// Also populates the projectID -> dirName cache for UpdateLastActivity optimization.
 func (c *RepositoryCoordinator) FindAll(ctx context.Context) ([]*domain.Project, error) {
 	select {
 	case <-ctx.Done():
@@ -139,18 +144,24 @@ func (c *RepositoryCoordinator) FindAll(ctx context.Context) ([]*domain.Project,
 	default:
 	}
 
-	repos, _, err := c.getAllRepos(ctx)
+	repos, dirNames, err := c.getAllRepos(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	// CRITICAL: Return empty slice, not nil
 	projects := make([]*domain.Project, 0)
-	for _, repo := range repos {
+	for i, repo := range repos {
 		repoProjects, err := repo.FindAll(ctx)
 		if err != nil {
 			slog.Warn("error reading from project repo", "error", err)
 			continue
+		}
+		// Populate projectID -> dirName cache for each project
+		for _, p := range repoProjects {
+			c.mu.Lock()
+			c.projectIDToDirName[p.ID] = dirNames[i]
+			c.mu.Unlock()
 		}
 		projects = append(projects, repoProjects...)
 	}
@@ -410,4 +421,57 @@ func (c *RepositoryCoordinator) UpdateState(ctx context.Context, id string, stat
 	}
 
 	return repo.UpdateState(ctx, id, state)
+}
+
+// UpdateLastActivity updates the LastActivityAt for a project.
+// Delegates to the appropriate per-project repository.
+// Uses cached projectID -> dirName mapping for O(1) lookup (high-frequency operation).
+// Returns domain.ErrProjectNotFound if not found.
+func (c *RepositoryCoordinator) UpdateLastActivity(ctx context.Context, id string, timestamp time.Time) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	// Try cached lookup first (O(1) - optimized for high-frequency calls)
+	c.mu.RLock()
+	dirName, cached := c.projectIDToDirName[id]
+	c.mu.RUnlock()
+
+	if cached {
+		repo, err := c.getProjectRepo(ctx, dirName)
+		if err == nil {
+			return repo.UpdateLastActivity(ctx, id, timestamp)
+		}
+		// If repo fails, fall through to full lookup
+	}
+
+	// Cache miss or repo error - fall back to full lookup
+	project, err := c.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := c.configLoader.Load(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	dirName, found := cfg.GetDirectoryName(project.Path)
+	if !found {
+		return fmt.Errorf("project path not in config: %s", project.Path)
+	}
+
+	// Cache the mapping for future calls
+	c.mu.Lock()
+	c.projectIDToDirName[id] = dirName
+	c.mu.Unlock()
+
+	repo, err := c.getProjectRepo(ctx, dirName)
+	if err != nil {
+		return err
+	}
+
+	return repo.UpdateLastActivity(ctx, id, timestamp)
 }

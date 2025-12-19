@@ -306,6 +306,31 @@ func (r *ProjectRepository) UpdateState(ctx context.Context, id string, state do
 	return nil
 }
 
+// UpdateLastActivity updates only the LastActivityAt timestamp.
+// Returns domain.ErrProjectNotFound if no project exists with the given ID.
+func (r *ProjectRepository) UpdateLastActivity(ctx context.Context, id string, timestamp time.Time) error {
+	db, err := r.openDB(ctx)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	result, err := db.ExecContext(ctx, updateLastActivitySQL,
+		timestamp.UTC().Format(time.RFC3339Nano),
+		time.Now().UTC().Format(time.RFC3339Nano),
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update last activity: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return domain.ErrProjectNotFound
+	}
+	return nil
+}
+
 // Note: This file reuses helper functions and types from repository.go in the same package:
 // - projectRow struct for DB row scanning
 // - rowToProject() for converting DB rows to domain.Project

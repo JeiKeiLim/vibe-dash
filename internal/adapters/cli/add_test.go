@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/cli"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
@@ -113,6 +114,10 @@ func (m *MockRepository) UpdateState(_ context.Context, id string, state domain.
 		}
 	}
 	return domain.ErrProjectNotFound
+}
+
+func (m *MockRepository) UpdateLastActivity(_ context.Context, _ string, _ time.Time) error {
+	return nil
 }
 
 // executeAddCommand runs the add command with given args and returns output/error

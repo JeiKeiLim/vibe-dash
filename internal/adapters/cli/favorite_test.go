@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/cli"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
@@ -106,6 +107,10 @@ func (m *favoriteMockRepository) UpdateState(_ context.Context, id string, state
 		}
 	}
 	return domain.ErrProjectNotFound
+}
+
+func (m *favoriteMockRepository) UpdateLastActivity(_ context.Context, _ string, _ time.Time) error {
+	return nil
 }
 
 // executeFavoriteCommand runs the favorite command with given args and returns output/error
