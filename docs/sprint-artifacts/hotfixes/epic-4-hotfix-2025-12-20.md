@@ -2,7 +2,7 @@
 
 **Date:** 2025-12-20
 **Source:** [Epic 4 Retrospective](../retrospectives/epic-4-retro-2025-12-20.md)
-**Status:** Complete
+**Status:** Complete (H1-H5 all fixed)
 
 ---
 
@@ -136,7 +136,9 @@ After all fixes complete:
 
 **Completed By:** Bob (Scrum Master) with Dev Team
 **Completion Date:** 2025-12-20
-**Commit Hash:** (to be filled after commit)
+**Commit Hashes:**
+- `8575a88` - H1, H2, H3, H4 fixes
+- `ab00304` - H5 fix + documentation updates
 
 ---
 
@@ -146,7 +148,7 @@ After all fixes complete:
 |------|-------------|-------------|
 | `internal/adapters/tui/components/status_bar.go` | Modified | H1: Show "0 waiting" with dim style |
 | `internal/adapters/tui/components/status_bar_test.go` | Modified | H1: Update tests for new behavior |
-| `internal/adapters/tui/model.go` | Modified | H3: Add debug logging for file watcher |
+| `internal/adapters/tui/model.go` | Modified | H3: Add debug logging for file watcher; H5: Recalculate waiting counts on tick |
 | `internal/adapters/detectors/speckit/detector.go` | Modified | H4: Add lexicographic tiebreaker |
 | `internal/adapters/detectors/speckit/detector_test.go` | Modified | H4: Add equal-mtime test |
 | `docs/sprint-artifacts/epic-acceptance-checklist.md` | Created | H2: Epic acceptance process |
@@ -155,4 +157,46 @@ After all fixes complete:
 
 ---
 
+## Post-Verification Findings
+
+During manual verification, a new bug was discovered:
+
+### H5: WAITING State Not Updating on Tick
+
+**Symptom:** WAITING indicator never appears despite exceeding threshold.
+
+**Root Cause:** `tickMsg` handler doesn't recalculate status bar waiting counts.
+
+**File:** `internal/adapters/tui/model.go`
+
+**Change:** Added waiting count recalculation in tickMsg handler:
+```go
+case tickMsg:
+    // Epic 4 Hotfix H5: Recalculate waiting counts on each tick.
+    if len(m.projects) > 0 {
+        active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
+        m.statusBar.SetCounts(active, hibernated, waiting)
+    }
+    return m, tickCmd()
+```
+
+**Acceptance Criteria:**
+- [x] Status bar waiting count updates periodically without file activity
+- [x] WAITING indicator appears after threshold exceeded
+- [x] All tests pass
+
+**Status:** [x] Complete
+
+---
+
+## User Feedback (New Items)
+
+| # | Item | Type |
+|---|------|------|
+| F1 | Show agent working/waiting state clearly on each project | Enhancement |
+| F2 | Show current configuration in TUI | New Feature |
+
+---
+
 *Generated from Epic 4 Retrospective action items*
+*Post-verification findings added: 2025-12-20*

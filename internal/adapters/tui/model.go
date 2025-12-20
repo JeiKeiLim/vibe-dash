@@ -669,7 +669,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		// Periodic tick to trigger timestamp recalculation (Story 4.2, AC4).
 		// The View() method calls FormatRelativeTime which recalculates on each render.
-		// We just need to schedule the next tick.
+
+		// Epic 4 Hotfix H5: Recalculate waiting counts on each tick.
+		// Without this, status bar would show stale count even as projects transition to WAITING.
+		if len(m.projects) > 0 {
+			active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
+			m.statusBar.SetCounts(active, hibernated, waiting)
+		}
+
 		return m, tickCmd()
 
 	case fileEventMsg:
