@@ -103,15 +103,15 @@ func TestBMADDetector_Detect(t *testing.T) {
 		wantReasoning  string
 	}{
 		{
-			name: "full v6 structure with version",
+			name: "full v6 structure with version - no artifacts",
 			setup: func(t *testing.T, dir string) {
 				createBMADStructure(t, dir, true)
 			},
 			wantNil:        false,
 			wantMethod:     "bmad",
 			wantStage:      domain.StageUnknown,
-			wantConfidence: domain.ConfidenceCertain,
-			wantReasoning:  "BMAD v6.0.0-alpha.13 detected (.bmad/bmm/config.yaml found)",
+			wantConfidence: domain.ConfidenceLikely, // Uncertain stage → Likely
+			wantReasoning:  "BMAD v6.0.0-alpha.13, No BMAD artifacts detected",
 		},
 		{
 			name: "config.yaml without version in header",
@@ -121,8 +121,8 @@ func TestBMADDetector_Detect(t *testing.T) {
 			wantNil:        false,
 			wantMethod:     "bmad",
 			wantStage:      domain.StageUnknown,
-			wantConfidence: domain.ConfidenceCertain,
-			wantReasoning:  "BMAD detected (.bmad/bmm/config.yaml found, version not in header)",
+			wantConfidence: domain.ConfidenceLikely, // Uncertain stage → Likely
+			wantReasoning:  "BMAD detected, No BMAD artifacts detected",
 		},
 		{
 			name: ".bmad folder exists but config.yaml missing",

@@ -60,10 +60,10 @@ func (d *BMADDetector) CanDetect(ctx context.Context, path string) bool {
 }
 
 // Detect performs full BMAD v6 methodology detection on the given path.
-// It checks for .bmad/bmm/config.yaml and extracts version from the header.
-// Returns ConfidenceCertain if config.yaml exists with version.
-// Returns ConfidenceLikely if .bmad/ exists but config.yaml is missing.
-// Always returns StageUnknown (stage detection is Story 4.5-2).
+// It checks for .bmad/bmm/config.yaml, extracts version from the header,
+// and detects the current workflow stage from sprint-status.yaml or artifacts.
+// Returns ConfidenceCertain if config.yaml exists with version and stage detected.
+// Returns ConfidenceLikely if .bmad/ exists but config.yaml is missing or stage uncertain.
 func (d *BMADDetector) Detect(ctx context.Context, path string) (*domain.DetectionResult, error) {
 	// Check context first
 	select {
@@ -101,7 +101,7 @@ func (d *BMADDetector) Detect(ctx context.Context, path string) (*domain.Detecti
 		// config.yaml doesn't exist or can't be read - lower confidence
 		result := domain.NewDetectionResult(
 			d.Name(),
-			domain.StageUnknown, // Always Unknown in this story
+			domain.StageUnknown,
 			domain.ConfidenceLikely,
 			".bmad folder exists but config.yaml not found",
 		)
@@ -115,19 +115,29 @@ func (d *BMADDetector) Detect(ctx context.Context, path string) (*domain.Detecti
 	default:
 	}
 
-	// Build reasoning with version if available
-	var reasoning string
+	// Detect stage from sprint-status.yaml or artifacts
+	stage, stageConfidence, stageReasoning := d.detectStage(ctx, path)
+
+	// Build combined reasoning
+	var fullReasoning string
 	if version != "" {
-		reasoning = "BMAD v" + version + " detected (.bmad/bmm/config.yaml found)"
+		fullReasoning = "BMAD v" + version + ", " + stageReasoning
 	} else {
-		reasoning = "BMAD detected (.bmad/bmm/config.yaml found, version not in header)"
+		fullReasoning = "BMAD detected, " + stageReasoning
+	}
+
+	// Use the more confident confidence level
+	// If stage detection is uncertain, downgrade to Likely
+	finalConfidence := domain.ConfidenceCertain
+	if stageConfidence == domain.ConfidenceUncertain {
+		finalConfidence = domain.ConfidenceLikely
 	}
 
 	result := domain.NewDetectionResult(
 		d.Name(),
-		domain.StageUnknown, // Always Unknown in this story
-		domain.ConfidenceCertain,
-		reasoning,
+		stage,
+		finalConfidence,
+		fullReasoning,
 	)
 	return &result, nil
 }
