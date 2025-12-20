@@ -1,0 +1,10 @@
+# generated: 2025-12-20
+project: fixture-test
+development_status:
+  epic-1: done
+  1-1-scaffolding: done
+  1-2-entities: done
+
+  epic-2: in-progress
+  2-1-feature-x: in-progress
+  2-2-feature-y: backlog

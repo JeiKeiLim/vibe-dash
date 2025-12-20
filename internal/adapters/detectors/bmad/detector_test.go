@@ -344,3 +344,330 @@ func createBMADWithConfig(t *testing.T, dir string, configContent string) {
 		t.Fatalf("failed to write config.yaml: %v", err)
 	}
 }
+
+// fixturesDir returns the path to the test fixtures directory
+func fixturesDir() string {
+	return filepath.Join("..", "..", "..", "..", "test", "fixtures")
+}
+
+// TestBMADDetector_FixtureBased tests the BMAD detector against all fixtures (AC: #3)
+// This uses table-driven tests to verify CanDetect, Detect, stage, confidence, and reasoning
+func TestBMADDetector_FixtureBased(t *testing.T) {
+	testCases := []struct {
+		fixture        string
+		shouldDetect   bool
+		expectedStage  domain.Stage
+		expectedConf   domain.Confidence
+		expectedMethod string
+	}{
+		// bmad-v6-complete: Full .bmad structure with sprint-status.yaml showing epic in-progress
+		{
+			fixture:        "bmad-v6-complete",
+			shouldDetect:   true,
+			expectedStage:  domain.StageImplement, // Has epic-1: in-progress
+			expectedConf:   domain.ConfidenceCertain,
+			expectedMethod: "bmad",
+		},
+		// bmad-v6-minimal: Just .bmad/bmm/config.yaml - no sprint-status or artifacts
+		{
+			fixture:        "bmad-v6-minimal",
+			shouldDetect:   true,
+			expectedStage:  domain.StageUnknown,
+			expectedConf:   domain.ConfidenceLikely, // No stage info available
+			expectedMethod: "bmad",
+		},
+		// bmad-v6-no-config: .bmad folder exists but no config.yaml
+		{
+			fixture:        "bmad-v6-no-config",
+			shouldDetect:   true, // CanDetect only checks for .bmad/ folder
+			expectedStage:  domain.StageUnknown,
+			expectedConf:   domain.ConfidenceLikely,
+			expectedMethod: "bmad",
+		},
+		// bmad-v6-mid-sprint: sprint-status.yaml with one epic done, one in-progress
+		{
+			fixture:        "bmad-v6-mid-sprint",
+			shouldDetect:   true,
+			expectedStage:  domain.StageImplement, // Has epic-2: in-progress
+			expectedConf:   domain.ConfidenceCertain,
+			expectedMethod: "bmad",
+		},
+		// bmad-v6-all-done: All epics marked done
+		{
+			fixture:        "bmad-v6-all-done",
+			shouldDetect:   true,
+			expectedStage:  domain.StageImplement, // All done = still Implement stage
+			expectedConf:   domain.ConfidenceCertain,
+			expectedMethod: "bmad",
+		},
+		// bmad-v6-artifacts-only: has epics.md but no sprint-status - falls back to artifact detection
+		// Returns Certain confidence because artifact detection returns Likely (not Uncertain)
+		// and the detector only downgrades to Likely when stageConfidence == Uncertain
+		{
+			fixture:        "bmad-v6-artifacts-only",
+			shouldDetect:   true,
+			expectedStage:  domain.StageImplement, // Epic artifacts detected
+			expectedConf:   domain.ConfidenceCertain,
+			expectedMethod: "bmad",
+		},
+		// bmad-v4-not-supported: .bmad-core folder (v4 structure)
+		{
+			fixture:      "bmad-v4-not-supported",
+			shouldDetect: false, // v4 not supported
+		},
+	}
+
+	d := NewBMADDetector()
+	ctx := context.Background()
+
+	for _, tc := range testCases {
+		t.Run(tc.fixture, func(t *testing.T) {
+			fixturePath := filepath.Join(fixturesDir(), tc.fixture)
+
+			// Verify fixture exists
+			if _, err := os.Stat(fixturePath); os.IsNotExist(err) {
+				t.Fatalf("Fixture does not exist: %s", fixturePath)
+			}
+
+			canDetect := d.CanDetect(ctx, fixturePath)
+
+			if tc.shouldDetect {
+				if !canDetect {
+					t.Errorf("CanDetect() = false, want true for fixture %s", tc.fixture)
+					return
+				}
+
+				result, err := d.Detect(ctx, fixturePath)
+				if err != nil {
+					t.Fatalf("Detect() error: %v", err)
+				}
+
+				if result == nil {
+					t.Fatal("Detect() returned nil result")
+				}
+
+				if result.Method != tc.expectedMethod {
+					t.Errorf("Method = %q, want %q", result.Method, tc.expectedMethod)
+				}
+				if result.Stage != tc.expectedStage {
+					t.Errorf("Stage = %v, want %v", result.Stage, tc.expectedStage)
+				}
+				if result.Confidence != tc.expectedConf {
+					t.Errorf("Confidence = %v, want %v", result.Confidence, tc.expectedConf)
+				}
+				if result.Reasoning == "" {
+					t.Error("Reasoning should not be empty")
+				}
+			} else {
+				if canDetect {
+					t.Errorf("CanDetect() = true, want false for fixture %s", tc.fixture)
+				}
+			}
+		})
+	}
+}
+
+// TestBMADDetector_EdgeCases tests edge cases (malformed YAML, missing files)
+func TestBMADDetector_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name           string
+		setup          func(t *testing.T, dir string)
+		wantCanDetect  bool
+		wantStage      domain.Stage
+		wantConfidence domain.Confidence
+	}{
+		{
+			name: "malformed sprint-status.yaml",
+			setup: func(t *testing.T, dir string) {
+				createBMADStructure(t, dir, true)
+				// Create malformed sprint-status.yaml
+				sprintDir := filepath.Join(dir, "docs", "sprint-artifacts")
+				if err := os.MkdirAll(sprintDir, 0755); err != nil {
+					t.Fatalf("failed to create sprint-artifacts: %v", err)
+				}
+				malformedYAML := `{this is not valid yaml`
+				if err := os.WriteFile(filepath.Join(sprintDir, "sprint-status.yaml"), []byte(malformedYAML), 0644); err != nil {
+					t.Fatalf("failed to write malformed yaml: %v", err)
+				}
+			},
+			wantCanDetect:  true,
+			wantStage:      domain.StageUnknown, // Falls back to Unknown on parse error
+			wantConfidence: domain.ConfidenceLikely,
+		},
+		{
+			name: "empty sprint-status.yaml",
+			setup: func(t *testing.T, dir string) {
+				createBMADStructure(t, dir, true)
+				sprintDir := filepath.Join(dir, "docs", "sprint-artifacts")
+				if err := os.MkdirAll(sprintDir, 0755); err != nil {
+					t.Fatalf("failed to create sprint-artifacts: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(sprintDir, "sprint-status.yaml"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to write empty yaml: %v", err)
+				}
+			},
+			wantCanDetect:  true,
+			wantStage:      domain.StageUnknown,
+			wantConfidence: domain.ConfidenceLikely,
+		},
+		{
+			name: "sprint-status.yaml without development_status",
+			setup: func(t *testing.T, dir string) {
+				createBMADStructure(t, dir, true)
+				sprintDir := filepath.Join(dir, "docs", "sprint-artifacts")
+				if err := os.MkdirAll(sprintDir, 0755); err != nil {
+					t.Fatalf("failed to create sprint-artifacts: %v", err)
+				}
+				yaml := `project: test
+generated: 2025-12-20
+`
+				if err := os.WriteFile(filepath.Join(sprintDir, "sprint-status.yaml"), []byte(yaml), 0644); err != nil {
+					t.Fatalf("failed to write yaml: %v", err)
+				}
+			},
+			wantCanDetect:  true,
+			wantStage:      domain.StageUnknown,
+			wantConfidence: domain.ConfidenceLikely,
+		},
+	}
+
+	d := NewBMADDetector()
+	ctx := context.Background()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tt.setup(t, dir)
+
+			got := d.CanDetect(ctx, dir)
+			if got != tt.wantCanDetect {
+				t.Errorf("CanDetect() = %v, want %v", got, tt.wantCanDetect)
+			}
+
+			if tt.wantCanDetect {
+				result, err := d.Detect(ctx, dir)
+				if err != nil {
+					t.Fatalf("Detect() error: %v", err)
+				}
+				if result.Stage != tt.wantStage {
+					t.Errorf("Stage = %v, want %v", result.Stage, tt.wantStage)
+				}
+				if result.Confidence != tt.wantConfidence {
+					t.Errorf("Confidence = %v, want %v", result.Confidence, tt.wantConfidence)
+				}
+			}
+		})
+	}
+}
+
+// TestBMADDetectionAccuracy runs against all BMAD fixtures and calculates accuracy.
+// This is the launch blocker test - must be >= 95%
+// Run with: make test-accuracy or go test -v -run TestBMADDetectionAccuracy ./internal/adapters/detectors/bmad/...
+func TestBMADDetectionAccuracy(t *testing.T) {
+	testCases := []struct {
+		fixture       string
+		expectedStage domain.Stage
+		shouldDetect  bool // false for non-BMAD fixtures
+	}{
+		// === BMAD v6 Fixtures (7 total) ===
+		{"bmad-v6-complete", domain.StageImplement, true},
+		{"bmad-v6-minimal", domain.StageUnknown, true},
+		{"bmad-v6-no-config", domain.StageUnknown, true},
+		{"bmad-v6-mid-sprint", domain.StageImplement, true},
+		{"bmad-v6-all-done", domain.StageImplement, true},
+		{"bmad-v6-artifacts-only", domain.StageImplement, true},
+		{"bmad-v4-not-supported", domain.StageUnknown, false},
+	}
+
+	d := NewBMADDetector()
+	ctx := context.Background()
+
+	correct := 0
+	total := len(testCases)
+
+	for _, tc := range testCases {
+		fixturePath := filepath.Join(fixturesDir(), tc.fixture)
+
+		canDetect := d.CanDetect(ctx, fixturePath)
+
+		if tc.shouldDetect {
+			if !canDetect {
+				t.Logf("FAIL: %s - CanDetect returned false, expected true", tc.fixture)
+				continue
+			}
+
+			result, err := d.Detect(ctx, fixturePath)
+			if err != nil {
+				t.Logf("FAIL: %s - Detect error: %v", tc.fixture, err)
+				continue
+			}
+
+			if result.Stage == tc.expectedStage {
+				correct++
+				t.Logf("PASS: %s - Stage: %v", tc.fixture, result.Stage)
+			} else {
+				t.Logf("FAIL: %s - Got %v, expected %v", tc.fixture, result.Stage, tc.expectedStage)
+			}
+		} else {
+			// Should NOT detect as BMAD
+			if !canDetect {
+				correct++
+				t.Logf("PASS: %s - Correctly not detected as BMAD", tc.fixture)
+			} else {
+				t.Logf("FAIL: %s - Should not be detected as BMAD", tc.fixture)
+			}
+		}
+	}
+
+	accuracy := float64(correct) / float64(total) * 100
+	t.Logf("\n=== BMAD DETECTION ACCURACY: %.1f%% (%d/%d) ===", accuracy, correct, total)
+
+	if accuracy < 95.0 {
+		t.Errorf("BMAD detection accuracy %.1f%% is below 95%% launch blocker threshold", accuracy)
+	}
+}
+
+// TestCrossDetectorExclusion ensures BMAD and Speckit detectors don't conflict
+// BMAD should not detect Speckit fixtures and vice versa
+func TestCrossDetectorExclusion(t *testing.T) {
+	bmadDetector := NewBMADDetector()
+	ctx := context.Background()
+
+	// BMAD fixtures should NOT be detected by Speckit (tested in Speckit tests)
+	// Here we test that BMAD does NOT detect Speckit fixtures
+
+	speckitFixtures := []string{
+		"speckit-stage-specify",
+		"speckit-stage-plan",
+		"speckit-stage-tasks",
+		"speckit-stage-implement",
+	}
+
+	for _, fixture := range speckitFixtures {
+		fixturePath := filepath.Join(fixturesDir(), fixture)
+		// Verify fixture exists before testing
+		if _, err := os.Stat(fixturePath); os.IsNotExist(err) {
+			t.Fatalf("Speckit fixture does not exist: %s", fixture)
+		}
+		if bmadDetector.CanDetect(ctx, fixturePath) {
+			t.Errorf("BMAD detector should not detect Speckit fixture: %s", fixture)
+		}
+	}
+
+	// Non-method fixtures should not be detected by BMAD
+	nonMethodFixtures := []string{
+		"no-method-detected",
+		"empty-project",
+	}
+
+	for _, fixture := range nonMethodFixtures {
+		fixturePath := filepath.Join(fixturesDir(), fixture)
+		// Verify fixture exists before testing
+		if _, err := os.Stat(fixturePath); os.IsNotExist(err) {
+			t.Fatalf("Non-method fixture does not exist: %s", fixture)
+		}
+		if bmadDetector.CanDetect(ctx, fixturePath) {
+			t.Errorf("BMAD detector should not detect non-method fixture: %s", fixture)
+		}
+	}
+}

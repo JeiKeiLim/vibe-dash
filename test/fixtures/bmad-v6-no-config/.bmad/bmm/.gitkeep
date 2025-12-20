@@ -1,0 +1,2 @@
+# Empty directory marker for git
+# This fixture tests .bmad folder detection when config.yaml is missing

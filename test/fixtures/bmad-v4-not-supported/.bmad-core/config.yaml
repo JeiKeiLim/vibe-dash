@@ -1,0 +1,3 @@
+# BMAD v4 configuration file
+# This should NOT be detected by the v6 detector
+project_name: v4-test

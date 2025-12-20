@@ -1,6 +1,6 @@
-# Speckit Detection Test Fixtures
+# Detection Test Fixtures
 
-This directory contains golden path test fixtures for validating Speckit detection accuracy.
+This directory contains golden path test fixtures for validating detection accuracy across all methodology detectors (Speckit, BMAD, etc.).
 
 ## 95% Accuracy Requirement
 
@@ -38,6 +38,18 @@ Run `make test-accuracy` to verify.
 | speckit-empty-spec-dir | Unknown | true | Empty subdirectory |
 | speckit-non-standard-names | Specify | true | Non-numbered dir name |
 | speckit-readme-only | Unknown | true | README but no spec.md |
+
+### BMAD Fixtures
+
+| Fixture | Expected Stage | shouldDetect | Purpose |
+|---------|----------------|--------------|---------|
+| bmad-v6-complete | Implement | true | Full .bmad structure with sprint-status.yaml (epic in-progress) |
+| bmad-v6-minimal | Unknown | true | Just .bmad/bmm/config.yaml - no sprint-status or artifacts |
+| bmad-v6-no-config | Unknown | true | .bmad folder but no config.yaml |
+| bmad-v6-mid-sprint | Implement | true | sprint-status.yaml with one epic done, one in-progress |
+| bmad-v6-all-done | Implement | true | All epics marked done |
+| bmad-v6-artifacts-only | Implement | true | Has epics.md but no sprint-status - falls back to artifact detection |
+| bmad-v4-not-supported | - | false | .bmad-core folder (v4 structure) - should not detect |
 
 ## Naming Convention
 
