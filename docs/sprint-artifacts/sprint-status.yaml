@@ -34,8 +34,8 @@
 # - Dev moves story to 'review', dev reviews, then Dev moves to 'done'
 
 generated: 2025-12-12
-updated: 2025-12-19
-updated_by: Dev Agent - Story 4.6 completed, Epic 4 done
+updated: 2025-12-20
+updated_by: SM (Bob) - Added Epic 4.5 (BMAD Method v6 Detection) from Sprint Change Proposal
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -108,7 +108,16 @@ development_status:
   4-4-waiting-threshold-configuration: done
   4-5-waiting-indicator-display: done
   4-6-real-time-dashboard-updates: done
-  epic-4-retrospective: optional
+  epic-4-retrospective: completed
+
+  # Epic 4.5: BMAD Method v6 State Detection
+  # Added via Sprint Change Proposal 2025-12-20
+  # Scope: v6 only (.bmad/ folder). v4 support deferred.
+  epic-4-5: backlog
+  4-5-1-bmad-v6-detector-implementation: backlog
+  4-5-2-bmad-v6-stage-detection-logic: backlog
+  4-5-3-bmad-test-fixtures: backlog
+  epic-4-5-retrospective: optional
 
   # Epic 5: Project State & Hibernation
   epic-5: backlog

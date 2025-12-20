@@ -1819,6 +1819,166 @@ And visible immediately when focused
 
 ---
 
+## Epic 4.5: BMAD Method v6 State Detection
+
+**Goal:** Implement BMAD Method v6 detection as a second MethodDetector plugin, enabling vibe-dash to detect and display workflow state for projects using the BMAD Method.
+
+**User Value:** "I can track my BMAD Method projects alongside Speckit projects - the dashboard shows me where I am in the BMAD workflow (Analysis, Planning, Solutioning, Implementation)."
+
+**Scope:** BMAD v6 only (`.bmad/` folder structure). v4 support (`.bmad-core/`) deferred for future if demand emerges.
+
+**Technical Context:**
+- Implements existing `MethodDetector` interface (proven by Speckit detector)
+- Detects `.bmad/` folder with `bmm/config.yaml`
+- Parses `sprint-status.yaml` for epic/story status
+- Maps BMAD phases to standardized stages
+
+**Reference Implementation:** `github.com/ibadmore/bmad-progress-dashboard` (analyzed for detection patterns)
+
+**FRs Covered:** FR13 (Pluggable methodology detectors), FR14 (Multiple methodologies)
+
+---
+
+### Story 4.5-1: BMAD v6 Detector Implementation
+
+**As a** developer using BMAD Method,
+**I want** vibe-dash to detect my BMAD v6 project structure,
+**So that** my project appears with the correct methodology identified.
+
+**Acceptance Criteria:**
+
+```gherkin
+Given a project directory with `.bmad/` folder
+And `.bmad/bmm/config.yaml` exists
+When MethodDetector.Detect() is called
+Then returns MethodInfo with:
+  - Name: "bmad"
+  - Version: extracted from config.yaml (e.g., "6.0.0-alpha.13")
+  - Confidence: High (folder structure matches)
+
+Given a project directory without `.bmad/` folder
+When MethodDetector.Detect() is called
+Then returns nil (not a BMAD project)
+
+Given a project with `.bmad-core/` (v4 structure)
+When MethodDetector.Detect() is called
+Then returns nil (v4 not supported in this story)
+```
+
+**Technical Notes:**
+- Create `internal/adapters/detectors/bmad/detector.go`
+- Implement `MethodDetector` interface from `internal/core/ports/detector.go`
+- Register with detector registry (same pattern as Speckit)
+- Config path: `.bmad/bmm/config.yaml`
+
+**Prerequisites:** Epic 2 (MethodDetector interface exists)
+
+---
+
+### Story 4.5-2: BMAD v6 Stage Detection Logic
+
+**As a** developer using BMAD Method,
+**I want** vibe-dash to show my current workflow stage,
+**So that** I know where I am in the BMAD process.
+
+**Acceptance Criteria:**
+
+```gherkin
+Given a BMAD v6 project with `sprint-status.yaml`
+When stage detection runs
+Then parses development_status section
+And determines current phase from epic statuses:
+  - All epics backlog → "Planning"
+  - Epic in-progress with stories → "Implementing"
+  - All epics done → "Complete"
+
+Given stage detection with epic/story analysis
+Then maps to standardized stages:
+  | BMAD State | Displayed Stage |
+  |------------|-----------------|
+  | No epics | Plan |
+  | Epics backlog | Specify |
+  | Epic in-progress | Implement |
+  | Stories in review | Review |
+  | All epics done | Validate |
+
+Given detection with reasoning
+Then provides explanation like:
+  "Epic 4 in-progress, Story 4.3 being implemented"
+
+Given no sprint-status.yaml found
+Then falls back to artifact detection:
+  - Has PRD → "Plan"
+  - Has Architecture → "Specify"
+  - Has Epics → "Implement"
+```
+
+**Technical Notes:**
+- Sprint status location: `docs/sprint-artifacts/sprint-status.yaml` or per config
+- Parse YAML for `development_status` section
+- Epic status values: `backlog`, `in-progress`, `done`
+- Story status values: `backlog`, `drafted`, `ready-for-dev`, `in-progress`, `review`, `done`
+
+**Prerequisites:** Story 4.5-1
+
+---
+
+### Story 4.5-3: BMAD Test Fixtures
+
+**As a** developer,
+**I want** comprehensive test coverage for BMAD detection,
+**So that** the detector is reliable and maintainable.
+
+**Acceptance Criteria:**
+
+```gherkin
+Given test fixtures in `internal/adapters/detectors/bmad/testdata/`
+Then includes:
+  - valid-v6-project/ (complete .bmad structure)
+  - minimal-v6-project/ (just .bmad/bmm/config.yaml)
+  - mid-sprint-project/ (with sprint-status.yaml)
+  - completed-project/ (all epics done)
+  - no-bmad-project/ (control case)
+
+Given vibe-dash's own `.bmad/` folder
+Then use as real-world dogfooding test:
+  - Copy relevant structure to testdata
+  - Verify detection matches expected state
+
+Given unit tests
+Then covers:
+  - Detector registration
+  - Folder detection
+  - Config parsing
+  - Stage detection from sprint-status
+  - Fallback to artifact detection
+  - Edge cases (missing files, malformed YAML)
+
+Given integration test
+Then verifies end-to-end:
+  - Add project with BMAD structure
+  - Confirm methodology detected as "bmad"
+  - Confirm stage displayed correctly
+```
+
+**Technical Notes:**
+- Follow existing test patterns from Speckit detector
+- Use table-driven tests for stage mapping
+- Mock file system for unit tests where appropriate
+
+**Prerequisites:** Story 4.5-1, Story 4.5-2
+
+---
+
+**Epic 4.5 Complete**
+
+**Stories Created:** 3
+**FR Coverage:** FR13 (pluggable detectors), FR14 (multiple methodologies)
+**Technical Context Used:** MethodDetector interface, sprint-status.yaml parsing
+**Dogfooding:** vibe-dash's own .bmad folder serves as test fixture
+
+---
+
 ## Epic 5: Project State & Hibernation
 
 **Goal:** Implement automatic state management with active/hibernated/favorite states.
