@@ -1159,12 +1159,12 @@ func TestModel_WaitingCallbacksWiring_NilDetector(t *testing.T) {
 
 // mockFileWatcher implements ports.FileWatcher for testing.
 type mockFileWatcher struct {
-	watchCalled  bool
-	closeCalled  bool
-	watchPaths   []string
-	returnErr    error
-	returnCh     chan ports.FileEvent
-	closeErr     error
+	watchCalled bool
+	closeCalled bool
+	watchPaths  []string
+	returnErr   error
+	returnCh    chan ports.FileEvent
+	closeErr    error
 }
 
 func newMockFileWatcher() *mockFileWatcher {

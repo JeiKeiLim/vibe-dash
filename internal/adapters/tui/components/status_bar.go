@@ -15,12 +15,12 @@ import (
 var (
 	// statusBarWaitingStyle matches tui.WaitingStyle (bold red for WAITING)
 	statusBarWaitingStyle = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("1")) // Red
+				Bold(true).
+				Foreground(lipgloss.Color("1")) // Red
 
 	// statusBarWaitingZeroStyle is dim style for "0 waiting" (Epic 4 Hotfix H1)
 	statusBarWaitingZeroStyle = lipgloss.NewStyle().
-		Faint(true)
+					Faint(true)
 )
 
 // Shortcut string constants (AC7: responsive width)

@@ -8,14 +8,16 @@ import (
 	"os/signal"
 	"syscall"
 
+	"time"
+
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/cli"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/detectors"
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/detectors/bmad"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/detectors/speckit"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/filesystem"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence"
 	"github.com/JeiKeiLim/vibe-dash/internal/config"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/services"
-	"time"
 )
 
 // configPathAdapter implements ports.ProjectPathLookup for DirectoryManager.
@@ -94,6 +96,7 @@ func run(ctx context.Context) error {
 	// Initialize detection service with registry (Story 2.5)
 	registry := detectors.NewRegistry()
 	registry.Register(speckit.NewSpeckitDetector())
+	registry.Register(bmad.NewBMADDetector())
 	detectionSvc := services.NewDetectionService(registry)
 	cli.SetDetectionService(detectionSvc)
 
@@ -102,7 +105,7 @@ func run(ctx context.Context) error {
 	// Note: Pass function (not value) for lazy evaluation after Cobra parses flags
 	thresholdResolver := config.NewWaitingThresholdResolver(
 		cfg,
-		basePath, // ~/.vibe-dash
+		basePath,                // ~/.vibe-dash
 		cli.GetWaitingThreshold, // Function reference - called lazily at Resolve time
 	)
 

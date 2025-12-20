@@ -14,9 +14,9 @@ var _ ports.ThresholdResolver = (*WaitingThresholdResolver)(nil)
 
 // WaitingThresholdResolver implements ports.ThresholdResolver with cascade logic.
 type WaitingThresholdResolver struct {
-	globalConfig   *ports.Config
-	vibeHome       string       // ~/.vibe-dash path for project config resolution
-	cliOverrideFunc func() int  // Lazy evaluation - called at Resolve time after flags are parsed
+	globalConfig    *ports.Config
+	vibeHome        string     // ~/.vibe-dash path for project config resolution
+	cliOverrideFunc func() int // Lazy evaluation - called at Resolve time after flags are parsed
 }
 
 // NewWaitingThresholdResolver creates a resolver with cascade support.
