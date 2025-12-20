@@ -99,10 +99,11 @@ func run(ctx context.Context) error {
 
 	// Initialize WaitingThresholdResolver with cascade support (Story 4.4)
 	// Priority: CLI flag > per-project config file > global config > default (10)
+	// Note: Pass function (not value) for lazy evaluation after Cobra parses flags
 	thresholdResolver := config.NewWaitingThresholdResolver(
 		cfg,
 		basePath, // ~/.vibe-dash
-		cli.GetWaitingThreshold(),
+		cli.GetWaitingThreshold, // Function reference - called lazily at Resolve time
 	)
 
 	// Create WaitingDetector with resolver (Story 4.3/4.4)

@@ -11,6 +11,9 @@ import (
 
 func intPtr(v int) *int { return &v }
 
+// cliFunc is a test helper that creates a function returning the given int value
+func cliFunc(v int) func() int { return func() int { return v } }
+
 func TestWaitingThresholdResolver_CLIWinsOverAll(t *testing.T) {
 	// CLI flag = 5, project config = 10, global config = 20
 	// Expected: 5 (CLI wins)
@@ -33,7 +36,7 @@ func TestWaitingThresholdResolver_CLIWinsOverAll(t *testing.T) {
 		AgentWaitingThresholdMinutes: 20,
 	}
 
-	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, 5)
+	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, cliFunc(5))
 	result := resolver.Resolve("test-project")
 
 	if result != 5 {
@@ -61,7 +64,7 @@ func TestWaitingThresholdResolver_CLIDisabled(t *testing.T) {
 		AgentWaitingThresholdMinutes: 20,
 	}
 
-	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, 0)
+	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, cliFunc(0))
 	result := resolver.Resolve("test-project")
 
 	if result != 0 {
@@ -89,7 +92,7 @@ func TestWaitingThresholdResolver_ProjectWins(t *testing.T) {
 		AgentWaitingThresholdMinutes: 20,
 	}
 
-	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, -1)
+	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, cliFunc(-1))
 	result := resolver.Resolve("test-project")
 
 	if result != 15 {
@@ -118,7 +121,7 @@ func TestWaitingThresholdResolver_GlobalWins(t *testing.T) {
 		AgentWaitingThresholdMinutes: 20,
 	}
 
-	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, -1)
+	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, cliFunc(-1))
 	result := resolver.Resolve("test-project")
 
 	if result != 20 {
@@ -140,7 +143,7 @@ func TestWaitingThresholdResolver_DefaultFallback(t *testing.T) {
 		AgentWaitingThresholdMinutes: 0, // No global setting
 	}
 
-	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, -1)
+	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, cliFunc(-1))
 	result := resolver.Resolve("test-project")
 
 	if result != 10 {
@@ -153,7 +156,7 @@ func TestWaitingThresholdResolver_NilGlobalConfig(t *testing.T) {
 	// Expected: 10 (default)
 	tmpDir := t.TempDir()
 
-	resolver := NewWaitingThresholdResolver(nil, tmpDir, -1)
+	resolver := NewWaitingThresholdResolver(nil, tmpDir, cliFunc(-1))
 	result := resolver.Resolve("nonexistent-project")
 
 	if result != 10 {
@@ -181,7 +184,7 @@ func TestWaitingThresholdResolver_ProjectConfigDisabled(t *testing.T) {
 		AgentWaitingThresholdMinutes: 20,
 	}
 
-	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, -1)
+	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, cliFunc(-1))
 	result := resolver.Resolve("test-project")
 
 	if result != 0 {
@@ -198,7 +201,7 @@ func TestWaitingThresholdResolver_NonexistentProjectDir(t *testing.T) {
 		AgentWaitingThresholdMinutes: 20,
 	}
 
-	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, -1)
+	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, cliFunc(-1))
 	result := resolver.Resolve("nonexistent-project")
 
 	if result != 20 {
@@ -243,7 +246,7 @@ func TestWaitingThresholdResolver_TableDriven(t *testing.T) {
 				AgentWaitingThresholdMinutes: tt.globalConfig,
 			}
 
-			resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, tt.cliOverride)
+			resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, cliFunc(tt.cliOverride))
 			result := resolver.Resolve("test-project")
 
 			if result != tt.expected {
@@ -276,7 +279,7 @@ active: true
 		AgentWaitingThresholdMinutes: 25,
 	}
 
-	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, -1)
+	resolver := NewWaitingThresholdResolver(globalConfig, tmpDir, cliFunc(-1))
 	result := resolver.Resolve("test-project")
 
 	if result != 25 {

@@ -14,22 +14,24 @@ var _ ports.ThresholdResolver = (*WaitingThresholdResolver)(nil)
 
 // WaitingThresholdResolver implements ports.ThresholdResolver with cascade logic.
 type WaitingThresholdResolver struct {
-	globalConfig *ports.Config
-	vibeHome     string // ~/.vibe-dash path for project config resolution
-	cliOverride  int    // -1 means not set (use config)
+	globalConfig   *ports.Config
+	vibeHome       string       // ~/.vibe-dash path for project config resolution
+	cliOverrideFunc func() int  // Lazy evaluation - called at Resolve time after flags are parsed
 }
 
 // NewWaitingThresholdResolver creates a resolver with cascade support.
-// cliOverride: -1 means "use config", 0 means "disabled", >0 means threshold minutes.
+// cliOverrideFunc is called lazily at Resolve time to get the CLI override value.
+// This allows flags to be parsed by Cobra before the value is read.
+// Returns: -1 means "use config", 0 means "disabled", >0 means threshold minutes.
 func NewWaitingThresholdResolver(
 	globalConfig *ports.Config,
 	vibeHome string,
-	cliOverride int,
+	cliOverrideFunc func() int,
 ) *WaitingThresholdResolver {
 	return &WaitingThresholdResolver{
-		globalConfig: globalConfig,
-		vibeHome:     vibeHome,
-		cliOverride:  cliOverride,
+		globalConfig:    globalConfig,
+		vibeHome:        vibeHome,
+		cliOverrideFunc: cliOverrideFunc,
 	}
 }
 
@@ -37,8 +39,12 @@ func NewWaitingThresholdResolver(
 // Cascade: CLI flag > per-project config file > global config > default (10)
 func (r *WaitingThresholdResolver) Resolve(projectID string) int {
 	// 1. CLI flag takes highest priority (if set)
-	if r.cliOverride >= 0 {
-		return r.cliOverride
+	// Called lazily to ensure Cobra has parsed flags
+	if r.cliOverrideFunc != nil {
+		cliOverride := r.cliOverrideFunc()
+		if cliOverride >= 0 {
+			return cliOverride
+		}
 	}
 
 	// 2. Per-project config file (~/.vibe-dash/<project>/config.yaml)

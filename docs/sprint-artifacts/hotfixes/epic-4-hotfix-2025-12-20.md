@@ -2,7 +2,7 @@
 
 **Date:** 2025-12-20
 **Source:** [Epic 4 Retrospective](../retrospectives/epic-4-retro-2025-12-20.md)
-**Status:** Complete (H1-H5 all fixed)
+**Status:** Complete (H1-H6 all fixed)
 
 ---
 
@@ -151,6 +151,9 @@ After all fixes complete:
 | `internal/adapters/tui/model.go` | Modified | H3: Add debug logging for file watcher; H5: Recalculate waiting counts on tick |
 | `internal/adapters/detectors/speckit/detector.go` | Modified | H4: Add lexicographic tiebreaker |
 | `internal/adapters/detectors/speckit/detector_test.go` | Modified | H4: Add equal-mtime test |
+| `internal/config/waiting_threshold_resolver.go` | Modified | H6: Lazy CLI flag evaluation |
+| `internal/config/waiting_threshold_resolver_test.go` | Modified | H6: Update tests for function-based API |
+| `cmd/vibe/main.go` | Modified | H6: Pass function reference instead of value |
 | `docs/sprint-artifacts/epic-acceptance-checklist.md` | Created | H2: Epic acceptance process |
 | `docs/sprint-artifacts/retrospectives/epic-4-retro-2025-12-20.md` | Created | Retrospective document |
 | `docs/sprint-artifacts/hotfixes/epic-4-hotfix-2025-12-20.md` | Created | This document |
@@ -184,6 +187,34 @@ case tickMsg:
 - [x] Status bar waiting count updates periodically without file activity
 - [x] WAITING indicator appears after threshold exceeded
 - [x] All tests pass
+
+**Status:** [x] Complete
+
+---
+
+### H6: CLI Flag --waiting-threshold Not Applied
+
+**Symptom:** `--waiting-threshold=1` was ignored; WAITING appeared after 10 minutes (default) instead of 1 minute.
+
+**Root Cause:** `ThresholdResolver` was created in `main.go` **before** Cobra parsed the CLI flags. The resolver captured the uninitialized value (-1 default) instead of the user's flag value.
+
+**File:** `internal/config/waiting_threshold_resolver.go`, `cmd/vibe/main.go`
+
+**Change:** Changed from passing `int` value to passing `func() int` for lazy evaluation:
+```go
+// Before (broken): value captured before Cobra parses flags
+thresholdResolver := config.NewWaitingThresholdResolver(cfg, basePath, cli.GetWaitingThreshold())
+
+// After (fixed): function called lazily at Resolve time
+thresholdResolver := config.NewWaitingThresholdResolver(cfg, basePath, cli.GetWaitingThreshold)
+```
+
+The resolver now calls `cliOverrideFunc()` during `Resolve()` instead of using a captured value.
+
+**Acceptance Criteria:**
+- [x] `--waiting-threshold=1` actually uses 1-minute threshold
+- [x] All tests pass
+- [x] Build succeeds
 
 **Status:** [x] Complete
 
