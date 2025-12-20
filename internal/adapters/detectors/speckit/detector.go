@@ -121,6 +121,8 @@ func (d *SpeckitDetector) Detect(ctx context.Context, path string) (*domain.Dete
 
 // findMostRecentDir finds the most recently modified directory.
 // If modification times cannot be determined, falls back to first directory with explanation.
+// Epic 4 Hotfix H4: When mtimes are equal (e.g., after git clone), uses lexicographic
+// sort descending so higher-numbered directories (005-*) are preferred over lower (001-*).
 func (d *SpeckitDetector) findMostRecentDir(baseDir string, dirs []os.DirEntry) (string, string) {
 	if len(dirs) == 1 {
 		return dirs[0].Name(), ""
@@ -140,14 +142,24 @@ func (d *SpeckitDetector) findMostRecentDir(baseDir string, dirs []os.DirEntry) 
 		dirMods = append(dirMods, dirMod{name: dir.Name(), modTime: info.ModTime().Unix()})
 	}
 
-	// Sort by modification time descending
+	// Sort by modification time descending, then by name descending as tiebreaker
+	// Epic 4 Hotfix H4: Tiebreaker ensures consistent behavior when mtimes are equal
+	// (common after git clone). Higher-numbered specs (005-*) are preferred.
 	sort.Slice(dirMods, func(i, j int) bool {
-		return dirMods[i].modTime > dirMods[j].modTime
+		if dirMods[i].modTime != dirMods[j].modTime {
+			return dirMods[i].modTime > dirMods[j].modTime
+		}
+		// Tiebreaker: sort by name descending (005 > 001)
+		return dirMods[i].name > dirMods[j].name
 	})
 
 	if len(dirMods) == 0 {
-		// Could not determine modification times, fall back to first directory
-		reasoning := fmt.Sprintf("unable to determine modification times, using first directory: %s", dirs[0].Name())
+		// Could not determine modification times, fall back to last directory alphabetically
+		// (highest-numbered if using numeric prefixes)
+		sort.Slice(dirs, func(i, j int) bool {
+			return dirs[i].Name() > dirs[j].Name()
+		})
+		reasoning := fmt.Sprintf("unable to determine modification times, using highest-numbered: %s", dirs[0].Name())
 		return dirs[0].Name(), reasoning
 	}
 

@@ -17,6 +17,10 @@ var (
 	statusBarWaitingStyle = lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("1")) // Red
+
+	// statusBarWaitingZeroStyle is dim style for "0 waiting" (Epic 4 Hotfix H1)
+	statusBarWaitingZeroStyle = lipgloss.NewStyle().
+		Faint(true)
 )
 
 // Shortcut string constants (AC7: responsive width)
@@ -129,9 +133,11 @@ func (s StatusBarModel) renderCondensed() string {
 	// Abbreviated counts (Story 3.10)
 	counts := fmt.Sprintf("%dA %dH", s.activeCount, s.hibernatedCount)
 
-	// Waiting count with styling (Story 3.10)
+	// Epic 4 Hotfix H1: Always show waiting count in condensed mode too
 	if s.waitingCount > 0 {
 		counts += " " + statusBarWaitingStyle.Render(fmt.Sprintf("%dW", s.waitingCount))
+	} else {
+		counts += " " + statusBarWaitingZeroStyle.Render("0W")
 	}
 
 	// Include refresh message if present (Story 3.6)
@@ -160,10 +166,14 @@ func (s StatusBarModel) renderCounts() string {
 		fmt.Sprintf("%d hibernated", s.hibernatedCount),
 	}
 
+	// Epic 4 Hotfix H1: Always show waiting count so users know feature exists
 	// AC4: If waitingCount > 0, show with waitingStyle (bold red)
-	// AC5: If waitingCount == 0, hide WAITING section
+	// H1: If waitingCount == 0, show with dim style
 	if s.waitingCount > 0 {
 		waitingText := statusBarWaitingStyle.Render(fmt.Sprintf("⏸️ %d WAITING", s.waitingCount))
+		parts = append(parts, waitingText)
+	} else {
+		waitingText := statusBarWaitingZeroStyle.Render("0 waiting")
 		parts = append(parts, waitingText)
 	}
 

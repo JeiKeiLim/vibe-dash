@@ -49,15 +49,19 @@ func TestStatusBar_View_WaitingHighlighted(t *testing.T) {
 }
 
 func TestStatusBar_View_WaitingZero(t *testing.T) {
-	// AC5: verify WAITING hidden/dimmed when 0
+	// Epic 4 Hotfix H1: verify "0 waiting" shown (dim style) so users know feature exists
 	sb := NewStatusBarModel(100)
 	sb.SetCounts(3, 1, 0)
 
 	view := sb.View()
 
-	// WAITING section should be hidden when count is 0
+	// "0 waiting" should be shown (not hidden) so users know the feature exists
+	if !strings.Contains(view, "0 waiting") {
+		t.Errorf("expected '0 waiting' in view when count is 0 (Epic 4 Hotfix H1), got: %s", view)
+	}
+	// Should NOT show "WAITING" in caps (that's for count > 0)
 	if strings.Contains(view, "WAITING") {
-		t.Errorf("expected WAITING to be hidden when count is 0, got: %s", view)
+		t.Errorf("expected 'WAITING' to NOT appear when count is 0 (use '0 waiting' instead), got: %s", view)
 	}
 }
 
@@ -453,9 +457,9 @@ func TestStatusBarModel_CondensedMode_NoWaiting(t *testing.T) {
 
 	view := sb.View()
 
-	// Should not contain waiting indicator
-	if strings.Contains(view, "W") {
-		t.Error("condensed view should not show waiting when count is 0")
+	// Epic 4 Hotfix H1: Should show "0W" so users know feature exists
+	if !strings.Contains(view, "0W") {
+		t.Error("condensed view should show '0W' when count is 0 (Epic 4 Hotfix H1)")
 	}
 }
 

@@ -528,6 +528,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.statusBar.SetWatcherWarning("⚠️ File watching unavailable")
 				} else {
 					m.eventCh = eventCh
+					// Epic 4 Hotfix H3: Log when file watcher starts successfully
+					slog.Debug("file watcher started", "project_count", len(paths))
 					return m, m.waitForNextFileEventCmd()
 				}
 			}
@@ -1202,6 +1204,9 @@ func (m *Model) handleFileEvent(msg fileEventMsg) {
 		slog.Warn("failed to update activity", "project_id", project.ID, "error", err)
 		return
 	}
+
+	// Epic 4 Hotfix H3: Log successful activity update for debugging
+	slog.Debug("activity updated", "project", project.Name, "path", msg.Path)
 
 	// Update local state
 	project.LastActivityAt = msg.Timestamp

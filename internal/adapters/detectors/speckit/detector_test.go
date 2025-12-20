@@ -327,6 +327,61 @@ func TestSpeckitDetector_MultipleDirectories(t *testing.T) {
 	}
 }
 
+// Epic 4 Hotfix H4: Test that equal modification times use lexicographic tiebreaker
+func TestSpeckitDetector_EqualModTimes_HighestNumberedWins(t *testing.T) {
+	d := speckit.NewSpeckitDetector()
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	specsDir := filepath.Join(tmpDir, "specs")
+
+	// Create directories with different numbered prefixes (simulating git clone scenario)
+	dirs := []string{
+		"001-first-feature",
+		"002-second-feature",
+		"003-third-feature",
+		"005-latest-feature", // Note: skipping 004 to ensure lexicographic sort works
+	}
+
+	// All directories will have same mtime (simulating git clone)
+	sameTime := time.Now()
+
+	for _, dir := range dirs {
+		dirPath := filepath.Join(specsDir, dir)
+		if err := os.MkdirAll(dirPath, 0755); err != nil {
+			t.Fatal(err)
+		}
+		// Create spec.md in each - different stages to identify which was picked
+		if err := os.WriteFile(filepath.Join(dirPath, "spec.md"), []byte("# Spec"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		// Set all to same modification time
+		if err := os.Chtimes(dirPath, sameTime, sameTime); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Add plan.md only to the highest-numbered directory
+	if err := os.WriteFile(filepath.Join(specsDir, "005-latest-feature", "plan.md"), []byte("# Plan"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := d.Detect(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+
+	// Should use 005-latest-feature (highest numbered when mtimes are equal)
+	if result.Stage != domain.StagePlan {
+		t.Errorf("Detect().Stage = %v, want %v (should use highest-numbered dir when mtimes equal)", result.Stage, domain.StagePlan)
+	}
+
+	// Reasoning should mention 005-latest-feature
+	if !strings.Contains(result.Reasoning, "005-latest-feature") {
+		t.Errorf("Reasoning should mention 005-latest-feature, got: %q", result.Reasoning)
+	}
+}
+
 // TestDetectionAccuracy runs against all fixtures and calculates accuracy.
 // This is the launch blocker test - must be >= 95%
 func TestDetectionAccuracy(t *testing.T) {
