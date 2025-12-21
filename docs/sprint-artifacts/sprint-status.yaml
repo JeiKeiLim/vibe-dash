@@ -35,7 +35,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-21
-updated_by: SM (Bob) - Epic 4.5 retrospective completed
+updated_by: SM (Bob) - Story 4.6.1 drafted and marked ready-for-dev
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -124,8 +124,8 @@ development_status:
   # Created from Epic 4.5 Retrospective 2025-12-21
   # Focus: Comprehensive validation of all state combinations
   # Can run in parallel with Epic 5
-  epic-4-6: backlog
-  4-6-1-investigation-gap-analysis: backlog
+  epic-4-6: in-progress
+  4-6-1-investigation-gap-analysis: done
   4-6-2-spec-update-stage-mapping: backlog
   4-6-3-implementation-fix-all-gaps: backlog
   4-6-4-verification-dogfooding: backlog
