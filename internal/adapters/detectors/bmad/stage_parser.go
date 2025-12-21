@@ -23,6 +23,34 @@ type SprintStatus struct {
 // epicKeyRegex matches epic keys like "epic-1", "epic-4-5".
 var epicKeyRegex = regexp.MustCompile(`^epic-\d+(-\d+)?$`)
 
+// normalizeStatus converts common LLM variations to canonical status values.
+// Apply BEFORE switch statement comparison.
+func normalizeStatus(status string) string {
+	// 1. Lowercase and trim
+	s := strings.ToLower(strings.TrimSpace(status))
+
+	// 2. Normalize separators: spaces and underscores → hyphens
+	s = strings.ReplaceAll(s, " ", "-")
+	s = strings.ReplaceAll(s, "_", "-")
+
+	// 3. Map synonyms (G17)
+	synonyms := map[string]string{
+		"complete":    "done",
+		"completed":   "done",
+		"finished":    "done",
+		"wip":         "in-progress",
+		"inprogress":  "in-progress",
+		"reviewing":   "review",
+		"in-review":   "review",
+		"code-review": "review",
+	}
+
+	if canonical, ok := synonyms[s]; ok {
+		return canonical
+	}
+	return s
+}
+
 // storyKeyRegex matches story keys like "1-1-project-scaffolding", "4-5-2-bmad-v6-...".
 var storyKeyRegex = regexp.MustCompile(`^\d+-\d+-`)
 
@@ -83,7 +111,7 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 		if epicKeyRegex.MatchString(key) {
 			epics[key] = &epicInfo{
 				key:    key,
-				status: strings.ToLower(value),
+				status: normalizeStatus(value),
 			}
 			epicOrder = append(epicOrder, key)
 		}
@@ -92,10 +120,19 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 	// Sort epic order for deterministic behavior (map iteration is random)
 	sort.Strings(epicOrder)
 
+	// G14/G22: Track data quality warnings
+	var warnings []string
+
 	// Second pass: associate stories with epics
 	for key, value := range status.DevelopmentStatus {
 		// Skip retrospectives
 		if strings.HasSuffix(key, "-retrospective") {
+			continue
+		}
+
+		// G22: Check for empty status values
+		if strings.TrimSpace(value) == "" {
+			warnings = append(warnings, "empty status for "+key)
 			continue
 		}
 
@@ -111,10 +148,22 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 					status string
 				}{
 					key:    key,
-					status: strings.ToLower(value),
+					status: normalizeStatus(value),
 				})
+			} else {
+				// G14: Orphan story (no matching epic)
+				warnings = append(warnings, "orphan story "+formatStoryKey(key))
 			}
 		}
+	}
+
+	// Helper to append warnings to reasoning
+	appendWarnings := func(reasoning string) string {
+		if len(warnings) > 0 {
+			sort.Strings(warnings) // Deterministic warning order
+			return reasoning + " [Warning: " + strings.Join(warnings, "; ") + "]"
+		}
+		return reasoning
 	}
 
 	// Count epics by status
@@ -136,49 +185,119 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 		}
 	}
 
+	// G7: Check for done epics with active stories (check before all-done shortcut)
+	for _, epicKey := range epicOrder {
+		epic := epics[epicKey]
+		if epic.status == "done" {
+			for _, story := range epic.stories {
+				if story.status == "review" {
+					return domain.StageTasks, domain.ConfidenceLikely,
+						appendWarnings("Epic done but Story " + formatStoryKey(story.key) + " in review")
+				}
+				if story.status == "in-progress" {
+					return domain.StageImplement, domain.ConfidenceLikely,
+						appendWarnings("Epic done but Story " + formatStoryKey(story.key) + " in-progress")
+				}
+			}
+		}
+	}
+
 	// All epics done
 	if len(epics) > 0 && doneCount == len(epics) {
-		return domain.StageImplement, domain.ConfidenceCertain, "All epics complete - project done"
+		return domain.StageImplement, domain.ConfidenceCertain, appendWarnings("All epics complete - project done")
+	}
+
+	// G8: Check for backlog epics with active stories
+	for _, epicKey := range epicOrder {
+		epic := epics[epicKey]
+		if epic.status == "backlog" {
+			for _, story := range epic.stories {
+				if story.status == "in-progress" || story.status == "done" || story.status == "review" {
+					return domain.StageSpecify, domain.ConfidenceLikely,
+						appendWarnings("Epic backlog but Story " + formatStoryKey(story.key) + " active")
+				}
+			}
+		}
 	}
 
 	// All epics backlog
 	if len(epics) > 0 && backlogCount == len(epics) {
-		return domain.StageSpecify, domain.ConfidenceCertain, "No epics in progress - planning phase"
+		return domain.StageSpecify, domain.ConfidenceCertain, appendWarnings("No epics in progress - planning phase")
 	}
 
 	// Has in-progress epic - analyze its stories
 	if firstInProgressEpic != nil {
-		// Find story statuses
-		var inProgressStory, reviewStory string
+		// G19: Sort stories for deterministic ordering
+		sortedStories := make([]struct {
+			key    string
+			status string
+		}, len(firstInProgressEpic.stories))
+		copy(sortedStories, firstInProgressEpic.stories)
+		sort.Slice(sortedStories, func(i, j int) bool {
+			return sortedStories[i].key < sortedStories[j].key
+		})
 
-		for _, story := range firstInProgressEpic.stories {
-			switch story.status {
-			case "in-progress":
-				inProgressStory = story.key
-			case "review":
-				reviewStory = story.key
+		// G2/G3/G19: Priority-based story selection
+		// Priority: review > in-progress > ready-for-dev > drafted > backlog > done
+		storyPriority := map[string]int{
+			"review":        1,
+			"in-progress":   2,
+			"ready-for-dev": 3,
+			"drafted":       4,
+			"backlog":       5,
+			"done":          6,
+		}
+
+		var selectedStory string
+		var selectedStatus string
+		const unsetPriority = 999
+		selectedPriority := unsetPriority
+
+		for _, story := range sortedStories {
+			if p, ok := storyPriority[story.status]; ok && p < selectedPriority {
+				selectedStory = story.key
+				selectedStatus = story.status
+				selectedPriority = p
 			}
 		}
 
-		// Story in review takes precedence
-		if reviewStory != "" {
+		// Return based on selected story status
+		switch selectedStatus {
+		case "review":
 			return domain.StageTasks, domain.ConfidenceCertain,
-				"Story " + formatStoryKey(reviewStory) + " in code review"
+				appendWarnings("Story " + formatStoryKey(selectedStory) + " in code review")
+		case "in-progress":
+			return domain.StageImplement, domain.ConfidenceCertain,
+				appendWarnings("Story " + formatStoryKey(selectedStory) + " being implemented")
+		case "ready-for-dev":
+			return domain.StagePlan, domain.ConfidenceCertain,
+				appendWarnings("Story " + formatStoryKey(selectedStory) + " ready for development")
+		case "drafted":
+			return domain.StagePlan, domain.ConfidenceCertain,
+				appendWarnings("Story " + formatStoryKey(selectedStory) + " drafted, needs review")
 		}
 
-		// Story in-progress
-		if inProgressStory != "" {
+		// G1: Check if ALL stories in this epic are done
+		allDone := true
+		hasStories := len(firstInProgressEpic.stories) > 0
+		for _, story := range firstInProgressEpic.stories {
+			if story.status != "done" {
+				allDone = false
+				break
+			}
+		}
+		if hasStories && allDone {
 			return domain.StageImplement, domain.ConfidenceCertain,
-				"Story " + formatStoryKey(inProgressStory) + " being implemented"
+				appendWarnings(formatEpicKey(firstInProgressEpic.key) + " stories complete, update epic status")
 		}
 
 		// Epic in-progress but no stories started
 		return domain.StagePlan, domain.ConfidenceCertain,
-			formatEpicKey(firstInProgressEpic.key) + " started, preparing stories"
+			appendWarnings(formatEpicKey(firstInProgressEpic.key) + " started, preparing stories")
 	}
 
 	// Fallback for unexpected states
-	return domain.StageUnknown, domain.ConfidenceUncertain, "Unable to determine stage from sprint status"
+	return domain.StageUnknown, domain.ConfidenceUncertain, appendWarnings("Unable to determine stage from sprint status")
 }
 
 // extractStoryPrefix extracts the epic prefix from a story key.

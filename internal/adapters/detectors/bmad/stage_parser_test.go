@@ -11,6 +11,47 @@ import (
 )
 
 // =============================================================================
+// normalizeStatus Tests
+// =============================================================================
+
+func TestNormalizeStatus(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		// G15: Space/underscore variations
+		{"in progress", "in-progress"},
+		{"in_progress", "in-progress"},
+		{"IN-PROGRESS", "in-progress"},
+		// G17: Synonyms
+		{"wip", "in-progress"},
+		{"complete", "done"},
+		{"completed", "done"},
+		{"finished", "done"},
+		{"reviewing", "review"},
+		{"in-review", "review"},
+		{"code-review", "review"},
+		// Pass-through
+		{"done", "done"},
+		{"backlog", "backlog"},
+		{"ready-for-dev", "ready-for-dev"},
+		{"drafted", "drafted"},
+		// Whitespace handling
+		{"  in-progress  ", "in-progress"},
+		{"In Progress", "in-progress"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := normalizeStatus(tt.input)
+			if got != tt.expected {
+				t.Errorf("normalizeStatus(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+// =============================================================================
 // parseSprintStatus Tests
 // =============================================================================
 
@@ -267,8 +308,88 @@ func TestDetermineStageFromStatus(t *testing.T) {
 			wantConfidence: domain.ConfidenceCertain,
 			wantReasoning:  "Epic 1 started, preparing stories",
 		},
+		// G1: All stories done detection
 		{
-			name: "story with ready-for-dev status (not started)",
+			name: "G1: epic in-progress, all stories done",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "in-progress",
+					"1-1-feature": "done",
+					"1-2-feature": "done",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Epic 1 stories complete, update epic status",
+		},
+		{
+			name: "G1: multiple epics, one with all stories done",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "in-progress",
+					"1-1-feature": "done",
+					"1-2-feature": "done",
+					"epic-2":      "backlog",
+					"2-1-feature": "backlog",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Epic 1 stories complete, update epic status",
+		},
+		// G7: Epic done with active stories
+		{
+			name: "G7: epic done, story in-progress",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "done",
+					"1-1-feature": "in-progress",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceLikely,
+			wantReasoning:  "Epic done but Story 1.1 in-progress",
+		},
+		{
+			name: "G7: epic done, story in review",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "done",
+					"1-1-feature": "review",
+				},
+			},
+			wantStage:      domain.StageTasks,
+			wantConfidence: domain.ConfidenceLikely,
+			wantReasoning:  "Epic done but Story 1.1 in review",
+		},
+		// G8: Epic backlog with active stories
+		{
+			name: "G8: epic backlog, story in-progress",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "backlog",
+					"1-1-feature": "in-progress",
+				},
+			},
+			wantStage:      domain.StageSpecify,
+			wantConfidence: domain.ConfidenceLikely,
+			wantReasoning:  "Epic backlog but Story 1.1 active",
+		},
+		{
+			name: "G8: epic backlog, story done",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "backlog",
+					"1-1-feature": "done",
+				},
+			},
+			wantStage:      domain.StageSpecify,
+			wantConfidence: domain.ConfidenceLikely,
+			wantReasoning:  "Epic backlog but Story 1.1 active",
+		},
+		// G2/G3: Drafted and Ready-for-Dev display appropriately
+		{
+			name: "G2: story with ready-for-dev status",
 			status: &SprintStatus{
 				DevelopmentStatus: map[string]string{
 					"epic-1":      "in-progress",
@@ -277,10 +398,10 @@ func TestDetermineStageFromStatus(t *testing.T) {
 			},
 			wantStage:      domain.StagePlan,
 			wantConfidence: domain.ConfidenceCertain,
-			wantReasoning:  "Epic 1 started, preparing stories",
+			wantReasoning:  "Story 1.1 ready for development",
 		},
 		{
-			name: "story with drafted status (not started)",
+			name: "G3: story with drafted status",
 			status: &SprintStatus{
 				DevelopmentStatus: map[string]string{
 					"epic-1":      "in-progress",
@@ -289,7 +410,75 @@ func TestDetermineStageFromStatus(t *testing.T) {
 			},
 			wantStage:      domain.StagePlan,
 			wantConfidence: domain.ConfidenceCertain,
-			wantReasoning:  "Epic 1 started, preparing stories",
+			wantReasoning:  "Story 1.1 drafted, needs review",
+		},
+		{
+			name: "G2/G3: drafted-only scenario",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "in-progress",
+					"1-1-feature": "drafted",
+					"1-2-feature": "backlog",
+				},
+			},
+			wantStage:      domain.StagePlan,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Story 1.1 drafted, needs review",
+		},
+		{
+			name: "G2/G3: ready-for-dev takes precedence over drafted",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "in-progress",
+					"1-1-feature": "drafted",
+					"1-2-feature": "ready-for-dev",
+				},
+			},
+			wantStage:      domain.StagePlan,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Story 1.2 ready for development",
+		},
+		// G19: Deterministic story order (first by sorted key when same priority)
+		{
+			name: "G19: multiple stories same priority, first by sorted key wins",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "in-progress",
+					"1-3-feature": "in-progress",
+					"1-1-feature": "in-progress",
+					"1-2-feature": "in-progress",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Story 1.1 being implemented",
+		},
+		// G14: Orphan stories warning
+		{
+			name: "G14: orphan story without matching epic",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "in-progress",
+					"1-1-feature": "in-progress",
+					"2-1-orphan":  "backlog", // No epic-2 defined
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Story 1.1 being implemented [Warning: orphan story 2.1]",
+		},
+		// G22: Empty status warning
+		{
+			name: "G22: empty status value",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "in-progress",
+					"1-1-feature": "",
+				},
+			},
+			wantStage:      domain.StagePlan,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Epic 1 started, preparing stories [Warning: empty status for 1-1-feature]",
 		},
 	}
 
