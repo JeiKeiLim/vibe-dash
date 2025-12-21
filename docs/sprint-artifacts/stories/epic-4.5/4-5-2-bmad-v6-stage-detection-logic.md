@@ -169,19 +169,108 @@ development_status:
 
 ### Stage Mapping Table (Complete Return Value Contract)
 
-| Condition | domain.Stage | domain.Confidence | Reasoning Template |
-|-----------|--------------|-------------------|-------------------|
-| All epics backlog | StageSpecify | ConfidenceCertain | "No epics in progress - planning phase" |
-| Epic in-progress, no stories started | StagePlan | ConfidenceCertain | "Epic N started, preparing stories" |
-| Story in-progress | StageImplement | ConfidenceCertain | "Story N.M being implemented" |
-| Story in review | StageTasks | ConfidenceCertain | "Story N.M in code review" |
-| All epics done | StageImplement | ConfidenceCertain | "All epics complete - project done" |
-| **Fallback: Has epics.md** | StageImplement | ConfidenceLikely | "Epics defined but no sprint status" |
-| **Fallback: Has architecture.md** | StagePlan | ConfidenceLikely | "Architecture designed, no epics yet" |
-| **Fallback: Has PRD.md** | StageSpecify | ConfidenceLikely | "PRD created, architecture pending" |
-| **Fallback: No artifacts** | StageUnknown | ConfidenceUncertain | "No BMAD artifacts detected" |
-| **Malformed YAML** | StageUnknown | ConfidenceUncertain | "sprint-status.yaml parse error" |
-| **Empty sprint-status.yaml** | StageUnknown | ConfidenceUncertain | "sprint-status.yaml is empty" |
+| # | Condition | domain.Stage | domain.Confidence | Reasoning Template |
+|---|-----------|--------------|-------------------|-------------------|
+| **Error Cases** |
+| E1 | sprint-status.yaml missing | (fallback) | - | Falls back to artifact detection |
+| E2 | sprint-status.yaml malformed | StageUnknown | ConfidenceUncertain | "sprint-status.yaml parse error" |
+| E3 | sprint-status.yaml empty | StageUnknown | ConfidenceUncertain | "sprint-status.yaml is empty" |
+| E4 | development_status key missing | StageUnknown | ConfidenceUncertain | "No development_status section" |
+| **Epic-Level Cases** |
+| 1 | All epics backlog | StageSpecify | ConfidenceCertain | "No epics in progress - planning phase" |
+| 2 | All epics done | StageImplement | ConfidenceCertain | "All epics complete - project done" |
+| 3 | Mixed: some done, none in-progress | StageSpecify | ConfidenceCertain | "No active epic - planning next" |
+| **Story-Level Cases (Epic In-Progress)** |
+| 4 | No stories | StagePlan | ConfidenceCertain | "Epic N started, preparing stories" |
+| 5 | All stories backlog | StagePlan | ConfidenceCertain | "Epic N started, preparing stories" |
+| 6 | Has drafted stories only | StagePlan | ConfidenceCertain | "Story X.Y drafted, awaiting approval" |
+| 7 | Has ready-for-dev stories only | StagePlan | ConfidenceCertain | "Story X.Y ready for development" |
+| 8 | Has in-progress story | StageImplement | ConfidenceCertain | "Story X.Y being implemented" |
+| 9 | Has review story | StageTasks | ConfidenceCertain | "Story X.Y in code review" |
+| 10 | Has in-progress AND review | StageTasks | ConfidenceCertain | "Story X.Y in code review" |
+| **11** | **All stories done** | **StageImplement** | **ConfidenceCertain** | **"Epic N stories complete, update epic status"** |
+| **Multi-Story Cases** |
+| 12 | Multiple in-progress | StageImplement | ConfidenceCertain | "Story X.Y being implemented (+N more)" |
+| 13 | Multiple review | StageTasks | ConfidenceCertain | "Story X.Y in code review (+N more)" |
+| **Inconsistent State Cases** |
+| 14 | Epic done, stories in-progress | StageImplement | ConfidenceLikely | "Epic done but Story X.Y in-progress" |
+| 15 | Epic done, stories in review | StageTasks | ConfidenceLikely | "Epic done but Story X.Y in review" |
+| 16 | Epic backlog, stories active | StageSpecify | ConfidenceLikely | "Epic backlog but Story X.Y active" |
+| **Unknown Status Cases** |
+| 17 | Unknown epic status | StageUnknown | ConfidenceUncertain | "Unknown epic status 'VALUE'" |
+| 18 | Unknown story status | (continue) | - | "Unknown story status 'VALUE'" |
+| **LLM Typo Normalization** |
+| 19 | Status with spaces/underscores | (normalize) | - | Normalize "in progress" → "in-progress" |
+| 20 | Synonym mapping | (normalize) | - | Map "complete"→"done", "wip"→"in-progress" |
+| **Data Quality Warning Cases** |
+| 21 | Orphan story (no epic match) | (warn) | ConfidenceLikely | "Story X.Y has no matching epic" |
+| 22 | Deep story prefix (4-5-6-xxx) | (warn) | ConfidenceLikely | "Story prefix depth exceeds epic depth" |
+| 23 | Empty status value `""` | (warn) | ConfidenceLikely | "Empty status for key X" |
+| **Fallback Artifact Detection** |
+| F1 | Has epic*.md | StageImplement | ConfidenceLikely | "Epics defined but no sprint status" |
+| F2 | Has architecture*.md | StagePlan | ConfidenceLikely | "Architecture designed, no epics yet" |
+| F3 | Has prd*.md | StageSpecify | ConfidenceLikely | "PRD created, architecture pending" |
+| F4 | No artifacts | StageUnknown | ConfidenceUncertain | "No BMAD artifacts detected" |
+
+### Status Normalization (LLM Typo Handling)
+
+Sprint-status.yaml is LLM-generated during workflow execution. LLMs may produce variations that must be normalized before comparison:
+
+```go
+// normalizeStatus converts common variations to canonical status values.
+// Apply BEFORE switch statement comparison.
+func normalizeStatus(status string) string {
+    // 1. Lowercase everything
+    s := strings.ToLower(strings.TrimSpace(status))
+
+    // 2. Normalize separators: spaces and underscores → hyphens
+    s = strings.ReplaceAll(s, " ", "-")
+    s = strings.ReplaceAll(s, "_", "-")
+
+    // 3. Map synonyms
+    synonyms := map[string]string{
+        "complete":    "done",
+        "completed":   "done",
+        "finished":    "done",
+        "wip":         "in-progress",
+        "inprogress":  "in-progress",
+        "reviewing":   "review",
+        "in-review":   "review",
+        "code-review": "review",
+    }
+
+    if canonical, ok := synonyms[s]; ok {
+        return canonical
+    }
+    return s
+}
+```
+
+**Case Normalization Rule:** Convert all status values to lowercase before comparison.
+
+**Normalization Examples:**
+| Input | Normalized Output |
+|-------|-------------------|
+| `"in progress"` | `"in-progress"` |
+| `"In_Progress"` | `"in-progress"` |
+| `"IN-PROGRESS"` | `"in-progress"` |
+| `"complete"` | `"done"` |
+| `"completed"` | `"done"` |
+| `"finished"` | `"done"` |
+| `"wip"` | `"in-progress"` |
+| `"reviewing"` | `"review"` |
+| `"in-review"` | `"review"` |
+| `"code-review"` | `"review"` |
+
+### Story Status Priority Order
+
+When multiple stories have different statuses, use this priority (highest first):
+1. `review` - someone waiting for feedback
+2. `in-progress` - active development
+3. `ready-for-dev` - queued for development
+4. `drafted` - story being prepared
+5. `backlog` - not started
+6. `done` - already completed
 
 ### Fallback Detection Implementation
 
@@ -292,7 +381,7 @@ return &result, nil
 
 ### Test Matrix (Required Coverage)
 
-**Sprint Status Parsing Tests:**
+**Sprint Status Parsing Tests (Original):**
 | Test Case | Input | Expected Stage | Expected Confidence |
 |-----------|-------|----------------|---------------------|
 | All epics backlog | `epic-1: backlog, epic-2: backlog` | StageSpecify | ConfidenceCertain |
@@ -301,6 +390,50 @@ return &result, nil
 | Story in review | `epic-1: in-progress, 1-1-x: review` | StageTasks | ConfidenceCertain |
 | All epics done | `epic-1: done, epic-2: done` | StageImplement | ConfidenceCertain |
 | Mixed: some done, one in-progress | `epic-1: done, epic-2: in-progress` | (analyze epic-2) | ConfidenceCertain |
+
+**P1 Gap Test Cases (Story 4.6.3):**
+| Gap | Test Case | Input | Expected Stage | Expected Reasoning |
+|-----|-----------|-------|----------------|--------------------|
+| G1 | All stories done in in-progress epic | `epic-1: in-progress, 1-1-x: done, 1-2-x: done` | StageImplement | "Epic 1 stories complete, update epic status" |
+| G1 | All stories done with multiple epics | `epic-1: done, epic-2: in-progress, 2-1-x: done` | StageImplement | "Epic 2 stories complete, update epic status" |
+| G7 | Epic done, story in-progress | `epic-1: done, 1-1-x: in-progress` | StageImplement | "Epic done but Story 1.1 in-progress" |
+| G7 | Epic done, story in review | `epic-1: done, 1-1-x: review` | StageTasks | "Epic done but Story 1.1 in review" |
+| G15 | LLM typo "in progress" (space) | `epic-1: in progress, 1-1-x: in-progress` | StageImplement | "Story 1.1 being implemented" |
+| G15 | LLM typo "complete" | `epic-1: complete` | StageImplement | "All epics complete" |
+| G15 | LLM typo "wip" | `epic-1: in-progress, 1-1-x: wip` | StageImplement | "Story 1.1 being implemented" |
+| G15 | LLM typo "code-review" | `epic-1: in-progress, 1-1-x: code-review` | StageTasks | "Story 1.1 in code review" |
+
+**P2 Gap Test Cases (Story 4.6.3):**
+| Gap | Test Case | Input | Expected Stage | Expected Reasoning |
+|-----|-----------|-------|----------------|--------------------|
+| G2 | Story drafted only | `epic-1: in-progress, 1-1-x: drafted` | StagePlan | "Story 1.1 drafted, awaiting approval" |
+| G3 | Story ready-for-dev only | `epic-1: in-progress, 1-1-x: ready-for-dev` | StagePlan | "Story 1.1 ready for development" |
+| G8 | Epic backlog, story in-progress | `epic-1: backlog, 1-1-x: in-progress` | StageSpecify | "Epic backlog but Story 1.1 active" |
+| G8 | Epic backlog, story done | `epic-1: backlog, 1-1-x: done` | StageSpecify | "Epic backlog but Story 1.1 done" |
+| G14 | Orphan story (no matching epic) | `epic-1: in-progress, 2-1-x: in-progress` | StageImplement | (warn about orphan story 2.1) |
+| G17 | Synonym "completed" | `epic-1: completed` | StageImplement | "All epics complete" |
+| G19 | Multiple stories, order test | `epic-1: in-progress, 1-2-x: in-progress, 1-1-x: in-progress` | StageImplement | "Story 1.1 being implemented" (first by sorted key) |
+| G22 | Empty status value | `epic-1: in-progress, 1-1-x: ""` | StagePlan | (warn about empty status) |
+
+**Inconsistent State Test Cases:**
+| Gap | Test Case | Input | Expected Stage | Expected Reasoning |
+|-----|-----------|-------|----------------|--------------------|
+| G7 | Epic done with multiple active stories | `epic-1: done, 1-1-x: in-progress, 1-2-x: review` | StageTasks | "Epic done but Story 1.2 in review" |
+| G8 | Epic backlog with multiple stories | `epic-1: backlog, 1-1-x: done, 1-2-x: in-progress` | StageSpecify | "Epic backlog but Story 1.2 active" |
+
+**Normalization Test Cases:**
+| Gap | Input Status | Normalized Value | Test Purpose |
+|-----|--------------|------------------|--------------|
+| G15 | `"in progress"` | `"in-progress"` | Space to hyphen |
+| G15 | `"in_progress"` | `"in-progress"` | Underscore to hyphen |
+| G15 | `"IN-PROGRESS"` | `"in-progress"` | Case normalization |
+| G15 | `"wip"` | `"in-progress"` | Abbreviation |
+| G15 | `"complete"` | `"done"` | Synonym |
+| G15 | `"completed"` | `"done"` | Synonym |
+| G15 | `"finished"` | `"done"` | Synonym |
+| G15 | `"reviewing"` | `"review"` | Synonym |
+| G15 | `"in-review"` | `"review"` | Synonym |
+| G15 | `"code-review"` | `"review"` | Synonym |
 
 **Error Handling Tests:**
 | Test Case | Expected Stage | Expected Confidence |
@@ -335,6 +468,52 @@ internal/adapters/detectors/bmad/
 4. **Follow Story 4.5.1 patterns exactly** - Same code style, same error handling
 5. **Use `domain.NewDetectionResult()` constructor** - Never construct DetectionResult struct manually
 6. **ConfidenceLikely for all fallback detection** - Only ConfidenceCertain when sprint-status.yaml parsed successfully
+
+### Implementation Priority (Gap Classification from Story 4.6.1)
+
+| Priority | Gap IDs | Description |
+|----------|---------|-------------|
+| **P1 (Must Fix)** | G1, G7, G15 | Actively misleading users OR high LLM probability |
+| **P2 (Should Fix)** | G2, G3, G8, G14, G17, G19, G22 | User sees less helpful info OR data quality issues |
+| **P3 (Nice to Have)** | G4, G5, G6, G9, G10, G11, G12, G13, G16, G18, G20, G21 | Edge cases, UX polish |
+
+**Gap Details:**
+| Gap ID | Scenario | Current Behavior | Expected Behavior |
+|--------|----------|------------------|-------------------|
+| G1 | Epic in-progress, all stories done | "preparing stories" | "Epic N complete, update epic status" |
+| G2 | Story status `drafted` | Falls through | "Story X.Y drafted, awaiting approval" |
+| G3 | Story status `ready-for-dev` | Falls through | "Story X.Y ready for development" |
+| G4 | Multiple stories in-progress | Shows first found | Show first by sorted key |
+| G5 | Multiple stories in review | Shows first found | Show first by sorted key |
+| G6 | Story `done` status | Falls through | Count toward epic completion check |
+| G7 | Epic done but stories active | "All epics complete" | Warning about inconsistent state |
+| G8 | Epic backlog but stories active | Stories ignored | Warning about inconsistent state |
+| G9 | Unknown epic status | Generic message | Include status value in message |
+| G10 | Unknown story status | Falls through | Include status value in message |
+| G11 | Whitespace in status | Not matched | Normalize whitespace |
+| G12 | Multi-epic order sensitivity | Lexicographic sort | Semantic order |
+| G13 | Uppercase epic key | Not matched | Case-insensitive match |
+| G14 | Orphan story (no matching epic) | Silently ignored | Warn about orphan |
+| G15 | LLM typos | Falls through | Normalize common variations |
+| G16 | Sub-epic depth >2 levels | Not matched | Support or warn |
+| G17 | Status synonyms | Falls through | Map to canonical |
+| G18 | Deep story prefix (4-5-6-xxx) | May not match | Handle or warn |
+| G19 | Story order within epic | Last-wins | First by sorted key |
+| G20 | `contexted` epic patterns | Not explicitly tested | Verify same as in-progress |
+| G21 | Uppercase story keys | May not match | Case-normalize keys |
+| G22 | Empty status value | Falls through | Warn about empty status |
+
+### Decision Summary (from Story 4.6.1)
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| D1: `drafted` display | Show "Story X.Y drafted, awaiting approval" | User should know which story is being refined |
+| D2: `ready-for-dev` display | Plan "Story X.Y ready for development" | Not yet implementing, but work is ready |
+| D3: Multi-status priority | Review > in-progress | Review is higher-urgency action |
+| D4: Retrospective handling | Ignore | Retros don't block development |
+| D5: Inconsistent states | Warn in reasoning string | Help catch data entry errors |
+| D6: Empty epic | "preparing stories" | Correct - genuinely preparing |
+| D7: All stories done | "Epic N stories complete, update epic status" | Guide user to update sprint-status.yaml |
 
 ### References
 
