@@ -122,14 +122,18 @@ development_status:
   epic-4-6-retrospective: done
 
   # Epic 5: Project State & Hibernation
-  epic-5: backlog
-  5-1-project-state-model: backlog
-  5-2-auto-hibernation: backlog
-  5-3-auto-activation-on-activity: backlog
-  5-4-hibernated-projects-view: backlog
-  5-5-manual-state-control: backlog
-  5-6-hibernation-threshold-configuration: backlog
-  epic-5-retrospective: optional
+  # DEFERRED TO POST-MVP (2025-12-22)
+  # Rationale: Hibernation is a power-user feature. MVP is functional.
+  # Dashboard has space for this info, but core polish takes priority.
+  # Decision: Focus on Epic 6, 7, then new Epic 8 (UX Polish)
+  epic-5: deferred-post-mvp
+  5-1-project-state-model: deferred-post-mvp
+  5-2-auto-hibernation: deferred-post-mvp
+  5-3-auto-activation-on-activity: deferred-post-mvp
+  5-4-hibernated-projects-view: deferred-post-mvp
+  5-5-manual-state-control: deferred-post-mvp
+  5-6-hibernation-threshold-configuration: deferred-post-mvp
+  epic-5-retrospective: deferred-post-mvp
 
   # Epic 6: Scripting & Automation
   epic-6: backlog
@@ -152,3 +156,19 @@ development_status:
   7-6-feedback-messages-polish: backlog
   7-7-graceful-shutdown: backlog
   epic-7-retrospective: optional
+
+  # Epic 8: UX Polish
+  # Created from systematic UX elicitation session (2025-12-22)
+  # Focus: Improve dashboard glanceability, fix core UX gaps
+  # Key insight: Dashboard is observation-only tool, optimize for glanceability
+  epic-8: backlog
+  8-1-recursive-file-watching: backlog
+  8-2-auto-refresh-reliability: backlog
+  8-3-stage-info-in-project-list: backlog
+  8-4-fix-layout-width-bugs: backlog
+  8-5-favorites-sort-first: backlog
+  8-6-horizontal-split-layout-option: backlog
+  8-7-config-display-in-tui: backlog
+  8-8-clarify-or-remove-confidence: backlog
+  8-9-visual-polish-bundle: backlog
+  epic-8-retrospective: optional
