@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
@@ -12,24 +11,6 @@ import (
 
 // ErrDatabaseCorrupted indicates the database file is corrupted and includes recovery suggestion
 var ErrDatabaseCorrupted = errors.New("database file is corrupted")
-
-// wrapDBError checks for database corruption indicators and wraps errors with recovery suggestions
-func wrapDBError(err error, dbPath string) error {
-	if err == nil {
-		return nil
-	}
-
-	errStr := strings.ToLower(err.Error())
-	// Check for common SQLite corruption indicators
-	if strings.Contains(errStr, "malformed") ||
-		strings.Contains(errStr, "corrupt") ||
-		strings.Contains(errStr, "disk i/o error") ||
-		strings.Contains(errStr, "database disk image is malformed") {
-		return fmt.Errorf("%w: %v. Recovery suggestion: delete %s and restart the application to recreate the database",
-			ErrDatabaseCorrupted, err, dbPath)
-	}
-	return err
-}
 
 // projectRow is the database row representation for scanning
 type projectRow struct {

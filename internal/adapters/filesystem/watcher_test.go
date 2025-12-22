@@ -389,12 +389,9 @@ func TestFsnotifyWatcher_Debounce_ConfigurableWindow(t *testing.T) {
 	// Wait for event
 	select {
 	case <-events:
-		elapsed := time.Since(start)
-		// Event should arrive after debounce period (with some margin)
-		if elapsed < shortDebounce {
-			// This is expected since the event arrives after debounce
-			// Some OS report events before debounce, so we just check it's within reasonable time
-		}
+		// Event received - timing varies by OS, some report before debounce completes
+		// We only verify the event arrives, not the exact timing
+		_ = time.Since(start) // elapsed time not checked - OS-dependent
 	case <-time.After(2 * time.Second):
 		t.Error("timeout waiting for debounced event")
 	}
@@ -597,10 +594,8 @@ func TestFsnotifyWatcher_RemovePath(t *testing.T) {
 	// Wait briefly and check no events received
 	select {
 	case _, ok := <-events:
-		if ok {
-			// This is actually okay in some race conditions
-			// fsnotify may still have buffered events
-		}
+		// Race condition possible - fsnotify may still have buffered events
+		_ = ok // intentionally not checking - either outcome is acceptable
 	case <-time.After(300 * time.Millisecond):
 		// Expected - no events from removed path
 	}

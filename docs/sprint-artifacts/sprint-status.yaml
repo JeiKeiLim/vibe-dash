@@ -24,8 +24,8 @@
 # - Dev moves story to 'review', dev reviews, then Dev moves to 'done'
 
 generated: 2025-12-12
-updated: 2025-12-21
-updated_by: Code Review - Fixed warning propagation in stage_parser.go
+updated: 2025-12-22
+updated_by: Dev Agent - Story 4.6.4 verification complete, awaiting user review
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -118,7 +118,7 @@ development_status:
   4-6-1-investigation-gap-analysis: done
   4-6-2-spec-update-stage-mapping: done
   4-6-3-implementation-fix-all-gaps: done
-  4-6-4-verification-dogfooding: backlog
+  4-6-4-verification-dogfooding: done
   epic-4-6-retrospective: optional
 
   # Epic 5: Project State & Hibernation

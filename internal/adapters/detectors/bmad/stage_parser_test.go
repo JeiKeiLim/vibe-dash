@@ -39,6 +39,10 @@ func TestNormalizeStatus(t *testing.T) {
 		// Whitespace handling
 		{"  in-progress  ", "in-progress"},
 		{"In Progress", "in-progress"},
+		// Multiple separator handling (Edge 2)
+		{"ready__for__dev", "ready-for-dev"},
+		{"in___progress", "in-progress"},
+		{"ready_for__dev", "ready-for-dev"},
 	}
 
 	for _, tt := range tests {
@@ -214,7 +218,7 @@ func TestDetermineStageFromStatus(t *testing.T) {
 			},
 			wantStage:      domain.StagePlan,
 			wantConfidence: domain.ConfidenceCertain,
-			wantReasoning:  "Epic 1 started, preparing stories",
+			wantReasoning:  "Story 1.1 in backlog, needs drafting",
 		},
 		{
 			name: "story in-progress",
@@ -306,7 +310,7 @@ func TestDetermineStageFromStatus(t *testing.T) {
 			},
 			wantStage:      domain.StagePlan,
 			wantConfidence: domain.ConfidenceCertain,
-			wantReasoning:  "Epic 1 started, preparing stories",
+			wantReasoning:  "Story 1.1 in backlog, needs drafting",
 		},
 		// G1: All stories done detection
 		{
@@ -479,6 +483,33 @@ func TestDetermineStageFromStatus(t *testing.T) {
 			wantStage:      domain.StagePlan,
 			wantConfidence: domain.ConfidenceCertain,
 			wantReasoning:  "Epic 1 started, preparing stories [Warning: empty status for 1-1-feature]",
+		},
+		// Edge 15: Unknown status value shows story and status
+		{
+			name: "Edge15: unknown status shows story name and status value",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "in-progress",
+					"1-1-feature": "some-random-status",
+				},
+			},
+			wantStage:      domain.StagePlan,
+			wantConfidence: domain.ConfidenceLikely,
+			wantReasoning:  "Story 1.1 has unknown status 'some-random-status' [Warning: unknown status 'some-random-status' for 1-1-feature]",
+		},
+		// Edge 15 variant: multiple unknown statuses, first by sorted key wins
+		{
+			name: "Edge15: multiple unknown statuses, first by sorted key",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "in-progress",
+					"1-2-feature": "weird-status",
+					"1-1-feature": "another-weird",
+				},
+			},
+			wantStage:      domain.StagePlan,
+			wantConfidence: domain.ConfidenceLikely,
+			wantReasoning:  "Story 1.1 has unknown status 'another-weird' [Warning: unknown status 'another-weird' for 1-1-feature]",
 		},
 	}
 

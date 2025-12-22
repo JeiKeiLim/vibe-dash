@@ -161,6 +161,61 @@ make test-accuracy # detection accuracy (must be ≥95%)
 
 ---
 
+## Story Completion & User Verification (MANDATORY)
+
+**Lesson learned from Epics 3, 3.5, 4, 4.5:** Code was written but not properly wired/integrated. All stories now require user verification before marking `done`.
+
+### Dev Agent Rules
+
+1. **Never mark story `done` directly** - Always set to `review` first
+2. **Stop after `review`** - Wait for user to verify integration
+3. **Include User Testing Guide** - Every story with TUI/CLI changes must have one
+
+### Story Status Flow
+
+```
+drafted → ready-for-dev → in-progress → review → done
+                                          ↑        ↑
+                                     Dev stops   User marks
+```
+
+### User Testing Guide Template
+
+Every story that touches TUI, CLI, or integration must include:
+
+```markdown
+## User Testing Guide
+
+**Time needed:** X minutes
+
+### Step 1: Basic Check
+- Command to run
+- What to look for (table with Expected column)
+- Red flags (what means FAIL)
+
+### Step 2: Spot-Check (if applicable)
+- One specific scenario to verify
+- Copy-paste commands
+- Expected output
+
+### Decision Guide
+| Situation | Action |
+|-----------|--------|
+| All checks pass | Mark `done` |
+| Any check fails | Do NOT approve, document issue |
+```
+
+### What User Checks
+
+| Story Type | User Verifies |
+|------------|---------------|
+| TUI feature | Run `./bin/vibe`, visually confirm feature works |
+| CLI command | Run command, check output format |
+| Detection logic | Run vibe on test project, verify stage/reasoning |
+| Integration | End-to-end flow works, not just unit tests pass |
+
+---
+
 ## Post-MVP References
 
 ### BMAD Progress Dashboard

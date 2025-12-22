@@ -1184,9 +1184,8 @@ func (m *mockFileWatcher) Watch(ctx context.Context, paths []string) (<-chan por
 
 func (m *mockFileWatcher) Close() error {
 	m.closeCalled = true
-	if m.returnCh != nil {
-		// Don't close here - let the test manage channel lifecycle
-	}
+	// Note: Don't close returnCh here - let the test manage channel lifecycle
+	// The channel may still be in use by goroutines reading from it
 	return m.closeErr
 }
 

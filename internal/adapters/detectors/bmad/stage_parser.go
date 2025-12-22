@@ -33,7 +33,12 @@ func normalizeStatus(status string) string {
 	s = strings.ReplaceAll(s, " ", "-")
 	s = strings.ReplaceAll(s, "_", "-")
 
-	// 3. Map synonyms (G17)
+	// 3. Collapse multiple hyphens into one (handles "ready__for__dev" → "ready-for-dev")
+	for strings.Contains(s, "--") {
+		s = strings.ReplaceAll(s, "--", "-")
+	}
+
+	// 4. Map synonyms (G17)
 	synonyms := map[string]string{
 		"complete":    "done",
 		"completed":   "done",
@@ -253,11 +258,23 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 		const unsetPriority = 999
 		selectedPriority := unsetPriority
 
+		// Track stories with unknown status for fallback display
+		var unknownStatusStories []struct {
+			key    string
+			status string
+		}
+
 		for _, story := range sortedStories {
 			if p, ok := storyPriority[story.status]; ok && p < selectedPriority {
 				selectedStory = story.key
 				selectedStatus = story.status
 				selectedPriority = p
+			} else if _, known := storyPriority[story.status]; !known && story.status != "" {
+				// Track unknown statuses (not empty, not in priority map)
+				unknownStatusStories = append(unknownStatusStories, struct {
+					key    string
+					status string
+				}{key: story.key, status: story.status})
 			}
 		}
 
@@ -275,6 +292,9 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 		case "drafted":
 			return domain.StagePlan, domain.ConfidenceCertain,
 				appendWarnings("Story " + formatStoryKey(selectedStory) + " drafted, needs review")
+		case "backlog":
+			return domain.StagePlan, domain.ConfidenceCertain,
+				appendWarnings("Story " + formatStoryKey(selectedStory) + " in backlog, needs drafting")
 		}
 
 		// G1: Check if ALL stories in this epic are done
@@ -291,7 +311,15 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 				appendWarnings(formatEpicKey(firstInProgressEpic.key) + " stories complete, update epic status")
 		}
 
-		// Epic in-progress but no stories started
+		// Epic in-progress but no known-status stories started
+		// If there are stories with unknown status, show the first one
+		if len(unknownStatusStories) > 0 {
+			first := unknownStatusStories[0]
+			warnings = append(warnings, "unknown status '"+first.status+"' for "+first.key)
+			return domain.StagePlan, domain.ConfidenceLikely,
+				appendWarnings("Story " + formatStoryKey(first.key) + " has unknown status '" + first.status + "'")
+		}
+
 		return domain.StagePlan, domain.ConfidenceCertain,
 			appendWarnings(formatEpicKey(firstInProgressEpic.key) + " started, preparing stories")
 	}
