@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-22
-updated_by: Dev Agent - Story 4.6.4 verification complete, awaiting user review
+updated_by: SM Agent - Epic 4.6 retrospective, marked done
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -114,12 +114,12 @@ development_status:
   # Created from Epic 4.5 Retrospective 2025-12-21
   # Focus: Comprehensive validation of all state combinations
   # Can run in parallel with Epic 5
-  epic-4-6: in-progress
+  epic-4-6: done
   4-6-1-investigation-gap-analysis: done
   4-6-2-spec-update-stage-mapping: done
   4-6-3-implementation-fix-all-gaps: done
   4-6-4-verification-dogfooding: done
-  epic-4-6-retrospective: optional
+  epic-4-6-retrospective: done
 
   # Epic 5: Project State & Hibernation
   epic-5: backlog
