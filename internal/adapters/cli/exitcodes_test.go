@@ -72,3 +72,26 @@ func TestExitCodeConstants(t *testing.T) {
 		})
 	}
 }
+
+func TestExitCodeDescription(t *testing.T) {
+	tests := []struct {
+		code        int
+		description string
+	}{
+		{ExitSuccess, "Success"},
+		{ExitGeneralError, "General error (unhandled, user decision needed)"},
+		{ExitProjectNotFound, "Project not found"},
+		{ExitConfigInvalid, "Configuration invalid"},
+		{ExitDetectionFailed, "Detection failed"},
+		{99, "Unknown exit code"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.description, func(t *testing.T) {
+			got := ExitCodeDescription(tt.code)
+			if got != tt.description {
+				t.Errorf("ExitCodeDescription(%d) = %q, want %q", tt.code, got, tt.description)
+			}
+		})
+	}
+}

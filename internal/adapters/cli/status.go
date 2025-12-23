@@ -260,4 +260,3 @@ func formatStatusJSON(ctx context.Context, cmd *cobra.Command, p *domain.Project
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(response)
 }
-

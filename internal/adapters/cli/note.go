@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -63,7 +64,12 @@ func runNote(cmd *cobra.Command, args []string) error {
 	}
 
 	if targetProject == nil {
-		return fmt.Errorf("%w: %s", domain.ErrProjectNotFound, projectName)
+		err := fmt.Errorf("%w: %s", domain.ErrProjectNotFound, projectName)
+		if errors.Is(err, domain.ErrProjectNotFound) {
+			cmd.SilenceErrors = true
+			cmd.SilenceUsage = true
+		}
+		return err
 	}
 
 	// View mode (no note argument)

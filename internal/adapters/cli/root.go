@@ -18,7 +18,14 @@ var RootCmd = &cobra.Command{
 Track AI-assisted coding project stages, detect when agents are waiting
 for input, and manage your workflow across multiple projects.
 
-Run 'vibe' with no arguments to launch the interactive dashboard.`,
+Run 'vibe' with no arguments to launch the interactive dashboard.
+
+Exit Codes:
+  0  Success
+  1  General error (unhandled, user decision needed)
+  2  Project not found
+  3  Configuration invalid
+  4  Detection failed`,
 	Run: func(cmd *cobra.Command, args []string) {
 		slog.Info("vibe-dash starting")
 

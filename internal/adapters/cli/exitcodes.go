@@ -15,6 +15,25 @@ const (
 	ExitDetectionFailed = 4
 )
 
+// ExitCodeDescription returns a human-readable description for an exit code.
+// Used for programmatic access to exit code meanings.
+func ExitCodeDescription(code int) string {
+	switch code {
+	case ExitSuccess:
+		return "Success"
+	case ExitGeneralError:
+		return "General error (unhandled, user decision needed)"
+	case ExitProjectNotFound:
+		return "Project not found"
+	case ExitConfigInvalid:
+		return "Configuration invalid"
+	case ExitDetectionFailed:
+		return "Detection failed"
+	default:
+		return "Unknown exit code"
+	}
+}
+
 // MapErrorToExitCode maps domain errors to CLI exit codes.
 //
 // Exit code mapping:

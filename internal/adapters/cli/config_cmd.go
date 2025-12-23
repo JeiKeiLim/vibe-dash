@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/config"
+	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 )
 
 // vibeHome is the base path for vibe-dash storage (~/.vibe-dash).
@@ -50,19 +52,28 @@ func runConfigSet(cmd *cobra.Command, args []string) error {
 	key := args[1]
 	value := args[2]
 
+	var err error
 	switch key {
 	case "waiting-threshold":
-		intVal, err := strconv.Atoi(value)
+		var intVal int
+		intVal, err = strconv.Atoi(value)
 		if err != nil {
-			return fmt.Errorf("invalid value for waiting-threshold: %s", value)
+			err = fmt.Errorf("%w: invalid value for waiting-threshold: %s", domain.ErrConfigInvalid, value)
+		} else if intVal < 0 {
+			err = fmt.Errorf("%w: waiting-threshold must be >= 0, got %d", domain.ErrConfigInvalid, intVal)
+		} else {
+			return setProjectWaitingThreshold(cmd.Context(), cmd, projectID, intVal)
 		}
-		if intVal < 0 {
-			return fmt.Errorf("waiting-threshold must be >= 0, got %d", intVal)
-		}
-		return setProjectWaitingThreshold(cmd.Context(), cmd, projectID, intVal)
 	default:
-		return fmt.Errorf("unknown config key: %s. Valid keys: waiting-threshold", key)
+		err = fmt.Errorf("%w: unknown config key: %s", domain.ErrConfigInvalid, key)
 	}
+
+	// SilenceErrors/SilenceUsage pattern for clean error output (matches status.go:164-165)
+	if err != nil && errors.Is(err, domain.ErrConfigInvalid) {
+		cmd.SilenceErrors = true
+		cmd.SilenceUsage = true
+	}
+	return err
 }
 
 // setProjectWaitingThreshold updates the waiting threshold for a project.

@@ -2,11 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 )
 
 func TestConfigSet_WaitingThreshold_Success(t *testing.T) {
@@ -207,4 +210,153 @@ func createTestConfigCommand() *cobra.Command {
 
 	cmd.AddCommand(setCmd)
 	return cmd
+}
+
+// ============================================================================
+// Exit code tests for config command (Story 6.3: AC4, AC7)
+// ============================================================================
+
+func TestConfigSet_InvalidValue_ExitCode3(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectDir := filepath.Join(tmpDir, "test-project")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	rootCmd := NewRootCmd()
+	rootCmd.AddCommand(createTestConfigCommand())
+
+	originalVibeHome := vibeHome
+	vibeHome = tmpDir
+	defer func() { vibeHome = originalVibeHome }()
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"config", "set", "test-project", "waiting-threshold", "abc"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for non-numeric threshold")
+	}
+
+	// Verify error is wrapped with ErrConfigInvalid
+	if !errors.Is(err, domain.ErrConfigInvalid) {
+		t.Errorf("expected error to wrap ErrConfigInvalid, got: %v", err)
+	}
+
+	// Verify exit code maps to 3
+	exitCode := MapErrorToExitCode(err)
+	if exitCode != ExitConfigInvalid {
+		t.Errorf("expected exit code %d (ExitConfigInvalid), got %d", ExitConfigInvalid, exitCode)
+	}
+}
+
+func TestConfigSet_NegativeValue_ExitCode3(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectDir := filepath.Join(tmpDir, "test-project")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	rootCmd := NewRootCmd()
+	rootCmd.AddCommand(createTestConfigCommand())
+
+	originalVibeHome := vibeHome
+	vibeHome = tmpDir
+	defer func() { vibeHome = originalVibeHome }()
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	// Use -- to mark end of flags, so -5 is treated as a positional arg
+	rootCmd.SetArgs([]string{"config", "set", "test-project", "waiting-threshold", "--", "-5"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for negative threshold")
+	}
+
+	// Verify error is wrapped with ErrConfigInvalid
+	if !errors.Is(err, domain.ErrConfigInvalid) {
+		t.Errorf("expected error to wrap ErrConfigInvalid, got: %v", err)
+	}
+
+	// Verify exit code maps to 3
+	exitCode := MapErrorToExitCode(err)
+	if exitCode != ExitConfigInvalid {
+		t.Errorf("expected exit code %d (ExitConfigInvalid), got %d", ExitConfigInvalid, exitCode)
+	}
+}
+
+func TestConfigSet_UnknownKey_ExitCode3(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectDir := filepath.Join(tmpDir, "test-project")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	rootCmd := NewRootCmd()
+	rootCmd.AddCommand(createTestConfigCommand())
+
+	originalVibeHome := vibeHome
+	vibeHome = tmpDir
+	defer func() { vibeHome = originalVibeHome }()
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"config", "set", "test-project", "unknown-key", "value"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for unknown config key")
+	}
+
+	// Verify error is wrapped with ErrConfigInvalid
+	if !errors.Is(err, domain.ErrConfigInvalid) {
+		t.Errorf("expected error to wrap ErrConfigInvalid, got: %v", err)
+	}
+
+	// Verify exit code maps to 3
+	exitCode := MapErrorToExitCode(err)
+	if exitCode != ExitConfigInvalid {
+		t.Errorf("expected exit code %d (ExitConfigInvalid), got %d", ExitConfigInvalid, exitCode)
+	}
+}
+
+func TestConfigSet_Success_ExitCode0(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectDir := filepath.Join(tmpDir, "test-project")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write initial project config
+	configPath := filepath.Join(projectDir, "config.yaml")
+	initialConfig := `notes: "test project"
+`
+	if err := os.WriteFile(configPath, []byte(initialConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	rootCmd := NewRootCmd()
+	rootCmd.AddCommand(createTestConfigCommand())
+
+	originalVibeHome := vibeHome
+	vibeHome = tmpDir
+	defer func() { vibeHome = originalVibeHome }()
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"config", "set", "test-project", "waiting-threshold", "15"})
+
+	err := rootCmd.Execute()
+
+	// Verify exit code maps to 0
+	exitCode := MapErrorToExitCode(err)
+	if exitCode != ExitSuccess {
+		t.Errorf("expected exit code %d (ExitSuccess), got %d", ExitSuccess, exitCode)
+	}
 }
