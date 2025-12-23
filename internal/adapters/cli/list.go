@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -16,10 +17,14 @@ import (
 // listJSON holds the --json flag value
 var listJSON bool
 
+// listAPIVersion holds the --api-version flag value
+var listAPIVersion string
+
 // ResetListFlags resets list command flags for testing.
 // Call this before each test to ensure clean state.
 func ResetListFlags() {
 	listJSON = false
+	listAPIVersion = "v1"
 }
 
 // newListCmd creates the list command.
@@ -40,6 +45,7 @@ Examples:
 	}
 
 	cmd.Flags().BoolVar(&listJSON, "json", false, "Output as JSON")
+	cmd.Flags().StringVar(&listAPIVersion, "api-version", "v1", "API version for JSON output (currently only v1)")
 
 	return cmd
 }
@@ -62,6 +68,11 @@ func runList(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("repository not initialized")
 	}
 
+	// Validate API version (AC3: only v1 supported currently)
+	if listAPIVersion != "v1" {
+		return fmt.Errorf("unsupported API version: %s", listAPIVersion)
+	}
+
 	projects, err := repository.FindAll(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list projects: %w", err)
@@ -71,7 +82,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 	project.SortByName(projects)
 
 	if listJSON {
-		return formatJSON(cmd, projects)
+		return formatJSON(ctx, cmd, projects)
 	}
 
 	// Plain text output
@@ -110,40 +121,72 @@ type ListResponse struct {
 
 // ProjectSummary represents a single project in JSON output
 type ProjectSummary struct {
-	Name           string  `json:"name"`
-	DisplayName    *string `json:"display_name"` // null if not set
-	Path           string  `json:"path"`
-	Method         string  `json:"method"`
-	Stage          string  `json:"stage"`      // lowercase per Architecture spec
-	Confidence     string  `json:"confidence"` // Default "uncertain" until DetectionResult stored
-	State          string  `json:"state"`      // lowercase: "active" or "hibernated"
-	IsFavorite     bool    `json:"is_favorite"`
-	LastActivityAt string  `json:"last_activity_at"` // ISO 8601 UTC (RFC3339)
+	Name                   string  `json:"name"`
+	DisplayName            *string `json:"display_name"` // null if not set
+	Path                   string  `json:"path"`
+	Method                 string  `json:"method"`
+	Stage                  string  `json:"stage"`      // lowercase per Architecture spec
+	Confidence             string  `json:"confidence"` // lowercase: "certain", "likely", "uncertain"
+	State                  string  `json:"state"`      // lowercase: "active" or "hibernated"
+	IsFavorite             bool    `json:"is_favorite"`
+	IsWaiting              bool    `json:"is_waiting"`               // Agent waiting detection status
+	WaitingDurationMinutes *int    `json:"waiting_duration_minutes"` // Minutes waiting, null if not waiting
+	Notes                  *string `json:"notes"`                    // User notes, null if not set
+	DetectionReasoning     *string `json:"detection_reasoning"`      // Detection explanation, null if empty
+	LastActivityAt         string  `json:"last_activity_at"`         // ISO 8601 UTC (RFC3339)
 }
 
 // formatJSON formats projects as JSON output.
-func formatJSON(cmd *cobra.Command, projects []*domain.Project) error {
+func formatJSON(ctx context.Context, cmd *cobra.Command, projects []*domain.Project) error {
 	response := ListResponse{
-		APIVersion: "v1",
+		APIVersion: listAPIVersion,
 		Projects:   make([]ProjectSummary, 0, len(projects)),
 	}
 
 	for _, p := range projects {
+		// Nullable display_name (null if not set)
 		var displayName *string
 		if p.DisplayName != "" {
 			displayName = &p.DisplayName
 		}
 
+		// Nullable notes (null if not set)
+		var notes *string
+		if p.Notes != "" {
+			notes = &p.Notes
+		}
+
+		// Nullable detection_reasoning (null if not set)
+		var detectionReasoning *string
+		if p.DetectionReasoning != "" {
+			detectionReasoning = &p.DetectionReasoning
+		}
+
+		// Waiting detection (AC4: is_waiting and waiting_duration_minutes)
+		isWaiting := false
+		var waitingMinutes *int
+		if waitingDetector != nil {
+			isWaiting = waitingDetector.IsWaiting(ctx, p)
+			if isWaiting {
+				mins := int(waitingDetector.WaitingDuration(ctx, p).Minutes())
+				waitingMinutes = &mins
+			}
+		}
+
 		response.Projects = append(response.Projects, ProjectSummary{
-			Name:           p.Name,
-			DisplayName:    displayName,
-			Path:           p.Path,
-			Method:         p.DetectedMethod,
-			Stage:          strings.ToLower(p.CurrentStage.String()),
-			Confidence:     "uncertain", // Default until DetectionResult is stored
-			State:          strings.ToLower(p.State.String()),
-			IsFavorite:     p.IsFavorite,
-			LastActivityAt: p.LastActivityAt.UTC().Format(time.RFC3339),
+			Name:                   p.Name,
+			DisplayName:            displayName,
+			Path:                   p.Path,
+			Method:                 p.DetectedMethod,
+			Stage:                  strings.ToLower(p.CurrentStage.String()),
+			Confidence:             strings.ToLower(p.Confidence.String()),
+			State:                  strings.ToLower(p.State.String()),
+			IsFavorite:             p.IsFavorite,
+			IsWaiting:              isWaiting,
+			WaitingDurationMinutes: waitingMinutes,
+			Notes:                  notes,
+			DetectionReasoning:     detectionReasoning,
+			LastActivityAt:         p.LastActivityAt.UTC().Format(time.RFC3339),
 		})
 	}
 

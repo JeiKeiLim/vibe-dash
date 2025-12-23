@@ -604,3 +604,258 @@ func (m *MockRepositoryWithFindAllError) UpdateState(_ context.Context, _ string
 func (m *MockRepositoryWithFindAllError) UpdateLastActivity(_ context.Context, _ string, _ time.Time) error {
 	return nil
 }
+
+// ============================================================================
+// Story 6.1: JSON Output Format - New Tests
+// ============================================================================
+
+// MockWaitingDetector implements ports.WaitingDetector for testing
+type MockWaitingDetector struct {
+	isWaiting       bool
+	waitingDuration time.Duration
+}
+
+func (m *MockWaitingDetector) IsWaiting(_ context.Context, _ *domain.Project) bool {
+	return m.isWaiting
+}
+
+func (m *MockWaitingDetector) WaitingDuration(_ context.Context, _ *domain.Project) time.Duration {
+	return m.waitingDuration
+}
+
+func TestList_JSON_AllFieldsPresent(t *testing.T) {
+	mock := NewMockRepository()
+	p1, _ := domain.NewProject("/path/to/test", "")
+	p1.CurrentStage = domain.StagePlan
+	p1.State = domain.StateActive
+	p1.DetectedMethod = "bmad"
+	p1.Confidence = domain.ConfidenceCertain
+	p1.Notes = "Test notes"
+	p1.DetectionReasoning = "Found .bmad folder"
+	p1.IsFavorite = true
+	mock.projects[p1.Path] = p1
+	cli.SetRepository(mock)
+
+	// Set up mock waiting detector
+	mockWD := &MockWaitingDetector{
+		isWaiting:       true,
+		waitingDuration: 45 * time.Minute,
+	}
+	cli.SetWaitingDetector(mockWD)
+	defer cli.SetWaitingDetector(nil)
+
+	output, err := executeListCommand([]string{"--json"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	var response struct {
+		APIVersion string `json:"api_version"`
+		Projects   []struct {
+			Name                   string  `json:"name"`
+			DisplayName            *string `json:"display_name"`
+			Path                   string  `json:"path"`
+			Method                 string  `json:"method"`
+			Stage                  string  `json:"stage"`
+			Confidence             string  `json:"confidence"`
+			State                  string  `json:"state"`
+			IsFavorite             bool    `json:"is_favorite"`
+			IsWaiting              bool    `json:"is_waiting"`
+			WaitingDurationMinutes *int    `json:"waiting_duration_minutes"`
+			Notes                  *string `json:"notes"`
+			DetectionReasoning     *string `json:"detection_reasoning"`
+			LastActivityAt         string  `json:"last_activity_at"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal([]byte(output), &response); err != nil {
+		t.Fatalf("invalid JSON: %v\nOutput: %s", err, output)
+	}
+
+	if len(response.Projects) != 1 {
+		t.Fatalf("expected 1 project, got %d", len(response.Projects))
+	}
+
+	proj := response.Projects[0]
+
+	// AC1: Verify api_version
+	if response.APIVersion != "v1" {
+		t.Errorf("expected api_version 'v1', got %s", response.APIVersion)
+	}
+
+	// AC4: Verify all required fields
+	if proj.Name != "test" {
+		t.Errorf("expected name 'test', got %s", proj.Name)
+	}
+	if proj.Path != "/path/to/test" {
+		t.Errorf("expected path '/path/to/test', got %s", proj.Path)
+	}
+	if proj.Method != "bmad" {
+		t.Errorf("expected method 'bmad', got %s", proj.Method)
+	}
+	if proj.Stage != "plan" {
+		t.Errorf("expected lowercase stage 'plan', got %s", proj.Stage)
+	}
+	if proj.Confidence != "certain" {
+		t.Errorf("expected lowercase confidence 'certain', got %s", proj.Confidence)
+	}
+	if proj.State != "active" {
+		t.Errorf("expected lowercase state 'active', got %s", proj.State)
+	}
+	if !proj.IsFavorite {
+		t.Error("expected is_favorite to be true")
+	}
+	if !proj.IsWaiting {
+		t.Error("expected is_waiting to be true")
+	}
+	if proj.WaitingDurationMinutes == nil || *proj.WaitingDurationMinutes != 45 {
+		t.Errorf("expected waiting_duration_minutes 45, got %v", proj.WaitingDurationMinutes)
+	}
+	if proj.Notes == nil || *proj.Notes != "Test notes" {
+		t.Errorf("expected notes 'Test notes', got %v", proj.Notes)
+	}
+	if proj.DetectionReasoning == nil || *proj.DetectionReasoning != "Found .bmad folder" {
+		t.Errorf("expected detection_reasoning 'Found .bmad folder', got %v", proj.DetectionReasoning)
+	}
+}
+
+func TestList_JSON_NullableFieldsWhenEmpty(t *testing.T) {
+	mock := NewMockRepository()
+	p1, _ := domain.NewProject("/path/to/test", "")
+	// Don't set Notes or DetectionReasoning
+	mock.projects[p1.Path] = p1
+	cli.SetRepository(mock)
+
+	// Set up mock waiting detector - not waiting
+	mockWD := &MockWaitingDetector{
+		isWaiting:       false,
+		waitingDuration: 0,
+	}
+	cli.SetWaitingDetector(mockWD)
+	defer cli.SetWaitingDetector(nil)
+
+	output, err := executeListCommand([]string{"--json"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	var response struct {
+		Projects []struct {
+			DisplayName            *string `json:"display_name"`
+			WaitingDurationMinutes *int    `json:"waiting_duration_minutes"`
+			Notes                  *string `json:"notes"`
+			IsWaiting              bool    `json:"is_waiting"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal([]byte(output), &response); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	proj := response.Projects[0]
+
+	// AC4/AC6: Nullable fields should be null when not set
+	if proj.DisplayName != nil {
+		t.Errorf("expected display_name to be null, got %v", proj.DisplayName)
+	}
+	if proj.Notes != nil {
+		t.Errorf("expected notes to be null, got %v", proj.Notes)
+	}
+	if proj.IsWaiting {
+		t.Error("expected is_waiting to be false")
+	}
+	if proj.WaitingDurationMinutes != nil {
+		t.Errorf("expected waiting_duration_minutes to be null, got %v", proj.WaitingDurationMinutes)
+	}
+}
+
+func TestList_JSON_APIVersionValidation(t *testing.T) {
+	mock := NewMockRepository()
+	cli.SetRepository(mock)
+
+	// Test AC3: v1 should be accepted
+	_, err := executeListCommand([]string{"--json", "--api-version=v1"})
+	if err != nil {
+		t.Fatalf("expected v1 to be accepted, got error: %v", err)
+	}
+
+	// Test AC3: invalid version should be rejected
+	_, err = executeListCommand([]string{"--json", "--api-version=v99"})
+	if err == nil {
+		t.Fatal("expected error for unsupported API version v99")
+	}
+	if !strings.Contains(err.Error(), "unsupported API version: v99") {
+		t.Errorf("expected 'unsupported API version: v99' error, got: %v", err)
+	}
+}
+
+func TestList_JSON_ConfidenceLevels(t *testing.T) {
+	tests := []struct {
+		name       string
+		confidence domain.Confidence
+		expected   string
+	}{
+		{"uncertain", domain.ConfidenceUncertain, "uncertain"},
+		{"likely", domain.ConfidenceLikely, "likely"},
+		{"certain", domain.ConfidenceCertain, "certain"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := NewMockRepository()
+			p1, _ := domain.NewProject("/path/to/test", "")
+			p1.Confidence = tt.confidence
+			mock.projects[p1.Path] = p1
+			cli.SetRepository(mock)
+
+			output, err := executeListCommand([]string{"--json"})
+			if err != nil {
+				t.Fatalf("expected no error, got: %v", err)
+			}
+
+			var response struct {
+				Projects []struct {
+					Confidence string `json:"confidence"`
+				} `json:"projects"`
+			}
+			if err := json.Unmarshal([]byte(output), &response); err != nil {
+				t.Fatalf("invalid JSON: %v", err)
+			}
+
+			if response.Projects[0].Confidence != tt.expected {
+				t.Errorf("expected confidence '%s', got '%s'", tt.expected, response.Projects[0].Confidence)
+			}
+		})
+	}
+}
+
+func TestList_JSON_WaitingDetectorNotSet(t *testing.T) {
+	mock := NewMockRepository()
+	p1, _ := domain.NewProject("/path/to/test", "")
+	mock.projects[p1.Path] = p1
+	cli.SetRepository(mock)
+
+	// Ensure waiting detector is nil
+	cli.SetWaitingDetector(nil)
+
+	output, err := executeListCommand([]string{"--json"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	var response struct {
+		Projects []struct {
+			IsWaiting              bool `json:"is_waiting"`
+			WaitingDurationMinutes *int `json:"waiting_duration_minutes"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal([]byte(output), &response); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// Should default to false/null when detector is nil
+	if response.Projects[0].IsWaiting {
+		t.Error("expected is_waiting to be false when detector is nil")
+	}
+	if response.Projects[0].WaitingDurationMinutes != nil {
+		t.Errorf("expected waiting_duration_minutes to be null when detector is nil, got %v", response.Projects[0].WaitingDurationMinutes)
+	}
+}
