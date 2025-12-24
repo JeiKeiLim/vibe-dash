@@ -24,8 +24,9 @@ Examples:
   vibe note my-project "Waiting on API specs"   # Set note
   vibe note my-project ""                        # Clear note
   vibe note my-project                           # View current note`,
-		Args: cobra.RangeArgs(1, 2),
-		RunE: runNote,
+		Args:              cobra.RangeArgs(1, 2),
+		ValidArgsFunction: projectCompletionFunc,
+		RunE:              runNote,
 	}
 }
 

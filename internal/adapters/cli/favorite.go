@@ -35,8 +35,9 @@ Favorited projects:
 Examples:
   vibe favorite my-project       # Toggle favorite status
   vibe favorite my-project --off # Remove favorite status`,
-		Args: cobra.ExactArgs(1),
-		RunE: runFavorite,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: projectCompletionFunc,
+		RunE:              runFavorite,
 	}
 
 	cmd.Flags().BoolVar(&favoriteOff, "off", false, "Remove favorite status (instead of toggle)")

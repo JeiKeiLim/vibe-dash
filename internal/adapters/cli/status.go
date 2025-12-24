@@ -52,8 +52,9 @@ Examples:
   vibe status /home/user/project    # By path
   vibe status client-alpha --json   # JSON output
   vibe status --all                 # All projects`,
-		Args: cobra.MaximumNArgs(1),
-		RunE: runStatus,
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: projectCompletionFunc,
+		RunE:              runStatus,
 	}
 
 	cmd.Flags().BoolVar(&statusJSON, "json", false, "Output as JSON")

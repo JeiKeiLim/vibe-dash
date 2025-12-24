@@ -39,8 +39,9 @@ Examples:
   vibe remove client-alpha          # Remove with confirmation
   vibe remove client-alpha --force  # Remove immediately
   vibe remove "My Project"          # Remove by display name`,
-		Args: cobra.ExactArgs(1),
-		RunE: runRemove,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: projectCompletionFunc,
+		RunE:              runRemove,
 	}
 
 	cmd.Flags().BoolVar(&removeForce, "force", false, "Remove without confirmation")

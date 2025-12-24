@@ -27,8 +27,9 @@ Scripting usage:
   else
     vibe add .
   fi`,
-		Args: cobra.ExactArgs(1),
-		RunE: runExists,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: projectCompletionFunc,
+		RunE:              runExists,
 	}
 
 	return cmd
