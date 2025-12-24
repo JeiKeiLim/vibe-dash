@@ -152,6 +152,8 @@ development_status:
   # - 7-8 through 7-12 are HIGH PRIORITY items from retro
   # - Address these BEFORE or alongside error handling stories
   # - G24 is blocking (dashboard shows "Unknown status" for deferred epics)
+  # - REFERENCE: docs/sprint-artifacts/retrospectives/epic-6-retro-2025-12-25.md
+  #   Contains: problem details, decisions made, implementation approach
   epic-7: backlog
   7-1-file-watcher-error-recovery: backlog
   7-2-configuration-error-handling: backlog
@@ -161,11 +163,13 @@ development_status:
   7-6-feedback-messages-polish: backlog
   7-7-graceful-shutdown: backlog
   # Epic 6 Retro Action Items (HIGH PRIORITY)
-  7-8-g24-deferred-epic-stage-detection: backlog  # BLOCKING: Skip deferred epics, normalize LLM variations
-  7-9-g23-retrospective-stage-detection: backlog  # Show meaningful stage when retro in-progress
-  7-10-m2-shared-test-helpers-package: backlog    # 6th carry-forward, finally prioritized
-  7-11-m3-shared-styles-package: backlog          # 6th carry-forward, finally prioritized
-  7-12-dry-refactor-findprojectbyidentifier: backlog  # favorite.go, note.go should reuse from status.go
+  # MUST READ: docs/sprint-artifacts/retrospectives/epic-6-retro-2025-12-25.md
+  # Section "New Issues Identified" for G24, "Action Items" for all decisions
+  7-8-g24-deferred-epic-stage-detection: backlog  # BLOCKING: Skip deferred, normalize variations (deferred/Deferred/deferred-post-mvp/etc). See normalizeStatus() in 4.6.3 for pattern.
+  7-9-g23-retrospective-stage-detection: backlog  # From Epic 4.6 retro. Show "Retrospective in progress" when all done but retro running.
+  7-10-m2-shared-test-helpers-package: backlog    # 6th carry-forward. Extract common test patterns to shared package.
+  7-11-m3-shared-styles-package: backlog          # 6th carry-forward. Extract lipgloss styles to shared package.
+  7-12-dry-refactor-findprojectbyidentifier: backlog  # favorite.go:69-81, note.go:45-57 duplicate status.go:79-114 pattern. Refactor to reuse.
   epic-7-retrospective: optional
 
   # Epic 8: UX Polish
