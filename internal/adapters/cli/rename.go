@@ -93,7 +93,9 @@ func runRename(cmd *cobra.Command, args []string) error {
 	if clearMode {
 		if proj.DisplayName == "" {
 			// Already empty - idempotent success (AC8)
-			fmt.Fprintf(cmd.OutOrStdout(), "☆ %s has no display name\n", proj.Name)
+			if !IsQuiet() {
+				fmt.Fprintf(cmd.OutOrStdout(), "☆ %s has no display name\n", proj.Name)
+			}
 			return nil
 		}
 		proj.DisplayName = ""
@@ -103,7 +105,9 @@ func runRename(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to save display name: %w", err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "✓ Cleared display name: %s\n", proj.Name)
+		if !IsQuiet() {
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Cleared display name: %s\n", proj.Name)
+		}
 		return nil
 	}
 
@@ -115,6 +119,8 @@ func runRename(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to save display name: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "✓ Renamed: %s → %s\n", proj.Name, newDisplayName)
+	if !IsQuiet() {
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Renamed: %s → %s\n", proj.Name, newDisplayName)
+	}
 	return nil
 }

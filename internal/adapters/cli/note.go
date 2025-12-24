@@ -92,10 +92,12 @@ func runNote(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to save note: %w", err)
 	}
 
-	if newNote == "" {
-		fmt.Fprintln(cmd.OutOrStdout(), "✓ Note cleared")
-	} else {
-		fmt.Fprintln(cmd.OutOrStdout(), "✓ Note saved")
+	if !IsQuiet() {
+		if newNote == "" {
+			fmt.Fprintln(cmd.OutOrStdout(), "✓ Note cleared")
+		} else {
+			fmt.Fprintln(cmd.OutOrStdout(), "✓ Note saved")
+		}
 	}
 
 	return nil

@@ -94,7 +94,9 @@ func runFavorite(cmd *cobra.Command, args []string) error {
 		// Explicit --off: remove favorite
 		if !targetProject.IsFavorite {
 			// Already not favorited - idempotent success (AC5)
-			fmt.Fprintf(cmd.OutOrStdout(), "☆ %s is not favorited\n", projectName)
+			if !IsQuiet() {
+				fmt.Fprintf(cmd.OutOrStdout(), "☆ %s is not favorited\n", projectName)
+			}
 			return nil
 		}
 		newFavorite = false
@@ -111,11 +113,13 @@ func runFavorite(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to save favorite status: %w", err)
 	}
 
-	// Success output
-	if newFavorite {
-		fmt.Fprintf(cmd.OutOrStdout(), "⭐ Favorited: %s\n", projectName)
-	} else {
-		fmt.Fprintf(cmd.OutOrStdout(), "☆ Unfavorited: %s\n", projectName)
+	// Success output (suppressed in quiet mode)
+	if !IsQuiet() {
+		if newFavorite {
+			fmt.Fprintf(cmd.OutOrStdout(), "⭐ Favorited: %s\n", projectName)
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "☆ Unfavorited: %s\n", projectName)
+		}
 	}
 
 	return nil

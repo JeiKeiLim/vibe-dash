@@ -203,15 +203,17 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to save project: %w", err)
 	}
 
-	// Success output
-	displayName := project.Name
-	if project.DisplayName != "" {
-		displayName = project.DisplayName
-	}
-	fmt.Fprintf(cmd.OutOrStdout(), "✓ Added: %s\n", displayName)
-	fmt.Fprintf(cmd.OutOrStdout(), "  Path: %s\n", canonicalPath)
-	if project.DetectedMethod != "" && project.DetectedMethod != "unknown" {
-		fmt.Fprintf(cmd.OutOrStdout(), "  Method: %s (%s)\n", project.DetectedMethod, project.CurrentStage)
+	// Success output (suppressed in quiet mode)
+	if !IsQuiet() {
+		displayName := project.Name
+		if project.DisplayName != "" {
+			displayName = project.DisplayName
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Added: %s\n", displayName)
+		fmt.Fprintf(cmd.OutOrStdout(), "  Path: %s\n", canonicalPath)
+		if project.DetectedMethod != "" && project.DetectedMethod != "unknown" {
+			fmt.Fprintf(cmd.OutOrStdout(), "  Method: %s (%s)\n", project.DetectedMethod, project.CurrentStage)
+		}
 	}
 
 	return nil

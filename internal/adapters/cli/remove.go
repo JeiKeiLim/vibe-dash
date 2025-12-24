@@ -140,7 +140,9 @@ func runRemove(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "✓ Removed: %s\n", displayName)
+	if !IsQuiet() {
+		fmt.Fprintf(cmd.OutOrStdout(), "✓ Removed: %s\n", displayName)
+	}
 	return nil
 }
 

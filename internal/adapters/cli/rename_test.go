@@ -477,3 +477,111 @@ func TestRenameCmd_HelpText(t *testing.T) {
 		t.Error("help text missing short description")
 	}
 }
+
+// ============================================================================
+// Story 6.7: Quiet Mode Tests
+// ============================================================================
+
+func TestRenameCmd_QuietMode_SetDisplayName(t *testing.T) {
+	projects := []*domain.Project{
+		{ID: "1", Path: "/test", Name: "test-project", DisplayName: ""},
+	}
+	mockRepo := newRenameMockRepository().withProjects(projects)
+	cli.SetRepository(mockRepo)
+
+	cli.ResetRenameFlags()
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true)
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterRenameCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"rename", "test-project", "New Name"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := buf.String()
+	if output != "" {
+		t.Errorf("expected empty output with --quiet, got: %s", output)
+	}
+
+	// Verify display name was set
+	if projects[0].DisplayName != "New Name" {
+		t.Errorf("expected display name 'New Name', got: %s", projects[0].DisplayName)
+	}
+}
+
+func TestRenameCmd_QuietMode_ClearDisplayName(t *testing.T) {
+	projects := []*domain.Project{
+		{ID: "1", Path: "/test", Name: "test-project", DisplayName: "Existing Name"},
+	}
+	mockRepo := newRenameMockRepository().withProjects(projects)
+	cli.SetRepository(mockRepo)
+
+	cli.ResetRenameFlags()
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true)
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterRenameCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"rename", "test-project", "--clear"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := buf.String()
+	if output != "" {
+		t.Errorf("expected empty output with --quiet, got: %s", output)
+	}
+
+	// Verify display name was cleared
+	if projects[0].DisplayName != "" {
+		t.Errorf("expected display name cleared, got: %s", projects[0].DisplayName)
+	}
+}
+
+func TestRenameCmd_QuietMode_IdempotentClear(t *testing.T) {
+	// Idempotent clear should also be quiet
+	projects := []*domain.Project{
+		{ID: "1", Path: "/test", Name: "test-project", DisplayName: ""},
+	}
+	mockRepo := newRenameMockRepository().withProjects(projects)
+	cli.SetRepository(mockRepo)
+
+	cli.ResetRenameFlags()
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true)
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterRenameCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"rename", "test-project", "--clear"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := buf.String()
+	if output != "" {
+		t.Errorf("expected empty output with --quiet (idempotent clear), got: %s", output)
+	}
+}

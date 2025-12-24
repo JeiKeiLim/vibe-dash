@@ -501,3 +501,82 @@ func TestRemove_NoDirectoryManagerIsGraceful(t *testing.T) {
 		t.Error("expected project to be removed from repository")
 	}
 }
+
+// ============================================================================
+// Story 6.7: Quiet Mode Tests
+// ============================================================================
+
+func TestRemove_QuietMode_SuppressesOutput(t *testing.T) {
+	// AC3: remove with --quiet --force produces no output
+	mock := NewMockRepository()
+	p, _ := domain.NewProject("/path/to/test-project", "")
+	mock.projects[p.Path] = p
+	cli.SetRepository(mock)
+
+	cli.ResetRemoveFlags()
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true)
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterRemoveCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"remove", "test-project", "--force"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// Verify output is empty (quiet mode)
+	output := buf.String()
+	if output != "" {
+		t.Errorf("expected empty output with --quiet --force, got: %s", output)
+	}
+
+	// Verify project was still removed
+	if len(mock.projects) != 0 {
+		t.Error("expected project to be deleted from repository")
+	}
+}
+
+func TestRemove_QuietMode_ForceRequired(t *testing.T) {
+	// AC6: Combined --force --quiet works together
+	mock := NewMockRepository()
+	p, _ := domain.NewProject("/path/to/test-project", "")
+	mock.projects[p.Path] = p
+	cli.SetRepository(mock)
+
+	cli.ResetRemoveFlags()
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true)
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterRemoveCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"remove", "test-project", "--force"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	// Should be completely silent
+	if output != "" {
+		t.Errorf("AC6: expected empty output with combined --force --quiet, got: %s", output)
+	}
+
+	// Exit code should be 0
+	exitCode := cli.MapErrorToExitCode(err)
+	if exitCode != cli.ExitSuccess {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+}

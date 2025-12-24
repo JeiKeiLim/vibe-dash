@@ -10,6 +10,7 @@ import (
 var (
 	verbose          bool
 	debug            bool
+	quiet            bool
 	configFile       string
 	waitingThreshold int // -1 = use config, 0 = disabled, >0 = threshold in minutes
 )
@@ -17,6 +18,7 @@ var (
 func init() {
 	RootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 	RootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logging with file/line info")
+	RootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "Suppress non-error output")
 	RootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "Config file path (default: ~/.vibe-dash/config.yaml)")
 	RootCmd.PersistentFlags().IntVar(&waitingThreshold, "waiting-threshold", -1,
 		"Override agent waiting threshold in minutes (0 to disable, -1 to use config)")
@@ -66,4 +68,23 @@ func GetWaitingThreshold() int {
 		return -1
 	}
 	return waitingThreshold
+}
+
+// IsQuiet returns true if --quiet flag is set.
+// When quiet mode is active, success messages are suppressed.
+// Errors still go to stderr regardless of this setting.
+func IsQuiet() bool {
+	return quiet
+}
+
+// ResetQuietFlag resets the quiet flag for testing.
+// Call this before each test to ensure clean state.
+func ResetQuietFlag() {
+	quiet = false
+}
+
+// SetQuietForTest sets the quiet flag for testing.
+// Used by external test packages to test quiet mode behavior.
+func SetQuietForTest(q bool) {
+	quiet = q
 }

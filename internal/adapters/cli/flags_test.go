@@ -287,3 +287,87 @@ func TestWaitingThresholdFlagInHelpOutput(t *testing.T) {
 		t.Errorf("Help output missing flag --waiting-threshold")
 	}
 }
+
+func TestQuietFlag(t *testing.T) {
+	resetTestState()
+
+	buf := new(bytes.Buffer)
+	RootCmd.SetOut(buf)
+	RootCmd.SetErr(buf)
+	RootCmd.SetArgs([]string{"--quiet", "--help"})
+
+	if err := RootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !quiet {
+		t.Error("--quiet flag should set quiet = true")
+	}
+}
+
+func TestQuietFlagShorthand(t *testing.T) {
+	resetTestState()
+
+	buf := new(bytes.Buffer)
+	RootCmd.SetOut(buf)
+	RootCmd.SetErr(buf)
+	RootCmd.SetArgs([]string{"-q", "--help"})
+
+	if err := RootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if !quiet {
+		t.Error("-q flag should set quiet = true")
+	}
+}
+
+func TestIsQuiet(t *testing.T) {
+	tests := []struct {
+		name     string
+		quietVal bool
+		expected bool
+	}{
+		{"not set", false, false},
+		{"set", true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetTestState()
+			quiet = tt.quietVal
+
+			got := IsQuiet()
+			if got != tt.expected {
+				t.Errorf("IsQuiet() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestResetQuietFlag(t *testing.T) {
+	quiet = true
+	ResetQuietFlag()
+	if quiet {
+		t.Error("ResetQuietFlag() should set quiet = false")
+	}
+}
+
+func TestQuietFlagInHelpOutput(t *testing.T) {
+	buf := new(bytes.Buffer)
+	RootCmd.SetOut(buf)
+	RootCmd.SetErr(buf)
+	RootCmd.SetArgs([]string{"--help"})
+
+	if err := RootCmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	output := buf.String()
+	expectedFlags := []string{"--quiet", "-q"}
+	for _, flag := range expectedFlags {
+		if !strings.Contains(output, flag) {
+			t.Errorf("Help output missing flag %q", flag)
+		}
+	}
+}

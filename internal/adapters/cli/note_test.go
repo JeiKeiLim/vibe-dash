@@ -395,3 +395,77 @@ func TestNoteCmd_SpecialCharacters(t *testing.T) {
 		t.Errorf("expected note with special chars, got: %s", projects[0].Notes)
 	}
 }
+
+// ============================================================================
+// Story 6.7: Quiet Mode Tests
+// ============================================================================
+
+func TestNoteCmd_QuietMode_SetNote(t *testing.T) {
+	projects := []*domain.Project{
+		{ID: "1", Path: "/test", Name: "test-project", Notes: ""},
+	}
+	mockRepo := newNoteMockRepository().withProjects(projects)
+	cli.SetRepository(mockRepo)
+
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true)
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterNoteCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"note", "test-project", "new note"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := buf.String()
+	if output != "" {
+		t.Errorf("expected empty output with --quiet, got: %s", output)
+	}
+
+	// Verify note was still saved
+	if projects[0].Notes != "new note" {
+		t.Errorf("expected note to be saved, got: %s", projects[0].Notes)
+	}
+}
+
+func TestNoteCmd_QuietMode_ClearNote(t *testing.T) {
+	projects := []*domain.Project{
+		{ID: "1", Path: "/test", Name: "test-project", Notes: "existing note"},
+	}
+	mockRepo := newNoteMockRepository().withProjects(projects)
+	cli.SetRepository(mockRepo)
+
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true)
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterNoteCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"note", "test-project", ""})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := buf.String()
+	if output != "" {
+		t.Errorf("expected empty output with --quiet, got: %s", output)
+	}
+
+	// Verify note was cleared
+	if projects[0].Notes != "" {
+		t.Errorf("expected note to be cleared, got: %s", projects[0].Notes)
+	}
+}

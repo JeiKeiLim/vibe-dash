@@ -1218,3 +1218,169 @@ func TestAdd_DisplayNameCollision(t *testing.T) {
 		t.Error("expected project to be saved")
 	}
 }
+
+// ============================================================================
+// Story 6.7: Quiet Mode Tests
+// ============================================================================
+
+func TestAdd_QuietMode_SuppressesOutput(t *testing.T) {
+	mock := NewMockRepository()
+	cli.SetRepository(mock)
+	cli.SetDetectionService(nil)
+
+	tmpDir := t.TempDir()
+
+	// Execute add command with --quiet
+	cli.ResetAddFlags()
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true) // Set quiet mode
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterAddCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"add", tmpDir})
+
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// Verify output is empty (quiet mode)
+	output := buf.String()
+	if output != "" {
+		t.Errorf("expected empty output with --quiet, got: %s", output)
+	}
+
+	// Verify project was still saved
+	if len(mock.projects) != 1 {
+		t.Errorf("expected 1 project saved, got %d", len(mock.projects))
+	}
+}
+
+func TestAdd_QuietMode_GlobalFlagPosition(t *testing.T) {
+	// Test AC8: vibe -q add . (global flag BEFORE subcommand)
+	mock := NewMockRepository()
+	cli.SetRepository(mock)
+	cli.SetDetectionService(nil)
+
+	tmpDir := t.TempDir()
+
+	cli.ResetAddFlags()
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true) // Simulates -q flag before subcommand
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterAddCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"add", tmpDir})
+
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	if output != "" {
+		t.Errorf("AC8: global -q before subcommand should suppress output, got: %s", output)
+	}
+}
+
+func TestAdd_QuietMode_WithForce(t *testing.T) {
+	// Test quiet mode combined with force flag on name collision
+	baseDir := t.TempDir()
+	clientADir := filepath.Join(baseDir, "client-a", "api-service")
+	clientBDir := filepath.Join(baseDir, "client-b", "api-service")
+
+	if err := os.MkdirAll(clientADir, 0755); err != nil {
+		t.Fatalf("failed to create client-a dir: %v", err)
+	}
+	if err := os.MkdirAll(clientBDir, 0755); err != nil {
+		t.Fatalf("failed to create client-b dir: %v", err)
+	}
+
+	canonicalA, _ := filepath.EvalSymlinks(clientADir)
+	canonicalB, _ := filepath.EvalSymlinks(clientBDir)
+
+	mock := NewMockRepository()
+	existingProject, _ := domain.NewProject(canonicalA, "")
+	mock.projects[canonicalA] = existingProject
+	cli.SetRepository(mock)
+	cli.SetDetectionService(nil)
+
+	cli.ResetAddFlags()
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true) // Set quiet mode
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterAddCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+
+	cmd.SetArgs([]string{"add", "--force", clientBDir})
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Fatalf("expected no error with --quiet --force, got: %v", err)
+	}
+
+	output := buf.String()
+	// Should have no output at all
+	if output != "" {
+		t.Errorf("expected empty output with --quiet --force, got: %s", output)
+	}
+
+	// Verify project was saved with disambiguated name
+	if saved, ok := mock.projects[canonicalB]; ok {
+		if saved.DisplayName == "" || saved.DisplayName == "api-service" {
+			t.Errorf("expected auto-disambiguated DisplayName, got: %s", saved.DisplayName)
+		}
+	} else {
+		t.Error("expected project to be saved")
+	}
+}
+
+func TestAdd_QuietMode_ErrorsStillReturned(t *testing.T) {
+	// AC7: Errors are still returned even in quiet mode
+	mock := NewMockRepository()
+	cli.SetRepository(mock)
+	cli.SetDetectionService(nil)
+
+	cli.ResetAddFlags()
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true)
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterAddCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"add", "/nonexistent/path"})
+
+	err := cmd.Execute()
+
+	// Error should still be returned
+	if err == nil {
+		t.Fatal("expected error for nonexistent path")
+	}
+
+	// Exit code should be non-zero
+	exitCode := cli.MapErrorToExitCode(err)
+	if exitCode == cli.ExitSuccess {
+		t.Errorf("expected non-zero exit code, got %d", exitCode)
+	}
+}

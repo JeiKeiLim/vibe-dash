@@ -351,3 +351,111 @@ func TestFavoriteCmd_SaveError(t *testing.T) {
 		t.Errorf("expected 'failed to save' error, got: %v", err)
 	}
 }
+
+// ============================================================================
+// Story 6.7: Quiet Mode Tests
+// ============================================================================
+
+func TestFavoriteCmd_QuietMode_ToggleOn(t *testing.T) {
+	projects := []*domain.Project{
+		{ID: "1", Path: "/test", Name: "test-project", IsFavorite: false},
+	}
+	mockRepo := newFavoriteMockRepository().withProjects(projects)
+	cli.SetRepository(mockRepo)
+
+	cli.ResetFavoriteFlags()
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true)
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterFavoriteCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"favorite", "test-project"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := buf.String()
+	if output != "" {
+		t.Errorf("expected empty output with --quiet, got: %s", output)
+	}
+
+	// Verify favorite was set
+	if !projects[0].IsFavorite {
+		t.Error("expected project to be favorited")
+	}
+}
+
+func TestFavoriteCmd_QuietMode_ToggleOff(t *testing.T) {
+	projects := []*domain.Project{
+		{ID: "1", Path: "/test", Name: "test-project", IsFavorite: true},
+	}
+	mockRepo := newFavoriteMockRepository().withProjects(projects)
+	cli.SetRepository(mockRepo)
+
+	cli.ResetFavoriteFlags()
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true)
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterFavoriteCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"favorite", "test-project"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := buf.String()
+	if output != "" {
+		t.Errorf("expected empty output with --quiet, got: %s", output)
+	}
+
+	// Verify favorite was toggled off
+	if projects[0].IsFavorite {
+		t.Error("expected project to be unfavorited")
+	}
+}
+
+func TestFavoriteCmd_QuietMode_IdempotentOff(t *testing.T) {
+	// Idempotent off should also be quiet
+	projects := []*domain.Project{
+		{ID: "1", Path: "/test", Name: "test-project", IsFavorite: false},
+	}
+	mockRepo := newFavoriteMockRepository().withProjects(projects)
+	cli.SetRepository(mockRepo)
+
+	cli.ResetFavoriteFlags()
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true)
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterFavoriteCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"favorite", "test-project", "--off"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := buf.String()
+	if output != "" {
+		t.Errorf("expected empty output with --quiet (idempotent off), got: %s", output)
+	}
+}
