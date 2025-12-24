@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-24
-updated_by: Dev Agent - Story 6-3 code review passed, marked done
+updated_by: Dev Agent - Story 6-4 code reviewed and fixed, marked done
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -140,7 +140,7 @@ development_status:
   6-1-json-output-format: done
   6-2-project-status-command: done
   6-3-exit-codes: done
-  6-4-project-exists-check: backlog
+  6-4-project-exists-check: done
   6-5-rename-project-command: backlog
   6-6-shell-completion: backlog
   6-7-quiet-and-force-flags: backlog

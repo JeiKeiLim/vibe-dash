@@ -49,7 +49,10 @@ func main() {
 
 	// Run application with cancellable context
 	if err := run(ctx); err != nil {
-		slog.Error("application error", "error", err)
+		// Only log if not a silent error (e.g., "exists" command uses exit codes only)
+		if !cli.IsSilentError(err) {
+			slog.Error("application error", "error", err)
+		}
 		os.Exit(cli.MapErrorToExitCode(err))
 	}
 }

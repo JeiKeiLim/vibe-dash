@@ -95,3 +95,60 @@ func TestExitCodeDescription(t *testing.T) {
 		})
 	}
 }
+
+func TestSilentError(t *testing.T) {
+	t.Run("wraps and unwraps error", func(t *testing.T) {
+		inner := domain.ErrProjectNotFound
+		silent := &SilentError{Err: inner}
+
+		// Error() should delegate to inner
+		if silent.Error() != inner.Error() {
+			t.Errorf("Error() = %q, want %q", silent.Error(), inner.Error())
+		}
+
+		// Unwrap() should return inner
+		if silent.Unwrap() != inner {
+			t.Errorf("Unwrap() = %v, want %v", silent.Unwrap(), inner)
+		}
+	})
+
+	t.Run("errors.Is works through SilentError", func(t *testing.T) {
+		silent := &SilentError{Err: fmt.Errorf("context: %w", domain.ErrProjectNotFound)}
+
+		if !errors.Is(silent, domain.ErrProjectNotFound) {
+			t.Error("errors.Is should find ErrProjectNotFound through SilentError")
+		}
+	})
+
+	t.Run("MapErrorToExitCode works through SilentError", func(t *testing.T) {
+		silent := &SilentError{Err: domain.ErrProjectNotFound}
+
+		got := MapErrorToExitCode(silent)
+		if got != ExitProjectNotFound {
+			t.Errorf("MapErrorToExitCode(SilentError) = %d, want %d", got, ExitProjectNotFound)
+		}
+	})
+}
+
+func TestIsSilentError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{"nil error", nil, false},
+		{"regular error", errors.New("regular"), false},
+		{"domain error", domain.ErrProjectNotFound, false},
+		{"silent error", &SilentError{Err: errors.New("silent")}, true},
+		{"wrapped silent error", fmt.Errorf("wrap: %w", &SilentError{Err: errors.New("inner")}), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsSilentError(tt.err)
+			if got != tt.expected {
+				t.Errorf("IsSilentError(%v) = %v, want %v", tt.err, got, tt.expected)
+			}
+		})
+	}
+}

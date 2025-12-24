@@ -15,6 +15,26 @@ const (
 	ExitDetectionFailed = 4
 )
 
+// SilentError wraps an error to signal that it should not be logged.
+// Used by commands like "exists" that communicate only via exit codes.
+type SilentError struct {
+	Err error
+}
+
+func (e *SilentError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *SilentError) Unwrap() error {
+	return e.Err
+}
+
+// IsSilentError checks if an error should be silently handled (no logging).
+func IsSilentError(err error) bool {
+	var silent *SilentError
+	return errors.As(err, &silent)
+}
+
 // ExitCodeDescription returns a human-readable description for an exit code.
 // Used for programmatic access to exit code meanings.
 func ExitCodeDescription(code int) string {
