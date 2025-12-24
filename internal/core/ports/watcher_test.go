@@ -97,6 +97,11 @@ func (m *mockWatcher) Close() error {
 	return nil
 }
 
+// GetFailedPaths implements ports.FileWatcher (Story 7.1).
+func (m *mockWatcher) GetFailedPaths() []string {
+	return nil // Mock always succeeds
+}
+
 // Compile-time interface compliance check
 var _ ports.FileWatcher = (*mockWatcher)(nil)
 

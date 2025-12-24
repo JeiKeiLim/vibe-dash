@@ -34,6 +34,9 @@ type FsnotifyWatcher struct {
 	// Debounce state
 	timer   *time.Timer
 	pending map[string]ports.FileEvent
+
+	// Story 7.1: Failed path tracking for graceful degradation
+	failedPaths []string
 }
 
 // NewFsnotifyWatcher creates a new FsnotifyWatcher with the specified debounce duration.
@@ -77,6 +80,9 @@ func (w *FsnotifyWatcher) Watch(ctx context.Context, paths []string) (<-chan por
 		return nil, fmt.Errorf("%w: failed to create fsnotify watcher: %v", domain.ErrPathNotAccessible, err)
 	}
 
+	// Story 7.1: Reset failed paths for new watch session
+	w.failedPaths = nil
+
 	// Add all paths to watcher
 	validPaths := 0
 	for _, path := range paths {
@@ -84,11 +90,13 @@ func (w *FsnotifyWatcher) Watch(ctx context.Context, paths []string) (<-chan por
 		canonical, err := CanonicalPath(path)
 		if err != nil {
 			slog.Error("failed to resolve path", "path", path, "error", err)
+			w.failedPaths = append(w.failedPaths, path)
 			continue
 		}
 
 		if err := fsWatcher.Add(canonical); err != nil {
 			slog.Error("failed to watch path", "path", canonical, "error", err)
+			w.failedPaths = append(w.failedPaths, canonical)
 			continue
 		}
 		validPaths++
@@ -114,6 +122,21 @@ func (w *FsnotifyWatcher) Watch(ctx context.Context, paths []string) (<-chan por
 	go w.eventLoop(ctx, out)
 
 	return out, nil
+}
+
+// GetFailedPaths returns the list of paths that failed to watch (Story 7.1).
+// Returns nil if all paths were successfully watched.
+// Thread-safe.
+func (w *FsnotifyWatcher) GetFailedPaths() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.failedPaths) == 0 {
+		return nil
+	}
+	// Return a copy to prevent external modification
+	result := make([]string, len(w.failedPaths))
+	copy(result, w.failedPaths)
+	return result
 }
 
 // Close stops watching and releases all resources.

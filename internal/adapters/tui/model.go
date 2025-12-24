@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -175,6 +176,13 @@ type fileEventMsg struct {
 // fileWatcherErrorMsg signals a file watcher error (Story 4.6).
 type fileWatcherErrorMsg struct {
 	err error
+}
+
+// watcherWarningMsg signals partial file watcher failures (Story 7.1).
+// Sent when some (but not all) paths fail to watch during startup.
+type watcherWarningMsg struct {
+	failedPaths []string
+	totalPaths  int
 }
 
 // NewModel creates a new Model with default values.
@@ -530,6 +538,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.eventCh = eventCh
 					// Epic 4 Hotfix H3: Log when file watcher starts successfully
 					slog.Debug("file watcher started", "project_count", len(paths))
+
+					// Story 7.1: Check for partial failures and emit warning
+					failedPaths := m.fileWatcher.GetFailedPaths()
+					if len(failedPaths) > 0 {
+						return m, tea.Batch(
+							m.waitForNextFileEventCmd(),
+							func() tea.Msg {
+								return watcherWarningMsg{
+									failedPaths: failedPaths,
+									totalPaths:  len(paths),
+								}
+							},
+						)
+					}
 					return m, m.waitForNextFileEventCmd()
 				}
 			}
@@ -547,6 +569,58 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.refreshError = ""
 		m.statusBar.SetRefreshComplete(fmt.Sprintf("Refreshed %d projects", msg.refreshedCount))
+
+		// Story 7.1 AC3: Attempt watcher recovery if it was previously unavailable
+		if !m.fileWatcherAvailable && m.fileWatcher != nil && len(m.projects) > 0 {
+			paths := make([]string, len(m.projects))
+			for i, p := range m.projects {
+				paths[i] = p.Path
+			}
+
+			// Cancel old context if any
+			if m.watchCancel != nil {
+				m.watchCancel()
+			}
+
+			m.watchCtx, m.watchCancel = context.WithCancel(context.Background())
+			eventCh, err := m.fileWatcher.Watch(m.watchCtx, paths)
+			if err == nil {
+				m.fileWatcherAvailable = true
+				m.eventCh = eventCh
+				m.statusBar.SetWatcherWarning("") // Clear warning on successful recovery
+				slog.Debug("file watcher recovered on refresh")
+
+				// Check for partial failures
+				failedPaths := m.fileWatcher.GetFailedPaths()
+				if len(failedPaths) > 0 {
+					// Partial recovery - still some failures
+					return m, tea.Batch(
+						m.loadProjectsCmd(),
+						tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+							return clearRefreshMsgMsg{}
+						}),
+						m.waitForNextFileEventCmd(),
+						func() tea.Msg {
+							return watcherWarningMsg{
+								failedPaths: failedPaths,
+								totalPaths:  len(paths),
+							}
+						},
+					)
+				}
+
+				return m, tea.Batch(
+					m.loadProjectsCmd(),
+					tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+						return clearRefreshMsgMsg{}
+					}),
+					m.waitForNextFileEventCmd(),
+				)
+			}
+			// Recovery failed - keep watcher as unavailable
+			slog.Debug("file watcher recovery failed", "error", err)
+		}
+
 		// Reload projects and start timer to clear message
 		return m, tea.Batch(
 			m.loadProjectsCmd(),
@@ -690,6 +764,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		slog.Warn("file watcher error", "error", msg.err)
 		m.fileWatcherAvailable = false
 		m.statusBar.SetWatcherWarning("⚠️ File watching unavailable")
+		return m, nil
+
+	case watcherWarningMsg:
+		// Story 7.1: Handle partial file watcher failures (AC1, AC2)
+		if len(msg.failedPaths) > 0 && len(msg.failedPaths) < msg.totalPaths {
+			// Partial failure - show first failed project name (AC1)
+			// Code review fix M1: Show count if multiple failures
+			warningText := fmt.Sprintf("⚠ File watching unavailable for: %s", filepath.Base(msg.failedPaths[0]))
+			if len(msg.failedPaths) > 1 {
+				warningText += fmt.Sprintf(" (+%d more)", len(msg.failedPaths)-1)
+			}
+			m.statusBar.SetWatcherWarning(warningText)
+		} else if len(msg.failedPaths) == msg.totalPaths {
+			// Complete failure (AC2)
+			m.statusBar.SetWatcherWarning("⚠ File watching unavailable. Use [r] to refresh.")
+			m.fileWatcherAvailable = false
+		}
 		return m, nil
 	}
 

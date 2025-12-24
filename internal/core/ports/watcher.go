@@ -72,6 +72,11 @@ type FileWatcher interface {
 	// Events may be coalesced/debounced according to implementation settings.
 	Watch(ctx context.Context, paths []string) (<-chan FileEvent, error)
 
+	// GetFailedPaths returns paths that failed during Watch() (Story 7.1).
+	// Returns nil if all paths were successfully watched.
+	// Used for graceful degradation with partial watch failures.
+	GetFailedPaths() []string
+
 	// Close stops watching and releases all resources.
 	// The event channel returned by Watch will be closed.
 	// Close is idempotent - calling it multiple times is safe.

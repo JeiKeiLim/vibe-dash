@@ -644,3 +644,169 @@ func TestFsnotifyWatcher_RemovePath_NotRunning(t *testing.T) {
 		t.Error("expected error when RemovePath called on non-running watcher")
 	}
 }
+
+// =============================================================================
+// Story 7.1: Failed Path Tracking Tests
+// =============================================================================
+
+// TestFsnotifyWatcher_GetFailedPaths_NoFailures tests GetFailedPaths with all valid paths.
+func TestFsnotifyWatcher_GetFailedPaths_NoFailures(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	w := NewFsnotifyWatcher(100 * time.Millisecond)
+	defer w.Close()
+
+	ctx := context.Background()
+	_, err := w.Watch(ctx, []string{tmpDir})
+	if err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+
+	// No failures expected
+	failedPaths := w.GetFailedPaths()
+	if len(failedPaths) != 0 {
+		t.Errorf("expected no failed paths, got %v", failedPaths)
+	}
+}
+
+// TestFsnotifyWatcher_GetFailedPaths_AllInvalid tests GetFailedPaths when all paths fail.
+func TestFsnotifyWatcher_GetFailedPaths_AllInvalid(t *testing.T) {
+	w := NewFsnotifyWatcher(100 * time.Millisecond)
+	defer w.Close()
+
+	ctx := context.Background()
+	invalidPaths := []string{"/non/existent/path1", "/non/existent/path2"}
+	_, err := w.Watch(ctx, invalidPaths)
+
+	// Should return error when all paths fail
+	if err == nil {
+		t.Fatal("expected error when all paths are invalid")
+	}
+
+	// Failed paths should be tracked
+	failedPaths := w.GetFailedPaths()
+	if len(failedPaths) != 2 {
+		t.Errorf("expected 2 failed paths, got %d: %v", len(failedPaths), failedPaths)
+	}
+}
+
+// TestFsnotifyWatcher_GetFailedPaths_PartialFailure tests GetFailedPaths with mixed paths.
+func TestFsnotifyWatcher_GetFailedPaths_PartialFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	w := NewFsnotifyWatcher(100 * time.Millisecond)
+	defer w.Close()
+
+	ctx := context.Background()
+	mixedPaths := []string{tmpDir, "/non/existent/path", "/another/invalid/path"}
+	_, err := w.Watch(ctx, mixedPaths)
+
+	// Should succeed with partial failure (1 valid path)
+	if err != nil {
+		t.Fatalf("Watch failed with partial valid paths: %v", err)
+	}
+
+	// Should have 2 failed paths
+	failedPaths := w.GetFailedPaths()
+	if len(failedPaths) != 2 {
+		t.Errorf("expected 2 failed paths, got %d: %v", len(failedPaths), failedPaths)
+	}
+}
+
+// TestFsnotifyWatcher_GetFailedPaths_ResetOnNewWatch tests that failed paths are reset on new Watch.
+func TestFsnotifyWatcher_GetFailedPaths_ResetOnNewWatch(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	w := NewFsnotifyWatcher(100 * time.Millisecond)
+	defer w.Close()
+
+	ctx := context.Background()
+
+	// First watch with mixed paths
+	mixedPaths := []string{tmpDir, "/non/existent/path"}
+	_, err := w.Watch(ctx, mixedPaths)
+	if err != nil {
+		t.Fatalf("First Watch failed: %v", err)
+	}
+
+	failedPaths1 := w.GetFailedPaths()
+	if len(failedPaths1) != 1 {
+		t.Errorf("expected 1 failed path after first watch, got %d", len(failedPaths1))
+	}
+
+	// Close and recreate watcher (simulate recovery)
+	w.Close()
+	w = NewFsnotifyWatcher(100 * time.Millisecond)
+
+	// Second watch with all valid paths
+	_, err = w.Watch(ctx, []string{tmpDir})
+	if err != nil {
+		t.Fatalf("Second Watch failed: %v", err)
+	}
+
+	// Should have no failed paths now
+	failedPaths2 := w.GetFailedPaths()
+	if len(failedPaths2) != 0 {
+		t.Errorf("expected no failed paths after second watch, got %d", len(failedPaths2))
+	}
+}
+
+// TestFsnotifyWatcher_GetFailedPaths_ThreadSafe tests concurrent access to GetFailedPaths.
+func TestFsnotifyWatcher_GetFailedPaths_ThreadSafe(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	w := NewFsnotifyWatcher(100 * time.Millisecond)
+	defer w.Close()
+
+	ctx := context.Background()
+	mixedPaths := []string{tmpDir, "/non/existent/path"}
+	_, err := w.Watch(ctx, mixedPaths)
+	if err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+
+	// Concurrent reads should not panic or race
+	done := make(chan bool)
+	for i := 0; i < 10; i++ {
+		go func() {
+			for j := 0; j < 100; j++ {
+				_ = w.GetFailedPaths()
+			}
+			done <- true
+		}()
+	}
+
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+}
+
+// TestFsnotifyWatcher_GetFailedPaths_ReturnsCopy tests that GetFailedPaths returns a copy.
+func TestFsnotifyWatcher_GetFailedPaths_ReturnsCopy(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	w := NewFsnotifyWatcher(100 * time.Millisecond)
+	defer w.Close()
+
+	ctx := context.Background()
+	mixedPaths := []string{tmpDir, "/non/existent/path"}
+	_, err := w.Watch(ctx, mixedPaths)
+	if err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+
+	failedPaths := w.GetFailedPaths()
+	if len(failedPaths) == 0 {
+		t.Fatal("expected failed paths")
+	}
+
+	// Modify the returned slice
+	originalFirst := failedPaths[0]
+	failedPaths[0] = "modified"
+
+	// Get again and verify original is unchanged
+	failedPaths2 := w.GetFailedPaths()
+	if failedPaths2[0] != originalFirst {
+		t.Error("GetFailedPaths should return a copy, not the original slice")
+	}
+}

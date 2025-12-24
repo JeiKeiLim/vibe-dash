@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-25
-updated_by: SM Agent - Epic 6 retrospective completed
+updated_by: Dev Agent - Story 7-1 code review fixes applied, marked done
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -154,8 +154,8 @@ development_status:
   # - G24 is blocking (dashboard shows "Unknown status" for deferred epics)
   # - REFERENCE: docs/sprint-artifacts/retrospectives/epic-6-retro-2025-12-25.md
   #   Contains: problem details, decisions made, implementation approach
-  epic-7: backlog
-  7-1-file-watcher-error-recovery: backlog
+  epic-7: in-progress
+  7-1-file-watcher-error-recovery: done
   7-2-configuration-error-handling: backlog
   7-3-database-recovery: backlog
   7-4-progress-indicators: backlog

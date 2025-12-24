@@ -1165,6 +1165,7 @@ type mockFileWatcher struct {
 	returnErr   error
 	returnCh    chan ports.FileEvent
 	closeErr    error
+	failedPaths []string // Story 7.1: Simulated failed paths
 }
 
 func newMockFileWatcher() *mockFileWatcher {
@@ -1187,6 +1188,11 @@ func (m *mockFileWatcher) Close() error {
 	// Note: Don't close returnCh here - let the test manage channel lifecycle
 	// The channel may still be in use by goroutines reading from it
 	return m.closeErr
+}
+
+// GetFailedPaths implements ports.FileWatcher (Story 7.1).
+func (m *mockFileWatcher) GetFailedPaths() []string {
+	return m.failedPaths
 }
 
 func TestModel_SetFileWatcher(t *testing.T) {
@@ -1608,5 +1614,126 @@ func TestModel_FindProjectByPath_LongerPathMatchesFirst(t *testing.T) {
 	}
 	if result.Path != "/home/user/project/submodule" {
 		t.Errorf("expected submodule path, got %s", result.Path)
+	}
+}
+
+// =============================================================================
+// Story 7.1: Watcher Warning Message Tests
+// =============================================================================
+
+// TestModel_Update_WatcherWarningMsg_PartialFailure tests partial failure warning (AC1).
+func TestModel_Update_WatcherWarningMsg_PartialFailure(t *testing.T) {
+	m := NewModel(nil)
+	m.fileWatcherAvailable = true // Start as available
+
+	// Send partial failure message (1 of 3 failed)
+	// Code review L2 fix: Use specific project name for reliable test assertion
+	msg := watcherWarningMsg{
+		failedPaths: []string{"/failed/my-test-project"},
+		totalPaths:  3,
+	}
+
+	updated, _ := m.Update(msg)
+	model := updated.(Model)
+
+	// Should show partial failure warning with project name (basename extracted)
+	warning := model.statusBar.View()
+	if !strings.Contains(warning, "my-test-project") {
+		t.Errorf("partial failure warning should contain project name 'my-test-project', got: %s", warning)
+	}
+	if !strings.Contains(warning, "⚠") {
+		t.Errorf("partial failure warning should contain warning symbol, got: %s", warning)
+	}
+	if !strings.Contains(warning, "unavailable for:") {
+		t.Errorf("partial failure warning should contain 'unavailable for:', got: %s", warning)
+	}
+
+	// fileWatcherAvailable should still be true (partial failure doesn't disable)
+	if !model.fileWatcherAvailable {
+		t.Error("fileWatcherAvailable should still be true for partial failure")
+	}
+}
+
+// TestModel_Update_WatcherWarningMsg_CompleteFailure tests complete failure warning (AC2).
+func TestModel_Update_WatcherWarningMsg_CompleteFailure(t *testing.T) {
+	m := NewModel(nil)
+	m.fileWatcherAvailable = true // Start as available
+
+	// Send complete failure message (all 3 failed)
+	msg := watcherWarningMsg{
+		failedPaths: []string{"/failed1", "/failed2", "/failed3"},
+		totalPaths:  3,
+	}
+
+	updated, _ := m.Update(msg)
+	model := updated.(Model)
+
+	// Should show complete failure warning
+	warning := model.statusBar.View()
+	if !strings.Contains(warning, "[r]") || !strings.Contains(warning, "refresh") {
+		t.Errorf("complete failure warning should mention [r] to refresh, got: %s", warning)
+	}
+
+	// fileWatcherAvailable should be false
+	if model.fileWatcherAvailable {
+		t.Error("fileWatcherAvailable should be false for complete failure")
+	}
+}
+
+// TestModel_Update_WatcherWarningMsg_NoFailure tests no warning when no failures.
+func TestModel_Update_WatcherWarningMsg_NoFailure(t *testing.T) {
+	m := NewModel(nil)
+	m.fileWatcherAvailable = true
+
+	// Send message with no failures
+	msg := watcherWarningMsg{
+		failedPaths: []string{},
+		totalPaths:  3,
+	}
+
+	updated, _ := m.Update(msg)
+	model := updated.(Model)
+
+	// Should remain available with no warning
+	if !model.fileWatcherAvailable {
+		t.Error("fileWatcherAvailable should remain true when no failures")
+	}
+}
+
+// TestModel_MockFileWatcher_FailedPaths tests mock returns configured failed paths.
+func TestModel_MockFileWatcher_FailedPaths(t *testing.T) {
+	mock := newMockFileWatcher()
+	mock.failedPaths = []string{"/failed/path1", "/failed/path2"}
+
+	failedPaths := mock.GetFailedPaths()
+	if len(failedPaths) != 2 {
+		t.Errorf("expected 2 failed paths, got %d", len(failedPaths))
+	}
+	if failedPaths[0] != "/failed/path1" {
+		t.Errorf("expected /failed/path1, got %s", failedPaths[0])
+	}
+}
+
+// TestModel_Update_WatcherWarningMsg_MultipleFailures tests M1 fix: multiple failures show count.
+func TestModel_Update_WatcherWarningMsg_MultipleFailures(t *testing.T) {
+	m := NewModel(nil)
+	m.fileWatcherAvailable = true
+
+	// Send partial failure message (3 of 5 failed)
+	msg := watcherWarningMsg{
+		failedPaths: []string{"/failed/project1", "/failed/project2", "/failed/project3"},
+		totalPaths:  5,
+	}
+
+	updated, _ := m.Update(msg)
+	model := updated.(Model)
+
+	// Should show first project name + count of additional failures
+	warning := model.statusBar.View()
+	if !strings.Contains(warning, "project1") {
+		t.Errorf("warning should contain first project name, got: %s", warning)
+	}
+	if !strings.Contains(warning, "+2 more") {
+		t.Errorf("warning should show '+2 more' for additional failures, got: %s", warning)
 	}
 }

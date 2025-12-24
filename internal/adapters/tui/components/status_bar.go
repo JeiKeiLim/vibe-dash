@@ -21,6 +21,10 @@ var (
 	// statusBarWaitingZeroStyle is dim style for "0 waiting" (Epic 4 Hotfix H1)
 	statusBarWaitingZeroStyle = lipgloss.NewStyle().
 					Faint(true)
+
+	// statusBarWarningStyle matches tui.WarningStyle (yellow) (Story 7.1)
+	statusBarWarningStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("3")) // Yellow
 )
 
 // Shortcut string constants (AC7: responsive width)
@@ -145,9 +149,9 @@ func (s StatusBarModel) renderCondensed() string {
 		counts += " " + s.lastRefreshMsg
 	}
 
-	// Show abbreviated watcher warning if present (Story 4.6 AC3)
+	// Show abbreviated watcher warning if present (Story 4.6 AC3, Story 7.1: yellow styling)
 	if s.watcherWarning != "" {
-		counts += " ⚠️"
+		counts += " " + statusBarWarningStyle.Render("⚠️")
 	}
 
 	return "│ " + counts + " │ [j/k][?][q] │"
@@ -182,9 +186,9 @@ func (s StatusBarModel) renderCounts() string {
 		parts = append(parts, s.lastRefreshMsg)
 	}
 
-	// Show watcher warning if present (Story 4.6 AC3)
+	// Show watcher warning if present (Story 4.6 AC3, Story 7.1: yellow styling)
 	if s.watcherWarning != "" {
-		parts = append(parts, s.watcherWarning)
+		parts = append(parts, statusBarWarningStyle.Render(s.watcherWarning))
 	}
 
 	return "│ " + strings.Join(parts, " │ ") + " │"

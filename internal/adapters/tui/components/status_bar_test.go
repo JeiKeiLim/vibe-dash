@@ -764,3 +764,57 @@ func TestStatusBarModel_WatcherWarning_WithRefreshMessage(t *testing.T) {
 		t.Error("expected watcher warning to appear")
 	}
 }
+
+// =============================================================================
+// Story 7.1: Yellow Warning Styling Tests
+// =============================================================================
+
+// TestStatusBarModel_WatcherWarning_YellowStyle tests that warning is rendered (AC4).
+// Note: In test environment, colors may not be applied. This test verifies the warning
+// is included and the styling code path is exercised.
+func TestStatusBarModel_WatcherWarning_YellowStyle(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetWatcherWarning("⚠ Test warning")
+
+	view := sb.View()
+
+	// Should contain warning text
+	if !strings.Contains(view, "Test warning") {
+		t.Error("expected warning text to be present")
+	}
+
+	// Verify the warning is in the output (style may or may not be visible in test)
+	if !strings.Contains(view, "⚠") {
+		t.Error("expected warning symbol to be present")
+	}
+}
+
+// TestStatusBarModel_WatcherWarning_YellowStyleCondensed tests yellow styling in condensed mode.
+func TestStatusBarModel_WatcherWarning_YellowStyleCondensed(t *testing.T) {
+	sb := NewStatusBarModel(80)
+	sb.SetCondensed(true)
+	sb.SetCounts(5, 2, 0)
+	sb.SetWatcherWarning("⚠ Test warning")
+
+	view := sb.View()
+
+	// Should contain warning indicator (emoji is styled yellow)
+	if !strings.Contains(view, "⚠️") {
+		t.Error("expected warning emoji in condensed mode")
+	}
+}
+
+// TestStatusBarModel_WatcherWarning_StyleNotAppliedWhenEmpty tests no style when warning is empty.
+func TestStatusBarModel_WatcherWarning_StyleNotAppliedWhenEmpty(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	// No warning set
+
+	view := sb.View()
+
+	// Should not contain warning symbols
+	if strings.Contains(view, "⚠") {
+		t.Error("should not contain warning symbol when no warning is set")
+	}
+}
