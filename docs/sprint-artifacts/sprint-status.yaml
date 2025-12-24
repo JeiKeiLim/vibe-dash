@@ -148,6 +148,10 @@ development_status:
   epic-6-retrospective: completed
 
   # Epic 7: Error Handling & Polish
+  # ACTION ITEMS FROM EPIC 6 RETROSPECTIVE (2025-12-25):
+  # - 7-8 through 7-12 are HIGH PRIORITY items from retro
+  # - Address these BEFORE or alongside error handling stories
+  # - G24 is blocking (dashboard shows "Unknown status" for deferred epics)
   epic-7: backlog
   7-1-file-watcher-error-recovery: backlog
   7-2-configuration-error-handling: backlog
@@ -156,6 +160,12 @@ development_status:
   7-5-verbose-and-debug-logging: backlog
   7-6-feedback-messages-polish: backlog
   7-7-graceful-shutdown: backlog
+  # Epic 6 Retro Action Items (HIGH PRIORITY)
+  7-8-g24-deferred-epic-stage-detection: backlog  # BLOCKING: Skip deferred epics, normalize LLM variations
+  7-9-g23-retrospective-stage-detection: backlog  # Show meaningful stage when retro in-progress
+  7-10-m2-shared-test-helpers-package: backlog    # 6th carry-forward, finally prioritized
+  7-11-m3-shared-styles-package: backlog          # 6th carry-forward, finally prioritized
+  7-12-dry-refactor-findprojectbyidentifier: backlog  # favorite.go, note.go should reuse from status.go
   epic-7-retrospective: optional
 
   # Epic 8: UX Polish
