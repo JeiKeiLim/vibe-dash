@@ -24,8 +24,8 @@
 # - Dev moves story to 'review', dev reviews, then Dev moves to 'done'
 
 generated: 2025-12-12
-updated: 2025-12-24
-updated_by: Dev Agent - Story 6-7 code review passed, marked done
+updated: 2025-12-25
+updated_by: SM Agent - Epic 6 retrospective completed
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -136,7 +136,8 @@ development_status:
   epic-5-retrospective: deferred-post-mvp
 
   # Epic 6: Scripting & Automation
-  epic-6: in-progress
+  # 2025-12-25: COMPLETE - All 7 stories done, retrospective completed
+  epic-6: done
   6-1-json-output-format: done
   6-2-project-status-command: done
   6-3-exit-codes: done
@@ -144,7 +145,7 @@ development_status:
   6-5-rename-project-command: done
   6-6-shell-completion: done
   6-7-quiet-and-force-flags: done
-  epic-6-retrospective: optional
+  epic-6-retrospective: completed
 
   # Epic 7: Error Handling & Polish
   epic-7: backlog
