@@ -163,13 +163,42 @@ development_status:
   7-6-feedback-messages-polish: backlog
   7-7-graceful-shutdown: backlog
   # Epic 6 Retro Action Items (HIGH PRIORITY)
-  # MUST READ: docs/sprint-artifacts/retrospectives/epic-6-retro-2025-12-25.md
-  # Section "New Issues Identified" for G24, "Action Items" for all decisions
-  7-8-g24-deferred-epic-stage-detection: backlog  # BLOCKING: Skip deferred, normalize variations (deferred/Deferred/deferred-post-mvp/etc). See normalizeStatus() in 4.6.3 for pattern.
-  7-9-g23-retrospective-stage-detection: backlog  # From Epic 4.6 retro. Show "Retrospective in progress" when all done but retro running.
-  7-10-m2-shared-test-helpers-package: backlog    # 6th carry-forward. Extract common test patterns to shared package.
-  7-11-m3-shared-styles-package: backlog          # 6th carry-forward. Extract lipgloss styles to shared package.
-  7-12-dry-refactor-findprojectbyidentifier: backlog  # favorite.go:69-81, note.go:45-57 duplicate status.go:79-114 pattern. Refactor to reuse.
+  # Source: docs/sprint-artifacts/retrospectives/epic-6-retro-2025-12-25.md
+
+  # 7-8: G24 - Deferred epic breaks stage detection
+  # Problem: Epic 5 marked "deferred-post-mvp" causes "Unknown status" in TUI
+  # Decision: Skip deferred epics in stage detection, normalize LLM variations
+  # Pattern: Follow normalizeStatus() in internal/adapters/detection/bmad_stage.go (Story 4.6.3)
+  # Variations to handle: deferred, Deferred, DEFERRED, deferred-post-mvp, deferred_post_mvp, epic-deferred
+  # Reference: epic-6-retro-2025-12-25.md → "New Issues Identified" section
+  7-8-g24-deferred-epic-stage-detection: backlog
+
+  # 7-9: G23 - Retrospective stage detection (from Epic 4.6 retro)
+  # Problem: All epics done + retro in-progress shows "Unable to determine stage"
+  # Decision: Show "Retrospective for Epic N in progress" or "All epics complete"
+  # Reference: epic-4.6-retro-2025-12-22.md → "New Gap Identified" section
+  7-9-g23-retrospective-stage-detection: backlog
+
+  # 7-10: M2 - Shared test helpers package
+  # Problem: Test helpers duplicated across packages (mocks, fixtures, executeCommand)
+  # Decision: Extract to internal/shared/testhelpers or similar
+  # Carried forward: 6 times (since Epic 3)
+  # Reference: epic-6-retro-2025-12-25.md → "Action Items" H1
+  7-10-m2-shared-test-helpers-package: backlog
+
+  # 7-11: M3 - Shared styles package
+  # Problem: Lipgloss styles duplicated across TUI components
+  # Decision: Extract to internal/shared/styles
+  # Carried forward: 6 times (since Epic 3)
+  # Reference: epic-6-retro-2025-12-25.md → "Action Items" H2
+  7-11-m3-shared-styles-package: backlog
+
+  # 7-12: DRY refactor - findProjectByIdentifier reuse
+  # Problem: favorite.go and note.go duplicate project lookup logic from status.go
+  # Locations: favorite.go:69-81, note.go:45-57 duplicate status.go:79-114
+  # Decision: Refactor to call findProjectByIdentifier() from status.go
+  # Reference: epic-6-retro-2025-12-25.md → "Action Items" H5
+  7-12-dry-refactor-findprojectbyidentifier: backlog
   epic-7-retrospective: optional
 
   # Epic 8: UX Polish
