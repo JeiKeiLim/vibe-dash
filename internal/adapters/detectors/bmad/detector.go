@@ -5,6 +5,7 @@ package bmad
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -50,9 +51,11 @@ func (d *BMADDetector) CanDetect(ctx context.Context, path string) bool {
 	default:
 	}
 
+	slog.Debug("checking bmad markers", "path", path)
 	for _, marker := range markerDirs {
 		markerPath := filepath.Join(path, marker)
 		if info, err := os.Stat(markerPath); err == nil && info.IsDir() {
+			slog.Debug("bmad marker found", "marker", marker)
 			return true
 		}
 	}
@@ -95,6 +98,7 @@ func (d *BMADDetector) Detect(ctx context.Context, path string) (*domain.Detecti
 
 	// Check for config.yaml
 	cfgPath := filepath.Join(bmadDir, configPath)
+	slog.Debug("reading bmad config", "config_path", cfgPath)
 	version, err := extractVersion(cfgPath)
 
 	if err != nil {
@@ -114,6 +118,8 @@ func (d *BMADDetector) Detect(ctx context.Context, path string) (*domain.Detecti
 		return nil, ctx.Err()
 	default:
 	}
+
+	slog.Debug("extracted version", "version", version)
 
 	// Detect stage from sprint-status.yaml or artifacts
 	stage, stageConfidence, stageReasoning := d.detectStage(ctx, path)

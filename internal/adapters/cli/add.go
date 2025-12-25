@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"time"
@@ -207,6 +208,13 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	if err := repository.Save(ctx, project); err != nil {
 		return fmt.Errorf("failed to save project: %w", err)
 	}
+
+	// Log successful addition (visible with --verbose)
+	slog.Info("project added",
+		"name", project.Name,
+		"path", canonicalPath,
+		"method", project.DetectedMethod,
+		"stage", project.CurrentStage)
 
 	// Success output (suppressed in quiet mode)
 	if !IsQuiet() {

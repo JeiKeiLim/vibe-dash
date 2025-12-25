@@ -6,6 +6,7 @@ package speckit
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -41,9 +42,12 @@ func (d *SpeckitDetector) CanDetect(ctx context.Context, path string) bool {
 	default:
 	}
 
+	slog.Debug("checking speckit markers", "path", path)
 	for _, marker := range markerDirs {
 		markerPath := filepath.Join(path, marker)
+		slog.Debug("checking marker directory", "marker", marker, "full_path", markerPath)
 		if info, err := os.Stat(markerPath); err == nil && info.IsDir() {
+			slog.Debug("speckit marker found", "marker", marker)
 			return true
 		}
 	}
@@ -73,6 +77,8 @@ func (d *SpeckitDetector) Detect(ctx context.Context, path string) (*domain.Dete
 		return nil, fmt.Errorf("no speckit markers found at %s", path)
 	}
 
+	slog.Debug("analyzing specs directory", "specs_dir", specsDir)
+
 	// Find spec subdirectories
 	entries, err := os.ReadDir(specsDir)
 	if err != nil {
@@ -86,6 +92,8 @@ func (d *SpeckitDetector) Detect(ctx context.Context, path string) (*domain.Dete
 			specDirs = append(specDirs, entry)
 		}
 	}
+
+	slog.Debug("found spec subdirectories", "count", len(specDirs))
 
 	if len(specDirs) == 0 {
 		// Empty specs directory
