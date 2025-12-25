@@ -329,6 +329,13 @@ func TestModel_RefreshCompleteMsg_AllFailed(t *testing.T) {
 	if updated.refreshError != "all projects failed to refresh" {
 		t.Errorf("expected error message, got: %s", updated.refreshError)
 	}
+
+	// Story 7.6 AC4: Verify status bar shows error with ✗ prefix
+	viewAfterError := updated.statusBar.View()
+	if !strings.Contains(viewAfterError, "✗ Refresh failed") {
+		t.Errorf("expected status bar to show '✗ Refresh failed', got: %s", viewAfterError)
+	}
+
 	// No reload command on total failure
 	if cmd != nil {
 		t.Error("expected nil command on total failure")

@@ -596,7 +596,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.SetRefreshing(false, 0, 0)
 		if msg.err != nil {
 			m.refreshError = msg.err.Error()
-			m.statusBar.SetRefreshComplete("Refresh failed")
+			m.statusBar.SetRefreshComplete("✗ Refresh failed")
 			return m, nil
 		}
 		m.refreshError = ""
@@ -741,7 +741,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case removeConfirmedMsg:
 		// Handle async delete completion (Story 3.9)
 		if msg.err != nil {
-			m.statusBar.SetRefreshComplete("✗ Failed to remove: " + msg.err.Error())
+			m.statusBar.SetRefreshComplete("✗ Failed to remove: " + msg.projectName)
 			return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
 				return clearRemoveFeedbackMsg{}
 			})
