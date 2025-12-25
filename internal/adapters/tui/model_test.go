@@ -1737,3 +1737,128 @@ func TestModel_Update_WatcherWarningMsg_MultipleFailures(t *testing.T) {
 		t.Errorf("warning should show '+2 more' for additional failures, got: %s", warning)
 	}
 }
+
+// =============================================================================
+// Story 7.2: Config Warning Message Tests
+// =============================================================================
+
+// TestModel_Update_ConfigWarningMsg_SetsWarning tests that configWarningMsg sets warning (AC6).
+func TestModel_Update_ConfigWarningMsg_SetsWarning(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(80)
+
+	// Send config warning message
+	msg := configWarningMsg{
+		warning: "⚠ Config: using defaults (see log)",
+	}
+
+	updated, cmd := m.Update(msg)
+	model := updated.(Model)
+
+	// Model should store warning
+	if model.configWarning != "⚠ Config: using defaults (see log)" {
+		t.Errorf("expected configWarning to be set, got: %s", model.configWarning)
+	}
+
+	// configWarningTime should be set
+	if model.configWarningTime.IsZero() {
+		t.Error("configWarningTime should be set")
+	}
+
+	// Status bar should show warning
+	view := model.statusBar.View()
+	if !strings.Contains(view, "using defaults") {
+		t.Errorf("status bar should show config warning, got: %s", view)
+	}
+
+	// Should return cmd for 10-second auto-clear timer
+	if cmd == nil {
+		t.Error("configWarningMsg should return tea.Tick command for auto-clear")
+	}
+}
+
+// TestModel_Update_ClearConfigWarningMsg_ClearsWarning tests that clearConfigWarningMsg clears after timeout.
+func TestModel_Update_ClearConfigWarningMsg_ClearsWarning(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(80)
+	m.configWarning = "test warning"
+	m.configWarningTime = time.Now().Add(-11 * time.Second) // Set in past
+
+	// Send clear message
+	msg := clearConfigWarningMsg{}
+
+	updated, cmd := m.Update(msg)
+	model := updated.(Model)
+
+	// Warning should be cleared
+	if model.configWarning != "" {
+		t.Errorf("expected configWarning to be cleared, got: %s", model.configWarning)
+	}
+
+	// Status bar should not show warning
+	view := model.statusBar.View()
+	if strings.Contains(view, "test warning") {
+		t.Error("status bar should not show cleared warning")
+	}
+
+	// Should return nil cmd
+	if cmd != nil {
+		t.Error("clearConfigWarningMsg should return nil command")
+	}
+}
+
+// TestModel_Update_ClearConfigWarningMsg_NotClearedIfRecent tests warning is not cleared if recent.
+func TestModel_Update_ClearConfigWarningMsg_NotClearedIfRecent(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(80)
+	m.statusBar.SetConfigWarning("test warning")
+	m.configWarning = "test warning"
+	m.configWarningTime = time.Now().Add(-5 * time.Second) // Only 5 seconds ago
+
+	// Send clear message
+	msg := clearConfigWarningMsg{}
+
+	updated, _ := m.Update(msg)
+	model := updated.(Model)
+
+	// Warning should NOT be cleared (only 5 seconds elapsed)
+	if model.configWarning != "test warning" {
+		t.Errorf("expected configWarning to remain, got: %s", model.configWarning)
+	}
+}
+
+// TestModel_ConfigWarning_DoesNotAffectWatcherWarning tests both warnings can coexist.
+func TestModel_ConfigWarning_DoesNotAffectWatcherWarning(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(80)
+	m.statusBar.SetWatcherWarning("⚠ File watching unavailable")
+
+	// Send config warning message
+	msg := configWarningMsg{
+		warning: "config error",
+	}
+
+	updated, _ := m.Update(msg)
+	model := updated.(Model)
+
+	// Both warnings should appear in status bar
+	view := model.statusBar.View()
+	if !strings.Contains(view, "File watching unavailable") {
+		t.Error("watcher warning should still be present")
+	}
+	if !strings.Contains(view, "config error") {
+		t.Error("config warning should be present")
+	}
+}

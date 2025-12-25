@@ -5,7 +5,22 @@ import "github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 // directoryManager handles project directory operations (delete).
 var directoryManager ports.DirectoryManager
 
+// configWarning stores any config loading warning (Story 7.2).
+// Set during main.go initialization when config has errors.
+var configWarning string
+
 // SetDirectoryManager sets the directory manager for CLI commands.
 func SetDirectoryManager(dm ports.DirectoryManager) {
 	directoryManager = dm
+}
+
+// SetConfigWarning sets the config warning for JSON output (Story 7.2, AC7).
+// Pass empty string to clear the warning.
+func SetConfigWarning(warning string) {
+	configWarning = warning
+}
+
+// GetConfigWarning returns the current config warning (Story 7.2).
+func GetConfigWarning() string {
+	return configWarning
 }

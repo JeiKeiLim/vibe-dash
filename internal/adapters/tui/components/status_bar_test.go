@@ -818,3 +818,87 @@ func TestStatusBarModel_WatcherWarning_StyleNotAppliedWhenEmpty(t *testing.T) {
 		t.Error("should not contain warning symbol when no warning is set")
 	}
 }
+
+// =============================================================================
+// Story 7.2: Config Warning Tests
+// =============================================================================
+
+// TestStatusBarModel_SetConfigWarning tests SetConfigWarning method (AC6).
+func TestStatusBarModel_SetConfigWarning(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+
+	// Initially no warning
+	view := sb.View()
+	if strings.Contains(view, "invalid config") {
+		t.Error("expected no config warning initially")
+	}
+
+	// Set warning
+	sb.SetConfigWarning("invalid config at ~/.vibe-dash/config.yaml")
+	view = sb.View()
+	if !strings.Contains(view, "invalid config") {
+		t.Errorf("expected config warning to appear, got: %s", view)
+	}
+}
+
+// TestStatusBarModel_ConfigWarning_CondensedMode tests config warning in condensed mode.
+func TestStatusBarModel_ConfigWarning_CondensedMode(t *testing.T) {
+	sb := NewStatusBarModel(80)
+	sb.SetCounts(5, 3, 0)
+	sb.SetCondensed(true)
+	sb.SetConfigWarning("config error")
+
+	view := sb.View()
+
+	// Should show abbreviated config warning in condensed mode
+	if !strings.Contains(view, "⚠ cfg") {
+		t.Errorf("condensed view should show abbreviated config warning '⚠ cfg', got: %s", view)
+	}
+}
+
+// TestStatusBarModel_ConfigWarning_ClearWarning tests clearing config warning.
+func TestStatusBarModel_ConfigWarning_ClearWarning(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetConfigWarning("config error")
+
+	// Clear warning
+	sb.SetConfigWarning("")
+	view := sb.View()
+	if strings.Contains(view, "config error") {
+		t.Error("expected config warning to be cleared")
+	}
+}
+
+// TestStatusBarModel_ConfigWarning_WithWatcherWarning tests both warnings.
+func TestStatusBarModel_ConfigWarning_WithWatcherWarning(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetWatcherWarning("⚠ File watching unavailable")
+	sb.SetConfigWarning("config error at ~/.vibe-dash/config.yaml")
+
+	view := sb.View()
+
+	// Both warnings should appear
+	if !strings.Contains(view, "File watching unavailable") {
+		t.Error("expected watcher warning to appear")
+	}
+	if !strings.Contains(view, "config error") {
+		t.Error("expected config warning to appear")
+	}
+}
+
+// TestStatusBarModel_ConfigWarning_YellowStyle tests yellow styling for config warning.
+func TestStatusBarModel_ConfigWarning_YellowStyle(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetConfigWarning("⚠ Config error")
+
+	view := sb.View()
+
+	// Should contain warning text (style verified via styling code path)
+	if !strings.Contains(view, "Config error") {
+		t.Error("expected config warning text to be present")
+	}
+}

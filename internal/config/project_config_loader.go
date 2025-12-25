@@ -76,11 +76,15 @@ func (l *ViperProjectConfigLoader) Load(ctx context.Context) (*ports.ProjectConf
 	default:
 	}
 
+	// Extract project name for logging (AC5: per-project error isolation)
+	projectName := filepath.Base(l.projectDir)
+
 	// Check if config file exists
 	if _, err := os.Stat(l.configPath); os.IsNotExist(err) {
 		// Create default config file
 		if err := l.writeDefaultConfig(); err != nil {
 			slog.Warn("could not write default project config, using defaults",
+				"project", projectName,
 				"error", err, "path", l.configPath)
 			return ports.NewProjectConfigData(), nil
 		}
@@ -89,6 +93,7 @@ func (l *ViperProjectConfigLoader) Load(ctx context.Context) (*ports.ProjectConf
 	// Read config file
 	if err := l.v.ReadInConfig(); err != nil {
 		slog.Warn("project config syntax error, using defaults",
+			"project", projectName,
 			"error", err, "path", l.configPath)
 		return ports.NewProjectConfigData(), nil
 	}
@@ -99,6 +104,7 @@ func (l *ViperProjectConfigLoader) Load(ctx context.Context) (*ports.ProjectConf
 	// Validate and fix invalid values (AC7: graceful degradation)
 	if err := data.Validate(); err != nil {
 		slog.Warn("project config validation failed, fixing invalid values",
+			"project", projectName,
 			"error", err, "path", l.configPath)
 		data = l.fixInvalidValues(data)
 	}
@@ -168,16 +174,22 @@ notes: ""
 }
 
 // fixInvalidValues corrects invalid project config values by removing invalid overrides.
-// Logs a warning for each corrected value.
+// Logs a warning for each corrected value with project and path context (AC2, AC5).
 func (l *ViperProjectConfigLoader) fixInvalidValues(data *ports.ProjectConfigData) *ports.ProjectConfigData {
+	projectName := filepath.Base(l.projectDir)
+
 	if data.CustomHibernationDays != nil && *data.CustomHibernationDays < 0 {
 		slog.Warn("invalid custom_hibernation_days, removing override",
+			"project", projectName,
+			"path", l.configPath,
 			"invalid_value", *data.CustomHibernationDays)
 		data.CustomHibernationDays = nil
 	}
 
 	if data.AgentWaitingThresholdMinutes != nil && *data.AgentWaitingThresholdMinutes < 0 {
 		slog.Warn("invalid agent_waiting_threshold_minutes, removing override",
+			"project", projectName,
+			"path", l.configPath,
 			"invalid_value", *data.AgentWaitingThresholdMinutes)
 		data.AgentWaitingThresholdMinutes = nil
 	}

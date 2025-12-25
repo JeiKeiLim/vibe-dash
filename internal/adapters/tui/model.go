@@ -75,6 +75,10 @@ type Model struct {
 	watchCtx             context.Context
 	watchCancel          context.CancelFunc
 	fileWatcherAvailable bool // false if watcher failed to start
+
+	// Story 7.2: Config warning state
+	configWarning     string    // Config error message to display
+	configWarningTime time.Time // When warning was set (for auto-clearing)
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -184,6 +188,15 @@ type watcherWarningMsg struct {
 	failedPaths []string
 	totalPaths  int
 }
+
+// configWarningMsg signals configuration loading errors (Story 7.2).
+// Sent when config file has syntax errors or invalid values.
+type configWarningMsg struct {
+	warning string
+}
+
+// clearConfigWarningMsg signals to clear the config warning after timeout (Story 7.2).
+type clearConfigWarningMsg struct{}
 
 // NewModel creates a new Model with default values.
 // The repository parameter is used for project persistence operations.
@@ -780,6 +793,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Complete failure (AC2)
 			m.statusBar.SetWatcherWarning("⚠ File watching unavailable. Use [r] to refresh.")
 			m.fileWatcherAvailable = false
+		}
+		return m, nil
+
+	case configWarningMsg:
+		// Story 7.2: Handle config loading errors (AC6)
+		m.configWarning = msg.warning
+		m.configWarningTime = time.Now()
+		m.statusBar.SetConfigWarning(msg.warning)
+		// Auto-clear after 10 seconds
+		return m, tea.Tick(10*time.Second, func(t time.Time) tea.Msg {
+			return clearConfigWarningMsg{}
+		})
+
+	case clearConfigWarningMsg:
+		// Story 7.2: Clear config warning after 10 seconds (AC6)
+		if time.Since(m.configWarningTime) >= 10*time.Second {
+			m.configWarning = ""
+			m.statusBar.SetConfigWarning("")
 		}
 		return m, nil
 	}

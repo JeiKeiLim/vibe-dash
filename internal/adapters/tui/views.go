@@ -92,12 +92,16 @@ func renderHelpOverlay(width, height int) string {
 		"q        Quit",
 		"Esc      Cancel/close",
 		"",
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+		hintStyle.Render("Config: ~/.vibe-dash/config.yaml"),
+		hintStyle.Render("Per-project: ~/.vibe-dash/<project>/config.yaml"),
+		"",
 		hintStyle.Render("Press any key to close"),
 		"",
 	}, "\n")
 
 	box := boxStyle.
-		Width(46). // Longest line (32) + padding (4) + border (2) + buffer (8)
+		Width(52). // Longest line (44) + padding (4) + border (2) + buffer (2)
 		Render(content)
 
 	// Add title to the border

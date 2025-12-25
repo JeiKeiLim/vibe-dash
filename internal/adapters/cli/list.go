@@ -115,8 +115,9 @@ func formatPlainText(cmd *cobra.Command, projects []*domain.Project) {
 
 // ListResponse represents the JSON output structure
 type ListResponse struct {
-	APIVersion string           `json:"api_version"`
-	Projects   []ProjectSummary `json:"projects"`
+	APIVersion    string           `json:"api_version"`
+	Projects      []ProjectSummary `json:"projects"`
+	ConfigWarning *string          `json:"config_warning,omitempty"` // Story 7.2: Config error message (null if no error)
 }
 
 // ProjectSummary represents a single project in JSON output
@@ -138,9 +139,16 @@ type ProjectSummary struct {
 
 // formatJSON formats projects as JSON output.
 func formatJSON(ctx context.Context, cmd *cobra.Command, projects []*domain.Project) error {
+	// Story 7.2: Include config warning if present (AC7)
+	var cfgWarning *string
+	if configWarning != "" {
+		cfgWarning = &configWarning
+	}
+
 	response := ListResponse{
-		APIVersion: listAPIVersion,
-		Projects:   make([]ProjectSummary, 0, len(projects)),
+		APIVersion:    listAPIVersion,
+		Projects:      make([]ProjectSummary, 0, len(projects)),
+		ConfigWarning: cfgWarning,
 	}
 
 	for _, p := range projects {

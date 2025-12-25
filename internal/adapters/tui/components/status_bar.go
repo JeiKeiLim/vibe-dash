@@ -63,6 +63,9 @@ type StatusBarModel struct {
 
 	// Watcher warning (Story 4.6)
 	watcherWarning string // Empty means no warning, "⚠️ File watching unavailable" on error
+
+	// Config warning (Story 7.2)
+	configWarning string // Config error message (separate from watcher warning)
 }
 
 // NewStatusBarModel creates a new StatusBarModel with the given width.
@@ -113,6 +116,12 @@ func (s *StatusBarModel) SetWatcherWarning(warning string) {
 	s.watcherWarning = warning
 }
 
+// SetConfigWarning sets the config warning message (Story 7.2).
+// Pass empty string to clear the warning.
+func (s *StatusBarModel) SetConfigWarning(warning string) {
+	s.configWarning = warning
+}
+
 // View renders the status bar to a string.
 // Returns two lines: counts line and shortcuts line (AC1).
 // Returns single line when condensed mode is active (Story 3.10 AC5).
@@ -154,6 +163,11 @@ func (s StatusBarModel) renderCondensed() string {
 		counts += " " + statusBarWarningStyle.Render("⚠️")
 	}
 
+	// Story 7.2: Show abbreviated config warning if present (AC6)
+	if s.configWarning != "" {
+		counts += " " + statusBarWarningStyle.Render("⚠ cfg")
+	}
+
 	return "│ " + counts + " │ [j/k][?][q] │"
 }
 
@@ -189,6 +203,11 @@ func (s StatusBarModel) renderCounts() string {
 	// Show watcher warning if present (Story 4.6 AC3, Story 7.1: yellow styling)
 	if s.watcherWarning != "" {
 		parts = append(parts, statusBarWarningStyle.Render(s.watcherWarning))
+	}
+
+	// Story 7.2: Show config warning if present (AC6)
+	if s.configWarning != "" {
+		parts = append(parts, statusBarWarningStyle.Render(s.configWarning))
 	}
 
 	return "│ " + strings.Join(parts, " │ ") + " │"

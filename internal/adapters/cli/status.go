@@ -32,8 +32,9 @@ func ResetStatusFlags() {
 // StatusResponse represents the JSON output structure for single project.
 // Different from ListResponse which uses "projects" array.
 type StatusResponse struct {
-	APIVersion string         `json:"api_version"` // Schema version (currently "v1")
-	Project    ProjectSummary `json:"project"`     // Single project object (NOT array)
+	APIVersion    string         `json:"api_version"`              // Schema version (currently "v1")
+	Project       ProjectSummary `json:"project"`                  // Single project object (NOT array)
+	ConfigWarning *string        `json:"config_warning,omitempty"` // Story 7.2: Config error message (null if no error)
 }
 
 // newStatusCmd creates the status command.
@@ -238,8 +239,15 @@ func formatStatusJSON(ctx context.Context, cmd *cobra.Command, p *domain.Project
 		}
 	}
 
+	// Story 7.2: Include config warning if present (AC7)
+	var cfgWarning *string
+	if configWarning != "" {
+		cfgWarning = &configWarning
+	}
+
 	response := StatusResponse{
-		APIVersion: statusAPIVersion,
+		APIVersion:    statusAPIVersion,
+		ConfigWarning: cfgWarning,
 		Project: ProjectSummary{
 			Name:                   p.Name,
 			DisplayName:            displayName,

@@ -859,3 +859,66 @@ func TestList_JSON_WaitingDetectorNotSet(t *testing.T) {
 		t.Errorf("expected waiting_duration_minutes to be null when detector is nil, got %v", response.Projects[0].WaitingDurationMinutes)
 	}
 }
+
+// =============================================================================
+// Story 7.2: Config Warning in JSON Output Tests (AC7)
+// =============================================================================
+
+func TestList_JSON_ConfigWarningIncluded(t *testing.T) {
+	mock := NewMockRepository()
+	p1, _ := domain.NewProject("/path/to/test", "")
+	mock.projects[p1.Path] = p1
+	cli.SetRepository(mock)
+
+	// Set config warning
+	cli.SetConfigWarning("invalid config at ~/.vibe-dash/config.yaml: line 5: syntax error")
+	defer cli.SetConfigWarning("") // Clean up
+
+	output, err := executeListCommand([]string{"--json"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	var response struct {
+		APIVersion    string  `json:"api_version"`
+		ConfigWarning *string `json:"config_warning"`
+		Projects      []struct {
+			Name string `json:"name"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal([]byte(output), &response); err != nil {
+		t.Fatalf("invalid JSON: %v\nOutput: %s", err, output)
+	}
+
+	// AC7: config_warning should be present when set
+	if response.ConfigWarning == nil {
+		t.Error("expected config_warning to be set")
+	} else if !strings.Contains(*response.ConfigWarning, "syntax error") {
+		t.Errorf("expected config_warning to contain 'syntax error', got: %s", *response.ConfigWarning)
+	}
+
+	// Projects should still be returned
+	if len(response.Projects) != 1 {
+		t.Errorf("expected 1 project, got %d", len(response.Projects))
+	}
+}
+
+func TestList_JSON_ConfigWarningOmittedWhenEmpty(t *testing.T) {
+	mock := NewMockRepository()
+	p1, _ := domain.NewProject("/path/to/test", "")
+	mock.projects[p1.Path] = p1
+	cli.SetRepository(mock)
+
+	// Ensure no config warning
+	cli.SetConfigWarning("")
+
+	output, err := executeListCommand([]string{"--json"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// AC7: config_warning should be omitted (not null) when empty
+	if strings.Contains(output, "config_warning") {
+		t.Errorf("expected config_warning to be omitted when empty, got: %s", output)
+	}
+}

@@ -233,12 +233,13 @@ func (l *ViperLoader) mapViperToConfig() *ports.Config {
 }
 
 // fixInvalidValues corrects invalid config values by replacing with defaults.
-// Logs a warning for each corrected value.
+// Logs a warning for each corrected value with path context (AC1, AC2).
 func (l *ViperLoader) fixInvalidValues(cfg *ports.Config) *ports.Config {
 	defaults := ports.NewConfig()
 
 	if cfg.HibernationDays < 0 {
 		slog.Warn("invalid hibernation_days, using default",
+			"path", l.configPath,
 			"invalid_value", cfg.HibernationDays,
 			"default_value", defaults.HibernationDays)
 		cfg.HibernationDays = defaults.HibernationDays
@@ -246,6 +247,7 @@ func (l *ViperLoader) fixInvalidValues(cfg *ports.Config) *ports.Config {
 
 	if cfg.RefreshIntervalSeconds <= 0 {
 		slog.Warn("invalid refresh_interval_seconds, using default",
+			"path", l.configPath,
 			"invalid_value", cfg.RefreshIntervalSeconds,
 			"default_value", defaults.RefreshIntervalSeconds)
 		cfg.RefreshIntervalSeconds = defaults.RefreshIntervalSeconds
@@ -253,6 +255,7 @@ func (l *ViperLoader) fixInvalidValues(cfg *ports.Config) *ports.Config {
 
 	if cfg.RefreshDebounceMs <= 0 {
 		slog.Warn("invalid refresh_debounce_ms, using default",
+			"path", l.configPath,
 			"invalid_value", cfg.RefreshDebounceMs,
 			"default_value", defaults.RefreshDebounceMs)
 		cfg.RefreshDebounceMs = defaults.RefreshDebounceMs
@@ -260,6 +263,7 @@ func (l *ViperLoader) fixInvalidValues(cfg *ports.Config) *ports.Config {
 
 	if cfg.AgentWaitingThresholdMinutes < 0 {
 		slog.Warn("invalid agent_waiting_threshold_minutes, using default",
+			"path", l.configPath,
 			"invalid_value", cfg.AgentWaitingThresholdMinutes,
 			"default_value", defaults.AgentWaitingThresholdMinutes)
 		cfg.AgentWaitingThresholdMinutes = defaults.AgentWaitingThresholdMinutes
@@ -269,12 +273,14 @@ func (l *ViperLoader) fixInvalidValues(cfg *ports.Config) *ports.Config {
 	for id, pc := range cfg.Projects {
 		if pc.HibernationDays != nil && *pc.HibernationDays < 0 {
 			slog.Warn("invalid project hibernation_days, removing override",
+				"path", l.configPath,
 				"project", id, "invalid_value", *pc.HibernationDays)
 			pc.HibernationDays = nil
 			cfg.Projects[id] = pc
 		}
 		if pc.AgentWaitingThresholdMinutes != nil && *pc.AgentWaitingThresholdMinutes < 0 {
 			slog.Warn("invalid project agent_waiting_threshold_minutes, removing override",
+				"path", l.configPath,
 				"project", id, "invalid_value", *pc.AgentWaitingThresholdMinutes)
 			pc.AgentWaitingThresholdMinutes = nil
 			cfg.Projects[id] = pc
@@ -284,6 +290,7 @@ func (l *ViperLoader) fixInvalidValues(cfg *ports.Config) *ports.Config {
 	// Fix invalid storage_version (Subtask 2.6)
 	if cfg.StorageVersion != currentStorageVersion {
 		slog.Warn("invalid storage_version, using default",
+			"path", l.configPath,
 			"invalid_value", cfg.StorageVersion,
 			"default_value", currentStorageVersion)
 		cfg.StorageVersion = currentStorageVersion
