@@ -79,6 +79,9 @@ type Model struct {
 	// Story 7.2: Config warning state
 	configWarning     string    // Config error message to display
 	configWarningTime time.Time // When warning was set (for auto-clearing)
+
+	// Story 7.3: Corrupted projects state
+	corruptedProjects []string // Names of projects with corrupted databases
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -197,6 +200,12 @@ type configWarningMsg struct {
 
 // clearConfigWarningMsg signals to clear the config warning after timeout (Story 7.2).
 type clearConfigWarningMsg struct{}
+
+// projectCorruptionMsg signals project database corruption (Story 7.3).
+// Sent when projects are skipped due to corrupted state.db files.
+type projectCorruptionMsg struct {
+	projects []string // Names of corrupted projects
+}
 
 // NewModel creates a new Model with default values.
 // The repository parameter is used for project persistence operations.
@@ -811,6 +820,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if time.Since(m.configWarningTime) >= 10*time.Second {
 			m.configWarning = ""
 			m.statusBar.SetConfigWarning("")
+		}
+		return m, nil
+
+	case projectCorruptionMsg:
+		// Story 7.3: Handle project database corruption (AC7)
+		m.corruptedProjects = msg.projects
+		if len(msg.projects) > 0 {
+			var warning string
+			if len(msg.projects) == 1 {
+				warning = fmt.Sprintf("⚠ %s: corrupted (vibe reset %s)", msg.projects[0], msg.projects[0])
+			} else {
+				warning = fmt.Sprintf("⚠ %d projects corrupted (vibe reset --all)", len(msg.projects))
+			}
+			m.statusBar.SetWatcherWarning(warning)
 		}
 		return m, nil
 	}

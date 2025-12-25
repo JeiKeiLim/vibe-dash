@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-25
-updated_by: Dev Agent (Amelia) - Story 7-2 code review complete + fixes applied
+updated_by: Dev (Amelia) - Story 7-3 code reviewed and done
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -157,7 +157,7 @@ development_status:
   epic-7: in-progress
   7-1-file-watcher-error-recovery: done
   7-2-configuration-error-handling: done
-  7-3-database-recovery: backlog
+  7-3-database-recovery: done
   7-4-progress-indicators: backlog
   7-5-verbose-and-debug-logging: backlog
   7-6-feedback-messages-polish: backlog

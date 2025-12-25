@@ -51,6 +51,8 @@ func (m *mockProjectRepo) FindActive(context.Context) ([]*domain.Project, error)
 func (m *mockProjectRepo) FindHibernated(context.Context) ([]*domain.Project, error)      { return nil, nil }
 func (m *mockProjectRepo) Delete(context.Context, string) error                           { return nil }
 func (m *mockProjectRepo) UpdateState(context.Context, string, domain.ProjectState) error { return nil }
+func (m *mockProjectRepo) ResetProject(context.Context, string) error                     { return nil }
+func (m *mockProjectRepo) ResetAll(context.Context) (int, error)                          { return 0, nil }
 
 func TestNewActivityTracker(t *testing.T) {
 	repo := newMockProjectRepo()

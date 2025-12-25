@@ -107,6 +107,14 @@ func (m *notesMockRepository) UpdateLastActivity(_ context.Context, _ string, _ 
 	return nil
 }
 
+func (m *notesMockRepository) ResetProject(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *notesMockRepository) ResetAll(_ context.Context) (int, error) {
+	return 0, nil
+}
+
 var _ ports.ProjectRepository = (*notesMockRepository)(nil)
 
 // TestModel_NotesKey_OpensEditor verifies pressing 'n' opens note editor (AC1).

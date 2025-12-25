@@ -62,4 +62,15 @@ type ProjectRepository interface {
 	// This is an optimized update for high-frequency activity tracking (FR34-38).
 	// Returns domain.ErrProjectNotFound if no project exists with the given ID.
 	UpdateLastActivity(ctx context.Context, id string, timestamp time.Time) error
+
+	// ResetProject deletes and allows recreation of a project's database.
+	// The projectID can be a directory name, project name, or path.
+	// Config.yaml is preserved - only state.db is affected.
+	// Returns domain.ErrProjectNotFound if the project doesn't exist.
+	ResetProject(ctx context.Context, projectID string) error
+
+	// ResetAll resets all project databases.
+	// Returns the count of successfully reset projects.
+	// Config.yaml is preserved - only state.db files are affected.
+	ResetAll(ctx context.Context) (int, error)
 }

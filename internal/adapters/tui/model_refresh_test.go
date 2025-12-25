@@ -113,6 +113,14 @@ func (m *refreshMockRepository) UpdateLastActivity(_ context.Context, _ string, 
 	return nil
 }
 
+func (m *refreshMockRepository) ResetProject(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *refreshMockRepository) ResetAll(_ context.Context) (int, error) {
+	return 0, nil
+}
+
 var _ ports.ProjectRepository = (*refreshMockRepository)(nil)
 var _ ports.Detector = (*refreshMockDetector)(nil)
 
@@ -373,5 +381,102 @@ func TestModel_SetDetectionService(t *testing.T) {
 	}
 	if m.detectionService != detector {
 		t.Error("expected detectionService to be the provided detector")
+	}
+}
+
+// ============================================================================
+// Story 7.3: Database Recovery TUI Tests
+// ============================================================================
+
+// TestModel_ProjectCorruptionMsg_SingleProject tests AC7: single project corruption warning
+func TestModel_ProjectCorruptionMsg_SingleProject(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	// Send projectCorruptionMsg with single project
+	msg := projectCorruptionMsg{
+		projects: []string{"my-project"},
+	}
+
+	updatedModel, _ := m.Update(msg)
+	updated := updatedModel.(Model)
+
+	// Verify corruptedProjects is set
+	if len(updated.corruptedProjects) != 1 {
+		t.Errorf("expected 1 corrupted project, got %d", len(updated.corruptedProjects))
+	}
+	if updated.corruptedProjects[0] != "my-project" {
+		t.Errorf("expected 'my-project', got %s", updated.corruptedProjects[0])
+	}
+
+	// Verify status bar warning contains expected text (AC7)
+	view := updated.statusBar.View()
+	if !strings.Contains(view, "corrupted") {
+		t.Errorf("expected status bar to show corruption warning, got: %s", view)
+	}
+	if !strings.Contains(view, "my-project") {
+		t.Errorf("expected status bar to mention project name, got: %s", view)
+	}
+	if !strings.Contains(view, "vibe reset") {
+		t.Errorf("expected status bar to suggest 'vibe reset', got: %s", view)
+	}
+}
+
+// TestModel_ProjectCorruptionMsg_MultipleProjects tests AC7: multiple projects corruption warning
+func TestModel_ProjectCorruptionMsg_MultipleProjects(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	// Send projectCorruptionMsg with multiple projects
+	msg := projectCorruptionMsg{
+		projects: []string{"project1", "project2", "project3"},
+	}
+
+	updatedModel, _ := m.Update(msg)
+	updated := updatedModel.(Model)
+
+	// Verify corruptedProjects count
+	if len(updated.corruptedProjects) != 3 {
+		t.Errorf("expected 3 corrupted projects, got %d", len(updated.corruptedProjects))
+	}
+
+	// Verify status bar shows count and --all flag (AC7)
+	view := updated.statusBar.View()
+	if !strings.Contains(view, "3") {
+		t.Errorf("expected status bar to show count '3', got: %s", view)
+	}
+	if !strings.Contains(view, "corrupted") {
+		t.Errorf("expected status bar to show 'corrupted', got: %s", view)
+	}
+	if !strings.Contains(view, "vibe reset --all") {
+		t.Errorf("expected status bar to suggest 'vibe reset --all', got: %s", view)
+	}
+}
+
+// TestModel_ProjectCorruptionMsg_EmptyList tests no warning for empty list
+func TestModel_ProjectCorruptionMsg_EmptyList(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	// Send projectCorruptionMsg with no projects
+	msg := projectCorruptionMsg{
+		projects: []string{},
+	}
+
+	updatedModel, _ := m.Update(msg)
+	updated := updatedModel.(Model)
+
+	// Verify corruptedProjects is empty
+	if len(updated.corruptedProjects) != 0 {
+		t.Errorf("expected 0 corrupted projects, got %d", len(updated.corruptedProjects))
 	}
 }

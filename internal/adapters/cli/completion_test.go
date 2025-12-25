@@ -85,6 +85,14 @@ func (m *completionMockRepository) UpdateLastActivity(_ context.Context, _ strin
 	return nil
 }
 
+func (m *completionMockRepository) ResetProject(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *completionMockRepository) ResetAll(_ context.Context) (int, error) {
+	return 0, nil
+}
+
 // executeCompletionCommand runs the completion command with given args and returns output/error
 func executeCompletionCommand(args []string) (string, error) {
 	cmd := cli.NewRootCmd()

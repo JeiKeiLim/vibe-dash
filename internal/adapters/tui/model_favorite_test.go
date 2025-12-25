@@ -103,6 +103,14 @@ func (m *favoriteMockRepository) UpdateLastActivity(_ context.Context, _ string,
 	return nil
 }
 
+func (m *favoriteMockRepository) ResetProject(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *favoriteMockRepository) ResetAll(_ context.Context) (int, error) {
+	return 0, nil
+}
+
 var _ ports.ProjectRepository = (*favoriteMockRepository)(nil)
 
 // TestModel_FavoriteKey_TogglesOn verifies pressing 'f' toggles favorite on (AC1).

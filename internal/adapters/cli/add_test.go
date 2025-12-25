@@ -120,6 +120,16 @@ func (m *MockRepository) UpdateLastActivity(_ context.Context, _ string, _ time.
 	return nil
 }
 
+// ResetProject implements ports.ProjectRepository (Story 7.3)
+func (m *MockRepository) ResetProject(_ context.Context, _ string) error {
+	return nil
+}
+
+// ResetAll implements ports.ProjectRepository (Story 7.3)
+func (m *MockRepository) ResetAll(_ context.Context) (int, error) {
+	return 0, nil
+}
+
 // executeAddCommand runs the add command with given args and returns output/error
 func executeAddCommand(args []string) (string, error) {
 	// Reset flags and root command for clean test

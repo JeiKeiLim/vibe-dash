@@ -91,7 +91,8 @@ func wrapDBErrorForProject(err error, dbPath string) error {
 	if strings.Contains(errStr, "malformed") ||
 		strings.Contains(errStr, "corrupt") ||
 		strings.Contains(errStr, "disk i/o error") ||
-		strings.Contains(errStr, "database disk image is malformed") {
+		strings.Contains(errStr, "database disk image is malformed") ||
+		strings.Contains(errStr, "file is not a database") {
 		return fmt.Errorf("%w: %v. Recovery: delete %s and re-add project via 'vibe add <path>'",
 			ErrDatabaseCorrupted, err, dbPath)
 	}
@@ -329,6 +330,18 @@ func (r *ProjectRepository) UpdateLastActivity(ctx context.Context, id string, t
 		return domain.ErrProjectNotFound
 	}
 	return nil
+}
+
+// ResetProject is a no-op for per-project repositories.
+// Reset functionality is handled at the coordinator level.
+func (r *ProjectRepository) ResetProject(ctx context.Context, projectID string) error {
+	return nil
+}
+
+// ResetAll is a no-op for per-project repositories.
+// Reset functionality is handled at the coordinator level.
+func (r *ProjectRepository) ResetAll(ctx context.Context) (int, error) {
+	return 0, nil
 }
 
 // Note: This file reuses helper functions and types from repository.go in the same package:

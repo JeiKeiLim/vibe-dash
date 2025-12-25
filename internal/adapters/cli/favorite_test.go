@@ -113,6 +113,14 @@ func (m *favoriteMockRepository) UpdateLastActivity(_ context.Context, _ string,
 	return nil
 }
 
+func (m *favoriteMockRepository) ResetProject(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *favoriteMockRepository) ResetAll(_ context.Context) (int, error) {
+	return 0, nil
+}
+
 // executeFavoriteCommand runs the favorite command with given args and returns output/error
 func executeFavoriteCommand(args []string) (string, error) {
 	cmd := cli.NewRootCmd()

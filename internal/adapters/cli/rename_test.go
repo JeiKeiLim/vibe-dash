@@ -115,6 +115,14 @@ func (m *renameMockRepository) UpdateLastActivity(_ context.Context, _ string, _
 	return nil
 }
 
+func (m *renameMockRepository) ResetProject(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *renameMockRepository) ResetAll(_ context.Context) (int, error) {
+	return 0, nil
+}
+
 // executeRenameCommand runs the rename command with given args and returns output/error
 func executeRenameCommand(args []string) (string, error) {
 	cmd := cli.NewRootCmd()

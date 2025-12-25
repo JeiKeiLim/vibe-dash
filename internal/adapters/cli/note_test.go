@@ -113,6 +113,14 @@ func (m *noteMockRepository) UpdateLastActivity(_ context.Context, _ string, _ t
 	return nil
 }
 
+func (m *noteMockRepository) ResetProject(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *noteMockRepository) ResetAll(_ context.Context) (int, error) {
+	return 0, nil
+}
+
 // executeNoteCommand runs the note command with given args and returns output/error
 func executeNoteCommand(args []string) (string, error) {
 	cmd := cli.NewRootCmd()

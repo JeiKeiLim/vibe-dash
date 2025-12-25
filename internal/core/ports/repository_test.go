@@ -95,6 +95,14 @@ func (m *mockRepository) UpdateLastActivity(ctx context.Context, id string, time
 	return nil
 }
 
+func (m *mockRepository) ResetProject(ctx context.Context, projectID string) error {
+	return nil
+}
+
+func (m *mockRepository) ResetAll(ctx context.Context) (int, error) {
+	return 0, nil
+}
+
 // Compile-time interface compliance check
 var _ ports.ProjectRepository = (*mockRepository)(nil)
 

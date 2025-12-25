@@ -2,8 +2,10 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -47,6 +49,7 @@ func NewRepositoryCoordinator(
 
 // getProjectRepo returns a cached or newly created repository for the given directory.
 // Uses double-checked locking pattern for thread safety.
+// If database corruption is detected, attempts auto-recovery before returning error.
 func (c *RepositoryCoordinator) getProjectRepo(ctx context.Context, dirName string) (*sqlite.ProjectRepository, error) {
 	// Context cancellation check first
 	select {
@@ -75,11 +78,56 @@ func (c *RepositoryCoordinator) getProjectRepo(ctx context.Context, dirName stri
 	projectDir := filepath.Join(c.basePath, dirName)
 	repo, err := sqlite.NewProjectRepository(projectDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open project %s: %w", dirName, err)
+		// Check if corruption - attempt auto-recovery (Story 7.3, AC2)
+		if errors.Is(err, sqlite.ErrDatabaseCorrupted) {
+			slog.Warn("database corrupted, attempting auto-recovery", "directory", dirName)
+			if recoverErr := c.recoverFromCorruption(ctx, dirName); recoverErr != nil {
+				slog.Error("recovery failed", "directory", dirName, "error", recoverErr)
+				return nil, fmt.Errorf("recovery failed for %s: %w", dirName, err)
+			}
+			// Retry after recovery
+			repo, err = sqlite.NewProjectRepository(projectDir)
+			if err != nil {
+				return nil, fmt.Errorf("failed to open project after recovery %s: %w", dirName, err)
+			}
+			slog.Info("database recovered successfully", "directory", dirName)
+		} else {
+			return nil, fmt.Errorf("failed to open project %s: %w", dirName, err)
+		}
 	}
 
 	c.repoCache[dirName] = repo
 	return repo, nil
+}
+
+// recoverFromCorruption deletes corrupted database files to allow recreation.
+// Called internally during auto-recovery in getProjectRepo.
+// Note: Does not acquire locks - caller must hold c.mu.Lock.
+func (c *RepositoryCoordinator) recoverFromCorruption(ctx context.Context, dirName string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	projectDir := filepath.Join(c.basePath, dirName)
+	dbPath := filepath.Join(projectDir, "state.db")
+
+	// Delete corrupted database files
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		_ = os.Remove(dbPath + suffix)
+	}
+
+	// Verify main db file is actually deleted (not just ignored error)
+	if _, err := os.Stat(dbPath); !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete corrupted database: %s still exists", dbPath)
+	}
+
+	// Remove from cache (already holding lock)
+	delete(c.repoCache, dirName)
+
+	slog.Info("database recovery completed", "directory", dirName)
+	return nil
 }
 
 // invalidateCache removes a directory from the cache.
@@ -474,4 +522,95 @@ func (c *RepositoryCoordinator) UpdateLastActivity(ctx context.Context, id strin
 	}
 
 	return repo.UpdateLastActivity(ctx, id, timestamp)
+}
+
+// resolveToDirName resolves a projectID (which can be dirName, project name, or path) to a dirName.
+// Returns empty string if not found.
+func (c *RepositoryCoordinator) resolveToDirName(cfg *ports.Config, projectID string) string {
+	// Try direct match as dirName first
+	if _, exists := cfg.Projects[projectID]; exists {
+		return projectID
+	}
+
+	// Try as path
+	if dirName, found := cfg.GetDirectoryName(projectID); found {
+		return dirName
+	}
+
+	// Try as display_name or project name (iterate through projects)
+	for dirName, entry := range cfg.Projects {
+		// Check display_name
+		if entry.DisplayName == projectID {
+			return dirName
+		}
+		// Check path base name (project name)
+		if filepath.Base(entry.Path) == projectID {
+			return dirName
+		}
+	}
+
+	return ""
+}
+
+// ResetProject deletes and allows recreation of a project's database.
+// The projectID can be a directory name, project name, display_name, or path.
+// Config.yaml is preserved - only state.db is affected.
+// Returns domain.ErrProjectNotFound if the project doesn't exist.
+func (c *RepositoryCoordinator) ResetProject(ctx context.Context, projectID string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	cfg, err := c.configLoader.Load(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Resolve projectID to dirName (could be name, path, or dirName)
+	dirName := c.resolveToDirName(cfg, projectID)
+	if dirName == "" {
+		return domain.ErrProjectNotFound
+	}
+
+	projectDir := filepath.Join(c.basePath, dirName)
+	dbPath := filepath.Join(projectDir, "state.db")
+
+	// Delete database files (ignore errors for missing files)
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		_ = os.Remove(dbPath + suffix)
+	}
+
+	// Invalidate cache - next access will recreate via NewProjectRepository
+	c.invalidateCache(dirName)
+
+	slog.Info("project database reset", "directory", dirName)
+	return nil
+}
+
+// ResetAll resets all project databases.
+// Returns the count of successfully reset projects.
+// Config.yaml is preserved - only state.db files are affected.
+func (c *RepositoryCoordinator) ResetAll(ctx context.Context) (int, error) {
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	default:
+	}
+
+	cfg, err := c.configLoader.Load(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to load config: %w", err)
+	}
+
+	count := 0
+	for dirName := range cfg.Projects {
+		if err := c.ResetProject(ctx, dirName); err != nil {
+			slog.Warn("failed to reset project", "directory", dirName, "error", err)
+			continue
+		}
+		count++
+	}
+	return count, nil
 }

@@ -837,3 +837,372 @@ func (m *mockDirectoryManager) DeleteProjectDir(ctx context.Context, projectPath
 	}
 	return nil
 }
+
+// Story 7.3: Tests for ResetProject, ResetAll, and auto-recovery
+
+// TestResetProject_DeletesDBFiles tests AC4: ResetProject deletes state.db files
+func TestResetProject_DeletesDBFiles(t *testing.T) {
+	basePath := t.TempDir()
+	ctx := context.Background()
+
+	// Setup project directory with database
+	projDir := setupProjectDir(t, basePath, "reset-proj")
+
+	// Create repo and save project (creates state.db)
+	repo, err := sqlite.NewProjectRepository(projDir)
+	if err != nil {
+		t.Fatalf("failed to create repo: %v", err)
+	}
+	project := createTestProject("/path/to/reset")
+	if err := repo.Save(ctx, project); err != nil {
+		t.Fatalf("failed to save project: %v", err)
+	}
+
+	// Verify DB exists
+	dbPath := filepath.Join(projDir, "state.db")
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		t.Fatal("expected state.db to exist before reset")
+	}
+
+	// Setup config
+	cfg := ports.NewConfig()
+	cfg.SetProjectEntry("reset-proj", "/path/to/reset", "", false)
+
+	mockLoader := &mockConfigLoader{
+		loadFunc: func(ctx context.Context) (*ports.Config, error) {
+			return cfg, nil
+		},
+	}
+
+	coord := NewRepositoryCoordinator(mockLoader, &mockDirectoryManager{}, basePath)
+
+	// Reset project by dirName
+	err = coord.ResetProject(ctx, "reset-proj")
+	if err != nil {
+		t.Fatalf("ResetProject returned error: %v", err)
+	}
+
+	// Verify DB is deleted
+	if _, err := os.Stat(dbPath); !os.IsNotExist(err) {
+		t.Error("expected state.db to be deleted after reset")
+	}
+}
+
+// TestResetProject_InvalidatesCache tests cache invalidation after reset
+func TestResetProject_InvalidatesCache(t *testing.T) {
+	basePath := t.TempDir()
+	ctx := context.Background()
+
+	// Setup project directory
+	projDir := setupProjectDir(t, basePath, "cache-proj")
+	repo, _ := sqlite.NewProjectRepository(projDir)
+	project := createTestProject("/path/to/cached")
+	if err := repo.Save(ctx, project); err != nil {
+		t.Fatalf("failed to save project: %v", err)
+	}
+
+	// Setup config
+	cfg := ports.NewConfig()
+	cfg.SetProjectEntry("cache-proj", "/path/to/cached", "", false)
+
+	mockLoader := &mockConfigLoader{
+		loadFunc: func(ctx context.Context) (*ports.Config, error) {
+			return cfg, nil
+		},
+	}
+
+	coord := NewRepositoryCoordinator(mockLoader, &mockDirectoryManager{}, basePath)
+
+	// Populate cache
+	if _, err := coord.FindAll(ctx); err != nil {
+		t.Fatalf("FindAll failed: %v", err)
+	}
+
+	// Verify cache is populated
+	coord.mu.RLock()
+	_, inCache := coord.repoCache["cache-proj"]
+	coord.mu.RUnlock()
+	if !inCache {
+		t.Error("expected cache to be populated before reset")
+	}
+
+	// Reset project
+	if err := coord.ResetProject(ctx, "cache-proj"); err != nil {
+		t.Fatalf("ResetProject failed: %v", err)
+	}
+
+	// Verify cache is cleared
+	coord.mu.RLock()
+	_, stillInCache := coord.repoCache["cache-proj"]
+	coord.mu.RUnlock()
+	if stillInCache {
+		t.Error("expected cache to be invalidated after reset")
+	}
+}
+
+// TestResetProject_ResolvesMultipleIDTypes tests that projectID can be dirName, path, or display_name
+func TestResetProject_ResolvesMultipleIDTypes(t *testing.T) {
+	basePath := t.TempDir()
+	ctx := context.Background()
+
+	// Setup project directory
+	projDir := setupProjectDir(t, basePath, "resolve-proj")
+	repo, _ := sqlite.NewProjectRepository(projDir)
+	project := createTestProject("/path/to/my-project")
+	project.DisplayName = "My Custom Name"
+	if err := repo.Save(ctx, project); err != nil {
+		t.Fatalf("failed to save project: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		projectID string
+	}{
+		{"by dirName", "resolve-proj"},
+		{"by path", "/path/to/my-project"},
+		{"by display_name", "My Custom Name"},
+		{"by project name", "my-project"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup config with all identifiers
+			cfg := ports.NewConfig()
+			cfg.SetProjectEntry("resolve-proj", "/path/to/my-project", "My Custom Name", false)
+
+			mockLoader := &mockConfigLoader{
+				loadFunc: func(ctx context.Context) (*ports.Config, error) {
+					return cfg, nil
+				},
+			}
+
+			coord := NewRepositoryCoordinator(mockLoader, &mockDirectoryManager{}, basePath)
+
+			// Reset using different ID type
+			err := coord.ResetProject(ctx, tt.projectID)
+			if err != nil {
+				t.Errorf("ResetProject(%s) failed: %v", tt.projectID, err)
+			}
+		})
+	}
+}
+
+// TestResetProject_NotFound tests error when project doesn't exist
+func TestResetProject_NotFound(t *testing.T) {
+	basePath := t.TempDir()
+	ctx := context.Background()
+
+	// Empty config
+	cfg := ports.NewConfig()
+
+	mockLoader := &mockConfigLoader{
+		loadFunc: func(ctx context.Context) (*ports.Config, error) {
+			return cfg, nil
+		},
+	}
+
+	coord := NewRepositoryCoordinator(mockLoader, &mockDirectoryManager{}, basePath)
+
+	err := coord.ResetProject(ctx, "nonexistent")
+	if !errors.Is(err, domain.ErrProjectNotFound) {
+		t.Errorf("expected ErrProjectNotFound, got %v", err)
+	}
+}
+
+// TestResetAll_ResetsAllProjects tests AC5: ResetAll resets all project databases
+func TestResetAll_ResetsAllProjects(t *testing.T) {
+	basePath := t.TempDir()
+	ctx := context.Background()
+
+	// Setup multiple project directories
+	proj1Dir := setupProjectDir(t, basePath, "proj1")
+	proj2Dir := setupProjectDir(t, basePath, "proj2")
+
+	// Create repos and DBs
+	repo1, _ := sqlite.NewProjectRepository(proj1Dir)
+	repo2, _ := sqlite.NewProjectRepository(proj2Dir)
+	if err := repo1.Save(ctx, createTestProject("/path/to/proj1")); err != nil {
+		t.Fatalf("failed to save proj1: %v", err)
+	}
+	if err := repo2.Save(ctx, createTestProject("/path/to/proj2")); err != nil {
+		t.Fatalf("failed to save proj2: %v", err)
+	}
+
+	// Setup config
+	cfg := ports.NewConfig()
+	cfg.SetProjectEntry("proj1", "/path/to/proj1", "", false)
+	cfg.SetProjectEntry("proj2", "/path/to/proj2", "", false)
+
+	mockLoader := &mockConfigLoader{
+		loadFunc: func(ctx context.Context) (*ports.Config, error) {
+			return cfg, nil
+		},
+	}
+
+	coord := NewRepositoryCoordinator(mockLoader, &mockDirectoryManager{}, basePath)
+
+	// Reset all
+	count, err := coord.ResetAll(ctx)
+	if err != nil {
+		t.Fatalf("ResetAll failed: %v", err)
+	}
+
+	if count != 2 {
+		t.Errorf("expected 2 projects reset, got %d", count)
+	}
+
+	// Verify both DBs are deleted
+	for _, projDir := range []string{proj1Dir, proj2Dir} {
+		dbPath := filepath.Join(projDir, "state.db")
+		if _, err := os.Stat(dbPath); !os.IsNotExist(err) {
+			t.Errorf("expected %s to be deleted", dbPath)
+		}
+	}
+}
+
+// TestResetAll_EmptyConfig tests ResetAll with no projects
+func TestResetAll_EmptyConfig(t *testing.T) {
+	basePath := t.TempDir()
+	ctx := context.Background()
+
+	// Empty config
+	cfg := ports.NewConfig()
+
+	mockLoader := &mockConfigLoader{
+		loadFunc: func(ctx context.Context) (*ports.Config, error) {
+			return cfg, nil
+		},
+	}
+
+	coord := NewRepositoryCoordinator(mockLoader, &mockDirectoryManager{}, basePath)
+
+	count, err := coord.ResetAll(ctx)
+	if err != nil {
+		t.Fatalf("ResetAll failed: %v", err)
+	}
+
+	if count != 0 {
+		t.Errorf("expected 0 projects reset, got %d", count)
+	}
+}
+
+// TestResetProject_ContextCancellation tests context cancellation
+func TestResetProject_ContextCancellation(t *testing.T) {
+	mockLoader := &mockConfigLoader{}
+	coord := NewRepositoryCoordinator(mockLoader, &mockDirectoryManager{}, "/tmp")
+
+	// Cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := coord.ResetProject(ctx, "any")
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got %v", err)
+	}
+}
+
+// TestResetAll_ContextCancellation tests context cancellation
+func TestResetAll_ContextCancellation(t *testing.T) {
+	mockLoader := &mockConfigLoader{}
+	coord := NewRepositoryCoordinator(mockLoader, &mockDirectoryManager{}, "/tmp")
+
+	// Cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := coord.ResetAll(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got %v", err)
+	}
+}
+
+// TestAutoRecovery_CorruptedDatabase tests AC2: auto-recovery when database is corrupted
+func TestAutoRecovery_CorruptedDatabase(t *testing.T) {
+	basePath := t.TempDir()
+	ctx := context.Background()
+
+	// Setup project directory
+	projDir := setupProjectDir(t, basePath, "corrupt-proj")
+
+	// Create a corrupted database file (invalid SQLite content)
+	dbPath := filepath.Join(projDir, "state.db")
+	if err := os.WriteFile(dbPath, []byte("this is not a valid sqlite database"), 0644); err != nil {
+		t.Fatalf("failed to create corrupted db: %v", err)
+	}
+
+	// Setup config
+	cfg := ports.NewConfig()
+	cfg.SetProjectEntry("corrupt-proj", "/path/to/corrupt", "", false)
+
+	mockLoader := &mockConfigLoader{
+		loadFunc: func(ctx context.Context) (*ports.Config, error) {
+			return cfg, nil
+		},
+	}
+
+	coord := NewRepositoryCoordinator(mockLoader, &mockDirectoryManager{}, basePath)
+
+	// First call should trigger auto-recovery: detect corruption, delete, recreate
+	// After recovery, the repo should work
+	_, err := coord.getProjectRepo(ctx, "corrupt-proj")
+
+	// After auto-recovery, getProjectRepo should succeed OR fail with non-corruption error
+	// The important thing is that corruption was detected and recovery attempted
+	if err != nil {
+		// If error, it should NOT be corruption anymore (recovery was attempted)
+		if errors.Is(err, sqlite.ErrDatabaseCorrupted) {
+			t.Error("expected auto-recovery to have been attempted, but still got ErrDatabaseCorrupted")
+		}
+		// Other errors are acceptable (e.g., if recovery succeeded but something else failed)
+		t.Logf("post-recovery error (acceptable): %v", err)
+	}
+
+	// Verify the corrupted file was deleted during recovery attempt
+	if _, statErr := os.Stat(dbPath); !os.IsNotExist(statErr) {
+		// File might be recreated after recovery - check content is valid
+		content, readErr := os.ReadFile(dbPath)
+		if readErr == nil && string(content) == "this is not a valid sqlite database" {
+			t.Error("expected corrupted db to be deleted, but original corrupt content remains")
+		}
+	}
+}
+
+// TestRecoverFromCorruption_VerifiesDeletion tests that recovery verifies db is actually deleted
+func TestRecoverFromCorruption_VerifiesDeletion(t *testing.T) {
+	basePath := t.TempDir()
+	ctx := context.Background()
+
+	// Setup project directory
+	projDir := setupProjectDir(t, basePath, "verify-proj")
+
+	// Create a database file
+	dbPath := filepath.Join(projDir, "state.db")
+	if err := os.WriteFile(dbPath, []byte("some data"), 0644); err != nil {
+		t.Fatalf("failed to create db: %v", err)
+	}
+
+	cfg := ports.NewConfig()
+	cfg.SetProjectEntry("verify-proj", "/path/to/verify", "", false)
+
+	mockLoader := &mockConfigLoader{
+		loadFunc: func(ctx context.Context) (*ports.Config, error) {
+			return cfg, nil
+		},
+	}
+
+	coord := NewRepositoryCoordinator(mockLoader, &mockDirectoryManager{}, basePath)
+
+	// Call recoverFromCorruption directly (need to hold lock)
+	coord.mu.Lock()
+	err := coord.recoverFromCorruption(ctx, "verify-proj")
+	coord.mu.Unlock()
+
+	if err != nil {
+		t.Fatalf("recoverFromCorruption failed: %v", err)
+	}
+
+	// Verify db file is deleted
+	if _, statErr := os.Stat(dbPath); !os.IsNotExist(statErr) {
+		t.Error("expected state.db to be deleted after recovery")
+	}
+}

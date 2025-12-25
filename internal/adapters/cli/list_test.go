@@ -605,6 +605,14 @@ func (m *MockRepositoryWithFindAllError) UpdateLastActivity(_ context.Context, _
 	return nil
 }
 
+func (m *MockRepositoryWithFindAllError) ResetProject(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *MockRepositoryWithFindAllError) ResetAll(_ context.Context) (int, error) {
+	return 0, nil
+}
+
 // ============================================================================
 // Story 6.1: JSON Output Format - New Tests
 // ============================================================================
