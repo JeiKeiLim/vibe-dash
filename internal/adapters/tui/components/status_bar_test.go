@@ -902,3 +902,108 @@ func TestStatusBarModel_ConfigWarning_YellowStyle(t *testing.T) {
 		t.Error("expected config warning text to be present")
 	}
 }
+
+// =============================================================================
+// Story 7.4: Loading State Tests
+// =============================================================================
+
+// TestStatusBarModel_LoadingState tests loading indicator in normal mode (AC1).
+func TestStatusBarModel_LoadingState(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetLoading(true)
+
+	view := sb.View()
+
+	// Should show loading indicator
+	if !strings.Contains(view, "Loading projects...") {
+		t.Errorf("expected 'Loading projects...' in output, got: %s", view)
+	}
+	// Should NOT show normal counts while loading
+	if strings.Contains(view, "5 active") {
+		t.Errorf("expected normal counts to be hidden while loading, got: %s", view)
+	}
+}
+
+// TestStatusBarModel_LoadingStateCondensed tests loading indicator in condensed mode (AC1).
+func TestStatusBarModel_LoadingStateCondensed(t *testing.T) {
+	sb := NewStatusBarModel(80)
+	sb.SetCounts(5, 2, 0)
+	sb.SetCondensed(true)
+	sb.SetLoading(true)
+
+	view := sb.View()
+
+	// Should show abbreviated loading indicator
+	if !strings.Contains(view, "Loading...") {
+		t.Errorf("expected 'Loading...' in condensed output, got: %s", view)
+	}
+	// Should show quit shortcut
+	if !strings.Contains(view, "[q]") {
+		t.Errorf("expected '[q]' in condensed loading output, got: %s", view)
+	}
+}
+
+// TestStatusBarModel_LoadingPrecedesRefresh tests loading shown before refresh if both true.
+func TestStatusBarModel_LoadingPrecedesRefresh(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetLoading(true)
+	sb.SetRefreshing(true, 2, 5) // Both loading and refreshing
+
+	view := sb.View()
+
+	// Loading should take precedence over refreshing
+	if !strings.Contains(view, "Loading projects...") {
+		t.Errorf("expected 'Loading projects...' to take precedence, got: %s", view)
+	}
+	if strings.Contains(view, "Refreshing") {
+		t.Errorf("expected 'Refreshing' to be hidden while loading, got: %s", view)
+	}
+}
+
+// TestStatusBarModel_SetLoading tests SetLoading method.
+func TestStatusBarModel_SetLoading(t *testing.T) {
+	sb := NewStatusBarModel(100)
+
+	// Initially not loading
+	if sb.isLoading {
+		t.Error("expected isLoading to be false initially")
+	}
+
+	// Set to loading
+	sb.SetLoading(true)
+	if !sb.isLoading {
+		t.Error("expected isLoading to be true after SetLoading(true)")
+	}
+
+	// Set back to not loading
+	sb.SetLoading(false)
+	if sb.isLoading {
+		t.Error("expected isLoading to be false after SetLoading(false)")
+	}
+}
+
+// TestStatusBarModel_LoadingCleared tests loading indicator is cleared after loading completes.
+func TestStatusBarModel_LoadingCleared(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetLoading(true)
+
+	// Verify loading is shown
+	view := sb.View()
+	if !strings.Contains(view, "Loading projects...") {
+		t.Errorf("expected loading indicator, got: %s", view)
+	}
+
+	// Clear loading
+	sb.SetLoading(false)
+	view = sb.View()
+	if strings.Contains(view, "Loading") {
+		t.Errorf("expected loading to be cleared, got: %s", view)
+	}
+	// Normal counts should appear
+	if !strings.Contains(view, "5 active") {
+		t.Errorf("expected normal counts after loading cleared, got: %s", view)
+	}
+}

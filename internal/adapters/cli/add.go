@@ -190,6 +190,11 @@ func runAdd(cmd *cobra.Command, args []string) error {
 
 	// Perform detection if service is available
 	if detectionService != nil {
+		// Story 7.4 AC4: Show detection progress
+		if !IsQuiet() {
+			fmt.Fprintf(cmd.OutOrStdout(), "Detecting methodology...\n")
+		}
+
 		result, err := detectionService.Detect(ctx, canonicalPath)
 		if err == nil && result != nil {
 			project.DetectedMethod = result.Method

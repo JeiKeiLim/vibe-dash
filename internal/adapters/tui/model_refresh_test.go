@@ -480,3 +480,146 @@ func TestModel_ProjectCorruptionMsg_EmptyList(t *testing.T) {
 		t.Errorf("expected 0 corrupted projects, got %d", len(updated.corruptedProjects))
 	}
 }
+
+// ============================================================================
+// Story 7.4: Progress Indicators Tests
+// ============================================================================
+
+// TestModel_ValidationComplete_SetsLoadingState verifies isLoading is set before loadProjectsCmd (AC6)
+func TestModel_ValidationComplete_SetsLoadingState(t *testing.T) {
+	repo := &refreshMockRepository{
+		projects: []*domain.Project{{ID: "1", Path: "/test", Name: "test"}},
+	}
+
+	m := NewModel(repo)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	// Send validationCompleteMsg with no invalid projects (triggers loading)
+	msg := validationCompleteMsg{invalidProjects: nil}
+	newModel, cmd := m.Update(msg)
+	updated := newModel.(Model)
+
+	// isLoading should be set
+	if !updated.isLoading {
+		t.Error("expected isLoading to be true after validationCompleteMsg")
+	}
+
+	// status bar should show loading
+	view := updated.statusBar.View()
+	if !strings.Contains(view, "Loading") {
+		t.Errorf("expected status bar to show loading, got: %s", view)
+	}
+
+	// Command should be returned to load projects
+	if cmd == nil {
+		t.Error("expected loadProjectsCmd to be returned")
+	}
+}
+
+// TestModel_ProjectsLoaded_ClearsLoadingState verifies isLoading is cleared on ProjectsLoadedMsg (AC6)
+func TestModel_ProjectsLoaded_ClearsLoadingState(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.isLoading = true // Simulating loading state
+	m.statusBar = components.NewStatusBarModel(m.width)
+	m.statusBar.SetLoading(true)
+
+	// Verify loading is set before
+	if !m.isLoading {
+		t.Error("expected isLoading to be true before ProjectsLoadedMsg")
+	}
+
+	// Send ProjectsLoadedMsg
+	msg := ProjectsLoadedMsg{
+		projects: []*domain.Project{{ID: "1", Path: "/test", Name: "test"}},
+		err:      nil,
+	}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// isLoading should be cleared
+	if updated.isLoading {
+		t.Error("expected isLoading to be false after ProjectsLoadedMsg")
+	}
+
+	// status bar should NOT show loading
+	view := updated.statusBar.View()
+	if strings.Contains(view, "Loading") {
+		t.Errorf("expected status bar to not show loading, got: %s", view)
+	}
+}
+
+// TestModel_RefreshComplete_ShowsFailureCount verifies "(Y failed)" message when failures > 0 (AC5)
+func TestModel_RefreshComplete_ShowsFailureCount(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.isRefreshing = true
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	// Simulate refresh completion with some failures
+	msg := refreshCompleteMsg{refreshedCount: 3, failedCount: 2, err: nil}
+	newModel, cmd := m.Update(msg)
+	updated := newModel.(Model)
+
+	if updated.isRefreshing {
+		t.Error("expected isRefreshing to be false after completion")
+	}
+
+	// Status bar should show failure count
+	view := updated.statusBar.View()
+	if !strings.Contains(view, "Scanned 3 projects") {
+		t.Errorf("expected status bar to show scan count, got: %s", view)
+	}
+	if !strings.Contains(view, "2 failed") {
+		t.Errorf("expected status bar to show failure count, got: %s", view)
+	}
+	if !strings.Contains(view, "✓") {
+		t.Errorf("expected status bar to show checkmark, got: %s", view)
+	}
+
+	if cmd == nil {
+		t.Error("expected batch command for reload and timer")
+	}
+}
+
+// TestModel_RefreshComplete_NoFailures verifies clean message when failures == 0 (AC3)
+func TestModel_RefreshComplete_NoFailures(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.isRefreshing = true
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	// Simulate refresh completion with no failures
+	msg := refreshCompleteMsg{refreshedCount: 5, failedCount: 0, err: nil}
+	newModel, cmd := m.Update(msg)
+	updated := newModel.(Model)
+
+	if updated.isRefreshing {
+		t.Error("expected isRefreshing to be false after completion")
+	}
+
+	// Status bar should show clean message (no failure count)
+	view := updated.statusBar.View()
+	if !strings.Contains(view, "Scanned 5 projects") {
+		t.Errorf("expected status bar to show scan count, got: %s", view)
+	}
+	if strings.Contains(view, "failed") {
+		t.Errorf("expected no failure count when failures == 0, got: %s", view)
+	}
+	if !strings.Contains(view, "✓") {
+		t.Errorf("expected status bar to show checkmark, got: %s", view)
+	}
+
+	if cmd == nil {
+		t.Error("expected batch command for reload and timer")
+	}
+}

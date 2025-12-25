@@ -82,6 +82,9 @@ type Model struct {
 
 	// Story 7.3: Corrupted projects state
 	corruptedProjects []string // Names of projects with corrupted databases
+
+	// Story 7.4: Loading state for initial project load
+	isLoading bool
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -474,6 +477,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentInvalidIdx = 0
 			return m, nil
 		}
+		// Story 7.4 AC6: Set loading state before loading projects
+		m.isLoading = true
+		m.statusBar.SetLoading(true)
 		// No invalid projects, load projects
 		return m, m.loadProjectsCmd()
 
@@ -513,6 +519,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case ProjectsLoadedMsg:
+		// Story 7.4 AC6: Clear loading state
+		m.isLoading = false
+		m.statusBar.SetLoading(false)
+
 		// Handle project loading result
 		if msg.err != nil {
 			slog.Error("Failed to load projects", "error", msg.err)
@@ -590,7 +600,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.refreshError = ""
-		m.statusBar.SetRefreshComplete(fmt.Sprintf("Refreshed %d projects", msg.refreshedCount))
+		// Story 7.4 AC5: Show failure count if any
+		var resultMsg string
+		if msg.failedCount > 0 {
+			resultMsg = fmt.Sprintf("✓ Scanned %d projects (%d failed)", msg.refreshedCount, msg.failedCount)
+		} else {
+			resultMsg = fmt.Sprintf("✓ Scanned %d projects", msg.refreshedCount)
+		}
+		m.statusBar.SetRefreshComplete(resultMsg)
 
 		// Story 7.1 AC3: Attempt watcher recovery if it was previously unavailable
 		if !m.fileWatcherAvailable && m.fileWatcher != nil && len(m.projects) > 0 {

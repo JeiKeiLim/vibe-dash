@@ -66,6 +66,9 @@ type StatusBarModel struct {
 
 	// Config warning (Story 7.2)
 	configWarning string // Config error message (separate from watcher warning)
+
+	// Loading state (Story 7.4)
+	isLoading bool // True when loading projects
 }
 
 // NewStatusBarModel creates a new StatusBarModel with the given width.
@@ -96,6 +99,11 @@ func (s *StatusBarModel) SetInHibernatedView(inView bool) {
 // SetCondensed sets the condensed mode for short terminals (Story 3.10 AC5).
 func (s *StatusBarModel) SetCondensed(condensed bool) {
 	s.isCondensed = condensed
+}
+
+// SetLoading sets the loading state (Story 7.4).
+func (s *StatusBarModel) SetLoading(isLoading bool) {
+	s.isLoading = isLoading
 }
 
 // SetRefreshing updates the refresh state (Story 3.6).
@@ -138,6 +146,11 @@ func (s StatusBarModel) View() string {
 // renderCondensed renders a single-line status bar for short terminals (Story 3.10 AC5).
 // Must preserve all features from renderCounts() to avoid regression (Story 3.6).
 func (s StatusBarModel) renderCondensed() string {
+	// Story 7.4 AC1: Show loading indicator first
+	if s.isLoading {
+		return "│ Loading... │ [q] │"
+	}
+
 	// Show refresh spinner when refreshing (Story 3.6)
 	if s.isRefreshing {
 		return fmt.Sprintf("│ Refreshing %d/%d │ [j/k][?][q] │", s.refreshProgress, s.refreshTotal)
@@ -173,6 +186,11 @@ func (s StatusBarModel) renderCondensed() string {
 
 // renderCounts renders the counts line with pipe separators (AC1, AC4, AC5).
 func (s StatusBarModel) renderCounts() string {
+	// Story 7.4 AC1: Show loading indicator first
+	if s.isLoading {
+		return "│ Loading projects... │"
+	}
+
 	// Show refresh spinner when refreshing (Story 3.6 AC1)
 	if s.isRefreshing {
 		spinnerText := fmt.Sprintf("Refreshing... (%d/%d)", s.refreshProgress, s.refreshTotal)

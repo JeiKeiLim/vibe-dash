@@ -33,7 +33,7 @@ claude -p "/bmad:bmm:agents:sm *validate-create-story $STORY then apply all sugg
 echo ""
 echo "🔨 Step 3/4: Implementing story..."
 echo "----------------------------------------"
-claude -p "/bmad:bmm:agents:dev *dev-story $STORY"
+claude -p "/bmad:bmm:agents:dev *dev-story $STORY do not ask and proceed right away"
 
 # Step 4: Code Review
 echo ""

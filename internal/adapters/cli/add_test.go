@@ -1394,3 +1394,141 @@ func TestAdd_QuietMode_ErrorsStillReturned(t *testing.T) {
 		t.Errorf("expected non-zero exit code, got %d", exitCode)
 	}
 }
+
+// ============================================================================
+// Story 7.4: Progress Indicators Tests
+// ============================================================================
+
+func TestAdd_ShowsDetectionProgress(t *testing.T) {
+	// AC4: "Detecting methodology..." is shown before detection
+	repoMock := NewMockRepository()
+	cli.SetRepository(repoMock)
+
+	// Create mock detector with result
+	detectionResult := domain.NewDetectionResult(
+		"bmad",
+		domain.StagePlan,
+		domain.ConfidenceCertain,
+		"bmad config found",
+	)
+	detectorMock := &MockDetector{
+		detectResult: &detectionResult,
+	}
+	cli.SetDetectionService(detectorMock)
+	defer cli.SetDetectionService(nil)
+
+	tmpDir := t.TempDir()
+
+	// Ensure not in quiet mode
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(false)
+	defer cli.ResetQuietFlag()
+
+	output, err := executeAddCommand([]string{tmpDir})
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// Should show detection progress message
+	if !strings.Contains(output, "Detecting methodology...") {
+		t.Errorf("expected 'Detecting methodology...' in output, got: %s", output)
+	}
+
+	// Should also show success message
+	if !strings.Contains(output, "Added") {
+		t.Errorf("expected 'Added' in output, got: %s", output)
+	}
+}
+
+func TestAdd_NoDetectionProgress_QuietMode(t *testing.T) {
+	// AC4: Detection progress is suppressed in quiet mode
+	repoMock := NewMockRepository()
+	cli.SetRepository(repoMock)
+
+	// Create mock detector with result
+	detectionResult := domain.NewDetectionResult(
+		"bmad",
+		domain.StagePlan,
+		domain.ConfidenceCertain,
+		"bmad config found",
+	)
+	detectorMock := &MockDetector{
+		detectResult: &detectionResult,
+	}
+	cli.SetDetectionService(detectorMock)
+	defer cli.SetDetectionService(nil)
+
+	tmpDir := t.TempDir()
+
+	// Set quiet mode
+	cli.ResetAddFlags()
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(true)
+	defer cli.ResetQuietFlag()
+
+	cmd := cli.NewRootCmd()
+	cli.RegisterAddCommand(cmd)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"add", tmpDir})
+
+	err := cmd.Execute()
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	// Should NOT show detection progress in quiet mode
+	if strings.Contains(output, "Detecting methodology...") {
+		t.Errorf("expected no 'Detecting methodology...' in quiet mode, got: %s", output)
+	}
+
+	// Should have no output at all in quiet mode
+	if output != "" {
+		t.Errorf("expected empty output in quiet mode, got: %s", output)
+	}
+
+	// Verify project was still saved with detection result
+	if len(repoMock.projects) != 1 {
+		t.Errorf("expected 1 project, got %d", len(repoMock.projects))
+	}
+	for _, p := range repoMock.projects {
+		if p.DetectedMethod != "bmad" {
+			t.Errorf("expected DetectedMethod 'bmad', got '%s'", p.DetectedMethod)
+		}
+	}
+}
+
+func TestAdd_NoDetectionProgress_WithoutDetector(t *testing.T) {
+	// When no detection service is set, no detection progress should be shown
+	repoMock := NewMockRepository()
+	cli.SetRepository(repoMock)
+	cli.SetDetectionService(nil) // No detection service
+
+	tmpDir := t.TempDir()
+
+	// Ensure not in quiet mode
+	cli.ResetQuietFlag()
+	cli.SetQuietForTest(false)
+	defer cli.ResetQuietFlag()
+
+	output, err := executeAddCommand([]string{tmpDir})
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// Should NOT show detection progress when detector is nil
+	if strings.Contains(output, "Detecting methodology...") {
+		t.Errorf("expected no 'Detecting methodology...' without detector, got: %s", output)
+	}
+
+	// Should still show success message
+	if !strings.Contains(output, "Added") {
+		t.Errorf("expected 'Added' in output, got: %s", output)
+	}
+}
