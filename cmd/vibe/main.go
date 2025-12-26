@@ -90,7 +90,11 @@ func run(ctx context.Context) error {
 		"refresh_interval_seconds", cfg.RefreshIntervalSeconds,
 		"refresh_debounce_ms", cfg.RefreshDebounceMs,
 		"agent_waiting_threshold_minutes", cfg.AgentWaitingThresholdMinutes,
+		"detail_layout", cfg.DetailLayout,
 	)
+
+	// Story 8.6: Set detail panel layout mode for TUI
+	cli.SetDetailLayout(cfg.DetailLayout)
 
 	// Get base path with safety check (Story 3.5.6)
 	basePath := config.GetDefaultBasePath()

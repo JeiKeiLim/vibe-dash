@@ -88,6 +88,9 @@ type Model struct {
 
 	// Story 8.4: Pending projects waiting for ready state (race condition fix)
 	pendingProjects []*domain.Project
+
+	// Story 8.6: Layout configuration
+	detailLayout string // "vertical" (left/right) or "horizontal" (top/bottom)
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -220,10 +223,11 @@ func NewModel(repo ports.ProjectRepository) Model {
 	return Model{
 		ready:           false,
 		showHelp:        false,
-		showDetailPanel: false, // Default closed, set based on height in resizeTickMsg
+		showDetailPanel: false,      // Default closed, set based on height in resizeTickMsg
 		viewMode:        viewModeNormal,
 		repository:      repo,
 		statusBar:       components.NewStatusBarModel(0), // Width set in resizeTickMsg
+		detailLayout:    "vertical",                      // Story 8.6: Default layout mode
 	}
 }
 
@@ -244,6 +248,21 @@ func (m *Model) SetWaitingDetector(detector ports.WaitingDetector) {
 func (m *Model) SetFileWatcher(watcher ports.FileWatcher) {
 	m.fileWatcher = watcher
 	m.fileWatcherAvailable = true // Assume available until proven otherwise
+}
+
+// SetDetailLayout configures the detail panel layout mode (Story 8.6).
+// Supports "vertical" (default, side-by-side) and "horizontal" (stacked top/bottom).
+func (m *Model) SetDetailLayout(layout string) {
+	if layout == "horizontal" || layout == "vertical" {
+		m.detailLayout = layout
+	} else {
+		m.detailLayout = "vertical" // Fallback to default
+	}
+}
+
+// isHorizontalLayout returns true if detail panel should be below project list (Story 8.6).
+func (m Model) isHorizontalLayout() bool {
+	return m.detailLayout == "horizontal"
 }
 
 // isProjectWaiting wraps WaitingDetector.IsWaiting for component callbacks.
@@ -1374,6 +1393,12 @@ func (m Model) renderMainContent(height int) string {
 		return m.projectList.View()
 	}
 
+	// Story 8.6: Check layout mode
+	if m.isHorizontalLayout() {
+		return m.renderHorizontalSplit(height)
+	}
+
+	// Vertical (side-by-side) layout - existing code
 	// Split layout: list (60%) | detail (40%)
 	listWidth := int(float64(m.width) * 0.6)
 	detailWidth := m.width - listWidth - 1 // -1 for separator space
@@ -1390,6 +1415,27 @@ func (m Model) renderMainContent(height int) string {
 	detailView := detailPanel.View()
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, listView, detailView)
+}
+
+// renderHorizontalSplit renders project list above detail panel (top/bottom).
+// Story 8.6: Used when config detail_layout=horizontal.
+func (m Model) renderHorizontalSplit(height int) string {
+	// Calculate heights: 60% list, 40% detail
+	listHeight := int(float64(height) * 0.6)
+	detailHeight := height - listHeight
+
+	// Create copies with updated sizes - full width for horizontal layout
+	projectList := m.projectList
+	projectList.SetSize(m.width, listHeight)
+
+	detailPanel := m.detailPanel
+	detailPanel.SetSize(m.width, detailHeight)
+
+	// Render stacked vertically
+	listView := projectList.View()
+	detailView := detailPanel.View()
+
+	return lipgloss.JoinVertical(lipgloss.Left, listView, detailView)
 }
 
 // handleFileEvent processes a file system event and updates project state (Story 4.6).

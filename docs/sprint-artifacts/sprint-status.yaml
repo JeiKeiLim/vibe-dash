@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-26
-updated_by: Dev Agent - Story 8.5 code review completed, all fixes applied
+updated_by: Dev Agent - Story 8.6 code review completed and marked done
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -222,7 +222,7 @@ development_status:
   8-3-stage-info-in-project-list: done
   8-4-fix-layout-width-bugs: done
   8-5-favorites-sort-first: done
-  8-6-horizontal-split-layout-option: backlog
+  8-6-horizontal-split-layout-option: done
   8-7-config-display-in-tui: backlog
   8-8-clarify-or-remove-confidence: backlog
   8-9-visual-polish-bundle: backlog

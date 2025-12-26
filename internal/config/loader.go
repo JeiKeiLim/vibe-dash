@@ -110,6 +110,7 @@ func (l *ViperLoader) Save(ctx context.Context, config *ports.Config) error {
 	l.v.Set("settings.refresh_interval_seconds", config.RefreshIntervalSeconds)
 	l.v.Set("settings.refresh_debounce_ms", config.RefreshDebounceMs)
 	l.v.Set("settings.agent_waiting_threshold_minutes", config.AgentWaitingThresholdMinutes)
+	l.v.Set("settings.detail_layout", config.DetailLayout) // Story 8.6
 
 	// Projects - directory_name as key, do NOT write deprecated fields (Subtask 2.4)
 	projects := make(map[string]interface{})
@@ -156,11 +157,12 @@ settings:
   refresh_interval_seconds: %d
   refresh_debounce_ms: %d
   agent_waiting_threshold_minutes: %d
+  detail_layout: %s  # "vertical" (side-by-side) or "horizontal" (stacked)
 
 # Projects map: directory_name → project info
 # Keys are subdirectory names under ~/.vibe-dash/
 projects: {}
-`, cfg.HibernationDays, cfg.RefreshIntervalSeconds, cfg.RefreshDebounceMs, cfg.AgentWaitingThresholdMinutes)
+`, cfg.HibernationDays, cfg.RefreshIntervalSeconds, cfg.RefreshDebounceMs, cfg.AgentWaitingThresholdMinutes, cfg.DetailLayout)
 
 	return os.WriteFile(l.configPath, []byte(content), 0644)
 }
@@ -189,6 +191,10 @@ func (l *ViperLoader) mapViperToConfig() *ports.Config {
 	}
 	if l.v.IsSet("settings.agent_waiting_threshold_minutes") {
 		cfg.AgentWaitingThresholdMinutes = l.v.GetInt("settings.agent_waiting_threshold_minutes")
+	}
+	// Story 8.6: Read detail_layout setting
+	if l.v.IsSet("settings.detail_layout") {
+		cfg.DetailLayout = l.v.GetString("settings.detail_layout")
 	}
 
 	// Map projects if present
@@ -294,6 +300,15 @@ func (l *ViperLoader) fixInvalidValues(cfg *ports.Config) *ports.Config {
 			"invalid_value", cfg.StorageVersion,
 			"default_value", currentStorageVersion)
 		cfg.StorageVersion = currentStorageVersion
+	}
+
+	// Fix invalid detail_layout (Story 8.6)
+	if cfg.DetailLayout != "vertical" && cfg.DetailLayout != "horizontal" {
+		slog.Warn("invalid detail_layout, using default",
+			"path", l.configPath,
+			"invalid_value", cfg.DetailLayout,
+			"default_value", defaults.DetailLayout)
+		cfg.DetailLayout = defaults.DetailLayout
 	}
 
 	return cfg

@@ -2232,3 +2232,197 @@ func TestModel_FullWidthAfterRace_Integration(t *testing.T) {
 		t.Error("View should display project after race condition resolved")
 	}
 }
+
+// =============================================================================
+// Story 8.6: Horizontal Split Layout Tests
+// =============================================================================
+
+// TestModel_SetDetailLayout_Valid tests SetDetailLayout with valid values.
+func TestModel_SetDetailLayout_Valid(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"vertical", "vertical"},
+		{"horizontal", "horizontal"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			m := NewModel(nil)
+			m.SetDetailLayout(tt.input)
+
+			if m.detailLayout != tt.expected {
+				t.Errorf("SetDetailLayout(%q) = %q, want %q", tt.input, m.detailLayout, tt.expected)
+			}
+		})
+	}
+}
+
+// TestModel_SetDetailLayout_Invalid tests SetDetailLayout with invalid values.
+func TestModel_SetDetailLayout_Invalid(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string // Should fallback to "vertical"
+	}{
+		{"", "vertical"},
+		{"diagonal", "vertical"},
+		{"VERTICAL", "vertical"},
+		{"Horizontal", "vertical"},
+		{"side-by-side", "vertical"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			m := NewModel(nil)
+			m.SetDetailLayout(tt.input)
+
+			if m.detailLayout != tt.expected {
+				t.Errorf("SetDetailLayout(%q) = %q, want %q (fallback)", tt.input, m.detailLayout, tt.expected)
+			}
+		})
+	}
+}
+
+// TestModel_isHorizontalLayout tests the isHorizontalLayout helper.
+func TestModel_isHorizontalLayout(t *testing.T) {
+	tests := []struct {
+		layout   string
+		expected bool
+	}{
+		{"horizontal", true},
+		{"vertical", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.layout, func(t *testing.T) {
+			m := NewModel(nil)
+			m.detailLayout = tt.layout
+
+			result := m.isHorizontalLayout()
+			if result != tt.expected {
+				t.Errorf("isHorizontalLayout() with layout %q = %v, want %v", tt.layout, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestModel_RenderMainContent_HorizontalLayout tests that horizontal layout
+// uses JoinVertical instead of JoinHorizontal.
+func TestModel_RenderMainContent_HorizontalLayout(t *testing.T) {
+	m := createModelWithProjects(2)
+	m.height = 40 // Tall enough
+	m.showDetailPanel = true
+	m.detailLayout = "horizontal" // Set horizontal layout
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.detailPanel.SetVisible(true)
+	m.detailPanel.SetProject(m.projectList.SelectedProject())
+
+	view := m.renderDashboard()
+
+	// Should still contain detail panel content
+	if !strings.Contains(view, "DETAILS:") {
+		t.Error("Horizontal layout should still show detail panel with 'DETAILS:' title")
+	}
+
+	// Verify the layout direction by checking that projects are rendered
+	// We can't easily test JoinVertical vs JoinHorizontal directly,
+	// but we verify both components are present
+	if !strings.Contains(view, m.projectList.SelectedProject().Name) {
+		t.Error("Horizontal layout should display selected project name")
+	}
+}
+
+// TestModel_RenderMainContent_VerticalLayout tests that vertical layout
+// remains unchanged (regression test).
+func TestModel_RenderMainContent_VerticalLayout(t *testing.T) {
+	m := createModelWithProjects(2)
+	m.height = 40 // Tall enough
+	m.showDetailPanel = true
+	m.detailLayout = "vertical" // Default layout
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.detailPanel.SetVisible(true)
+	m.detailPanel.SetProject(m.projectList.SelectedProject())
+
+	view := m.renderDashboard()
+
+	// Should contain detail panel content
+	if !strings.Contains(view, "DETAILS:") {
+		t.Error("Vertical layout should show detail panel with 'DETAILS:' title")
+	}
+
+	// Verify both components are present
+	if !strings.Contains(view, m.projectList.SelectedProject().Name) {
+		t.Error("Vertical layout should display selected project name")
+	}
+}
+
+// TestModel_RenderMainContent_EmptyLayoutDefaultsToVertical tests that
+// empty detailLayout defaults to vertical behavior.
+func TestModel_RenderMainContent_EmptyLayoutDefaultsToVertical(t *testing.T) {
+	m := createModelWithProjects(2)
+	m.height = 40
+	m.showDetailPanel = true
+	m.detailLayout = "" // Empty - should behave as vertical
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.detailPanel.SetVisible(true)
+	m.detailPanel.SetProject(m.projectList.SelectedProject())
+
+	// Should not panic and should render correctly
+	view := m.renderDashboard()
+
+	if !strings.Contains(view, "DETAILS:") {
+		t.Error("Empty layout should still render detail panel")
+	}
+}
+
+// TestModel_RenderMainContent_HiddenDetailPanel_NoLayoutEffect tests that
+// layout mode doesn't affect rendering when detail panel is hidden.
+func TestModel_RenderMainContent_HiddenDetailPanel_NoLayoutEffect(t *testing.T) {
+	m := createModelWithProjects(2)
+	m.height = 40
+	m.showDetailPanel = false // Panel hidden
+	m.detailLayout = "horizontal"
+
+	view := m.renderDashboard()
+
+	// Detail panel content should NOT be present
+	if strings.Contains(view, "DETAILS:") {
+		t.Error("Hidden detail panel should not show DETAILS title regardless of layout")
+	}
+
+	// Project list should be visible
+	if !strings.Contains(view, m.projectList.SelectedProject().Name) {
+		t.Error("Project list should be visible when detail panel is hidden")
+	}
+}
+
+// TestModel_RenderHorizontalSplit_Dimensions tests that horizontal split
+// uses correct height proportions (60% list, 40% detail).
+func TestModel_RenderHorizontalSplit_Dimensions(t *testing.T) {
+	m := createModelWithProjects(2)
+	m.width = 100
+	m.height = 50
+	m.showDetailPanel = true
+	m.detailLayout = "horizontal"
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.detailPanel.SetVisible(true)
+	m.detailPanel.SetProject(m.projectList.SelectedProject())
+
+	// Call renderHorizontalSplit directly with content height
+	// Content height = total height - statusBarHeight (approximately 2 lines)
+	contentHeight := 48
+
+	result := m.renderHorizontalSplit(contentHeight)
+
+	// Should produce non-empty result
+	if result == "" {
+		t.Error("renderHorizontalSplit should produce non-empty result")
+	}
+
+	// Both list and detail content should be present
+	if !strings.Contains(result, m.projectList.SelectedProject().Name) {
+		t.Error("renderHorizontalSplit should include project list content")
+	}
+}

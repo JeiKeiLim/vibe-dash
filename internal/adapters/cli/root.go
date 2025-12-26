@@ -35,9 +35,9 @@ Exit Codes:
 			return
 		}
 
-		// Pass detection service, waiting detector, and file watcher to TUI (Story 3.6, 4.5, 4.6)
-		// Uses existing package variables from add.go
-		if err := tui.Run(cmd.Context(), repository, detectionService, waitingDetector, fileWatcher); err != nil {
+		// Pass detection service, waiting detector, file watcher, and layout to TUI (Story 3.6, 4.5, 4.6, 8.6)
+		// Uses existing package variables from add.go and deps.go
+		if err := tui.Run(cmd.Context(), repository, detectionService, waitingDetector, fileWatcher, detailLayout); err != nil {
 			slog.Error("TUI error", "error", err)
 		}
 	},

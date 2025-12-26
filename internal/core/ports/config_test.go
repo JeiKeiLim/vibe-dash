@@ -41,6 +41,12 @@ func TestNewConfig_Defaults(t *testing.T) {
 			t.Error("Projects map is nil, want initialized")
 		}
 	})
+
+	t.Run("DetailLayout defaults to vertical", func(t *testing.T) {
+		if config.DetailLayout != "vertical" {
+			t.Errorf("DetailLayout = %q, want %q", config.DetailLayout, "vertical")
+		}
+	})
 }
 
 func TestConfig_Validate(t *testing.T) {
@@ -74,6 +80,7 @@ func TestConfig_Validate(t *testing.T) {
 				RefreshIntervalSeconds:       10,
 				RefreshDebounceMs:            200,
 				AgentWaitingThresholdMinutes: 10,
+				DetailLayout:                 "vertical",
 				Projects:                     make(map[string]ports.ProjectConfig),
 			},
 			wantErr: false,
@@ -134,6 +141,7 @@ func TestConfig_Validate(t *testing.T) {
 				RefreshIntervalSeconds:       10,
 				RefreshDebounceMs:            200,
 				AgentWaitingThresholdMinutes: 0,
+				DetailLayout:                 "vertical",
 				Projects:                     make(map[string]ports.ProjectConfig),
 			},
 			wantErr: false,
@@ -232,6 +240,7 @@ func TestConfig_Validate_ProjectConfigOverrides(t *testing.T) {
 				RefreshIntervalSeconds:       10,
 				RefreshDebounceMs:            200,
 				AgentWaitingThresholdMinutes: 10,
+				DetailLayout:                 "vertical",
 				Projects:                     nil,
 			},
 			wantErr: false,
@@ -475,6 +484,55 @@ func TestProjectConfig_DirectoryName(t *testing.T) {
 
 	if pc.DirectoryName != "api-service" {
 		t.Errorf("ProjectConfig.DirectoryName = %q, want %q", pc.DirectoryName, "api-service")
+	}
+}
+
+// Story 8.6: DetailLayout validation tests
+func TestConfig_Validate_DetailLayout(t *testing.T) {
+	tests := []struct {
+		name         string
+		detailLayout string
+		wantErr      bool
+	}{
+		{
+			name:         "vertical is valid",
+			detailLayout: "vertical",
+			wantErr:      false,
+		},
+		{
+			name:         "horizontal is valid",
+			detailLayout: "horizontal",
+			wantErr:      false,
+		},
+		{
+			name:         "empty string is invalid",
+			detailLayout: "",
+			wantErr:      true,
+		},
+		{
+			name:         "diagonal is invalid",
+			detailLayout: "diagonal",
+			wantErr:      true,
+		},
+		{
+			name:         "VERTICAL (uppercase) is invalid",
+			detailLayout: "VERTICAL",
+			wantErr:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := ports.NewConfig()
+			config.DetailLayout = tt.detailLayout
+			err := config.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil && !errors.Is(err, domain.ErrConfigInvalid) {
+				t.Errorf("Validate() error should wrap domain.ErrConfigInvalid, got %v", err)
+			}
+		})
 	}
 }
 
