@@ -56,6 +56,72 @@ func TestNormalizeStatus(t *testing.T) {
 }
 
 // =============================================================================
+// isDeferred Tests (G24)
+// =============================================================================
+
+func TestIsDeferred(t *testing.T) {
+	tests := []struct {
+		status string
+		want   bool
+	}{
+		// Deferred variations - should return true
+		{"deferred", true},
+		{"deferred-post-mvp", true},
+		{"deferred-to-v2", true},
+		{"post-mvp", true},
+		// Active statuses - should return false
+		{"in-progress", false},
+		{"done", false},
+		{"backlog", false},
+		{"review", false},
+		{"ready-for-dev", false},
+		{"drafted", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.status, func(t *testing.T) {
+			got := isDeferred(tt.status)
+			if got != tt.want {
+				t.Errorf("isDeferred(%q) = %v, want %v", tt.status, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestIsDeferredWithNormalization verifies the combined flow: normalizeStatus() → isDeferred()
+// M2 fix: Ensures uppercase/space/underscore variations of deferred statuses work correctly
+func TestIsDeferredWithNormalization(t *testing.T) {
+	tests := []struct {
+		rawStatus string
+		want      bool
+	}{
+		// Uppercase variations
+		{"DEFERRED", true},
+		{"DEFERRED-POST-MVP", true},
+		{"POST-MVP", true},
+		// Space/underscore variations
+		{"deferred post mvp", true},
+		{"deferred_post_mvp", true},
+		{"Deferred To V2", true},
+		{"post mvp", true},
+		// Active statuses should still be false after normalization
+		{"IN PROGRESS", false},
+		{"DONE", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.rawStatus, func(t *testing.T) {
+			normalized := normalizeStatus(tt.rawStatus)
+			got := isDeferred(normalized)
+			if got != tt.want {
+				t.Errorf("isDeferred(normalizeStatus(%q)) = %v, want %v (normalized=%q)",
+					tt.rawStatus, got, tt.want, normalized)
+			}
+		})
+	}
+}
+
+// =============================================================================
 // parseSprintStatus Tests
 // =============================================================================
 
@@ -510,6 +576,88 @@ func TestDetermineStageFromStatus(t *testing.T) {
 			wantStage:      domain.StagePlan,
 			wantConfidence: domain.ConfidenceLikely,
 			wantReasoning:  "Story 1.1 has unknown status 'another-weird' [Warning: unknown status 'another-weird' for 1-1-feature]",
+		},
+		// G24: Deferred epic handling
+		{
+			name: "G24: single deferred epic with active epics",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "deferred-post-mvp",
+					"1-1-feature": "deferred-post-mvp",
+					"epic-2":      "in-progress",
+					"2-1-feature": "in-progress",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Story 2.1 being implemented",
+		},
+		{
+			name: "G24: all epics deferred",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1": "deferred-post-mvp",
+					"epic-2": "deferred",
+				},
+			},
+			wantStage:      domain.StageUnknown,
+			wantConfidence: domain.ConfidenceUncertain,
+			wantReasoning:  "All epics deferred - no active development",
+		},
+		{
+			name: "G24: deferred-to-v2 variation",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "deferred-to-v2",
+					"epic-2":      "in-progress",
+					"2-1-feature": "ready-for-dev",
+				},
+			},
+			wantStage:      domain.StagePlan,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Story 2.1 ready for development",
+		},
+		{
+			name: "G24: post-mvp variation",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1": "post-mvp",
+					"epic-2": "backlog",
+				},
+			},
+			wantStage:      domain.StageSpecify,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "No epics in progress - planning phase",
+		},
+		{
+			name: "G24: deferred epic stories not flagged as orphans",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "deferred-post-mvp",
+					"1-1-feature": "backlog", // Story for deferred epic - should be silently ignored
+					"1-2-feature": "drafted", // Another story for deferred epic - should be silently ignored
+					"epic-2":      "in-progress",
+					"2-1-feature": "in-progress",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Story 2.1 being implemented", // Verifies no "[Warning: orphan story 1.x]" appears
+		},
+		// M1 fix: Story for deferred epic with different status (edge case)
+		{
+			name: "G24: story for deferred epic with in-progress status is ignored",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "deferred-post-mvp",
+					"1-1-feature": "in-progress", // Story marked in-progress but epic is deferred
+					"epic-2":      "in-progress",
+					"2-1-feature": "backlog",
+				},
+			},
+			wantStage:      domain.StagePlan,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Story 2.1 in backlog, needs drafting", // 1-1-feature is ignored, no orphan warning
 		},
 	}
 

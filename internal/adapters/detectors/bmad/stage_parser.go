@@ -56,6 +56,13 @@ func normalizeStatus(status string) string {
 	return s
 }
 
+// isDeferred checks if a normalized status indicates a deferred epic.
+// G24: Deferred epics should be completely skipped in stage detection.
+func isDeferred(normalizedStatus string) bool {
+	return strings.Contains(normalizedStatus, "deferred") ||
+		strings.HasPrefix(normalizedStatus, "post-mvp")
+}
+
 // storyKeyRegex matches story keys like "1-1-project-scaffolding", "4-5-2-bmad-v6-...".
 var storyKeyRegex = regexp.MustCompile(`^\d+-\d+-`)
 
@@ -104,9 +111,10 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 	}
 
 	epics := make(map[string]*epicInfo)
-	var epicOrder []string // Preserve order for finding first in-progress
+	deferredEpics := make(map[string]bool) // G24: Track deferred epics to skip their stories
+	var epicOrder []string                 // Preserve order for finding first in-progress
 
-	// First pass: collect epics
+	// First pass: collect epics (skip deferred - G24)
 	for key, value := range status.DevelopmentStatus {
 		// Skip retrospectives
 		if strings.HasSuffix(key, "-retrospective") {
@@ -114,9 +122,17 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 		}
 
 		if epicKeyRegex.MatchString(key) {
+			normalized := normalizeStatus(value)
+
+			// G24: Skip deferred epics from active counting, track to prevent orphan warnings for their stories
+			if isDeferred(normalized) {
+				deferredEpics[key] = true
+				continue
+			}
+
 			epics[key] = &epicInfo{
 				key:    key,
-				status: normalizeStatus(value),
+				status: normalized,
 			}
 			epicOrder = append(epicOrder, key)
 		}
@@ -124,6 +140,12 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 
 	// Sort epic order for deterministic behavior (map iteration is random)
 	sort.Strings(epicOrder)
+
+	// G24: Check if all epics are deferred (no active epics found)
+	if len(epics) == 0 {
+		return domain.StageUnknown, domain.ConfidenceUncertain,
+			"All epics deferred - no active development"
+	}
 
 	// G14/G22: Track data quality warnings
 	var warnings []string
@@ -146,6 +168,11 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 			// Story "4-5-2-xxx" belongs to epic "epic-4-5"
 			storyPrefix := extractStoryPrefix(key)
 			epicKey := "epic-" + storyPrefix
+
+			// G24: Skip stories for deferred epics (no orphan warning)
+			if deferredEpics[epicKey] {
+				continue
+			}
 
 			if epic, ok := epics[epicKey]; ok {
 				epic.stories = append(epic.stories, struct {

@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-26
-updated_by: Dev (Amelia) - Story 7-7 Graceful Shutdown done with code review fixes
+updated_by: Dev Agent - Story 7-8 done (code review passed, all fixes applied)
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -171,7 +171,7 @@ development_status:
   # Pattern: Follow normalizeStatus() in internal/adapters/detection/bmad_stage.go (Story 4.6.3)
   # Variations to handle: deferred, Deferred, DEFERRED, deferred-post-mvp, deferred_post_mvp, epic-deferred
   # Reference: epic-6-retro-2025-12-25.md → "New Issues Identified" section
-  7-8-g24-deferred-epic-stage-detection: backlog
+  7-8-g24-deferred-epic-stage-detection: done
 
   # 7-9: G23 - Retrospective stage detection (from Epic 4.6 retro)
   # Problem: All epics done + retro in-progress shows "Unable to determine stage"
@@ -199,6 +199,13 @@ development_status:
   # Decision: Refactor to call findProjectByIdentifier() from status.go
   # Reference: epic-6-retro-2025-12-25.md → "Action Items" H5
   7-12-dry-refactor-findprojectbyidentifier: backlog
+
+  # 7-13: Numeric story sorting
+  # Problem: Stories sort lexicographically (7-10 before 7-2) instead of numerically
+  # Impact: Dashboard shows wrong "next story" when story numbers exceed single digits
+  # Root cause: stage_parser.go uses string comparison for sorting
+  # Locations: stage_parser.go:241-242 (story sort), stage_parser.go:126 (epic sort)
+  7-13-numeric-story-sorting: ready-for-dev
   epic-7-retrospective: optional
 
   # Epic 8: UX Polish
