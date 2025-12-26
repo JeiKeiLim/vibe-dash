@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-26
-updated_by: Dev Agent - Story 7-8 done (code review passed, all fixes applied)
+updated_by: Dev Agent - Story 7-9 done (code review passed, fixes applied)
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -177,7 +177,7 @@ development_status:
   # Problem: All epics done + retro in-progress shows "Unable to determine stage"
   # Decision: Show "Retrospective for Epic N in progress" or "All epics complete"
   # Reference: epic-4.6-retro-2025-12-22.md → "New Gap Identified" section
-  7-9-g23-retrospective-stage-detection: backlog
+  7-9-g23-retrospective-stage-detection: done
 
   # 7-10: M2 - Shared test helpers package
   # Problem: Test helpers duplicated across packages (mocks, fixtures, executeCommand)

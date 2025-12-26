@@ -23,6 +23,10 @@ type SprintStatus struct {
 // epicKeyRegex matches epic keys like "epic-1", "epic-4-5".
 var epicKeyRegex = regexp.MustCompile(`^epic-\d+(-\d+)?$`)
 
+// retroKeyRegex matches retrospective keys like "epic-7-retrospective", "epic-4-5-retrospective".
+// G23: Used to detect retrospectives when all epics are done.
+var retroKeyRegex = regexp.MustCompile(`^epic-(\d+(?:-\d+)?)-retrospective$`)
+
 // normalizeStatus converts common LLM variations to canonical status values.
 // Apply BEFORE switch statement comparison.
 func normalizeStatus(status string) string {
@@ -61,6 +65,18 @@ func normalizeStatus(status string) string {
 func isDeferred(normalizedStatus string) bool {
 	return strings.Contains(normalizedStatus, "deferred") ||
 		strings.HasPrefix(normalizedStatus, "post-mvp")
+}
+
+// activeStatuses defines normalized statuses that indicate active/in-progress state.
+// G23: Used for retrospective detection when all epics are done.
+var activeStatuses = map[string]bool{
+	"in-progress": true, // Most common - normalizeStatus maps WIP/wip/in_progress here
+	"started":     true, // Direct usage
+}
+
+// isActiveStatus checks if a normalized status indicates an active/in-progress state.
+func isActiveStatus(normalizedStatus string) bool {
+	return activeStatuses[normalizedStatus]
 }
 
 // storyKeyRegex matches story keys like "1-1-project-scaffolding", "4-5-2-bmad-v6-...".
@@ -110,13 +126,21 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 		}
 	}
 
+	// G23: Track retrospectives for all-done case
+	type retroInfo struct {
+		key     string // e.g., "epic-7-retrospective"
+		epicNum string // e.g., "7" or "4-5" for sub-epics
+		status  string // normalized status
+	}
+
 	epics := make(map[string]*epicInfo)
 	deferredEpics := make(map[string]bool) // G24: Track deferred epics to skip their stories
 	var epicOrder []string                 // Preserve order for finding first in-progress
+	var retrospectives []retroInfo         // G23: Collect retrospectives for all-done check
 
-	// First pass: collect epics (skip deferred - G24)
+	// First pass: collect epics (identify deferred first - G24)
 	for key, value := range status.DevelopmentStatus {
-		// Skip retrospectives
+		// Skip retrospectives in first pass - collect after we know all deferred epics
 		if strings.HasSuffix(key, "-retrospective") {
 			continue
 		}
@@ -135,6 +159,25 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 				status: normalized,
 			}
 			epicOrder = append(epicOrder, key)
+		}
+	}
+
+	// G23: Collect retrospectives (after we know all deferred epics)
+	for key, value := range status.DevelopmentStatus {
+		if matches := retroKeyRegex.FindStringSubmatch(key); matches != nil {
+			epicNum := matches[1] // e.g., "7" or "4-5"
+			epicKey := "epic-" + epicNum
+
+			// G24+G23: Skip retrospectives for deferred epics (AC9)
+			if deferredEpics[epicKey] {
+				continue
+			}
+
+			retrospectives = append(retrospectives, retroInfo{
+				key:     key,
+				epicNum: epicNum,
+				status:  normalizeStatus(value),
+			})
 		}
 	}
 
@@ -217,6 +260,11 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 		}
 	}
 
+	// G23: Sort retrospectives by epicNum for deterministic behavior (AC5)
+	sort.Slice(retrospectives, func(i, j int) bool {
+		return retrospectives[i].epicNum < retrospectives[j].epicNum
+	})
+
 	// G7: Check for done epics with active stories (check before all-done shortcut)
 	for _, epicKey := range epicOrder {
 		epic := epics[epicKey]
@@ -234,8 +282,14 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 		}
 	}
 
-	// All epics done
+	// All epics done - G23: Check for in-progress retrospective
 	if len(epics) > 0 && doneCount == len(epics) {
+		for _, retro := range retrospectives {
+			if isActiveStatus(retro.status) {
+				return domain.StageImplement, domain.ConfidenceCertain,
+					appendWarnings("Retrospective for Epic " + retro.epicNum + " in progress")
+			}
+		}
 		return domain.StageImplement, domain.ConfidenceCertain, appendWarnings("All epics complete - project done")
 	}
 

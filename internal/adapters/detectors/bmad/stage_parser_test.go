@@ -122,6 +122,75 @@ func TestIsDeferredWithNormalization(t *testing.T) {
 }
 
 // =============================================================================
+// isActiveStatus Tests (G23)
+// =============================================================================
+
+func TestIsActiveStatus(t *testing.T) {
+	tests := []struct {
+		status string
+		want   bool
+	}{
+		// Active statuses - should return true
+		{"in-progress", true},
+		{"started", true},
+		// Inactive statuses - should return false
+		{"done", false},
+		{"completed", false}, // Note: normalizeStatus would map this to "done" first
+		{"optional", false},
+		{"backlog", false},
+		{"review", false},
+		{"ready-for-dev", false},
+		{"drafted", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.status, func(t *testing.T) {
+			got := isActiveStatus(tt.status)
+			if got != tt.want {
+				t.Errorf("isActiveStatus(%q) = %v, want %v", tt.status, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestIsActiveStatusWithNormalization verifies the combined flow: normalizeStatus() → isActiveStatus()
+// G23: Ensures WIP and other variations correctly detect as active
+func TestIsActiveStatusWithNormalization(t *testing.T) {
+	tests := []struct {
+		rawStatus string
+		want      bool
+	}{
+		// Active variations - should be true after normalization
+		{"WIP", true},
+		{"wip", true},
+		{"In Progress", true},
+		{"in_progress", true},
+		{"IN-PROGRESS", true},
+		{"started", true},
+		{"STARTED", true},
+		// Inactive variations - should be false after normalization
+		{"DONE", false},
+		{"completed", false},
+		{"Completed", false},
+		{"COMPLETED", false},
+		{"optional", false},
+		{"OPTIONAL", false},
+		{"backlog", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.rawStatus, func(t *testing.T) {
+			normalized := normalizeStatus(tt.rawStatus)
+			got := isActiveStatus(normalized)
+			if got != tt.want {
+				t.Errorf("isActiveStatus(normalizeStatus(%q)) = %v, want %v (normalized=%q)",
+					tt.rawStatus, got, tt.want, normalized)
+			}
+		})
+	}
+}
+
+// =============================================================================
 // parseSprintStatus Tests
 // =============================================================================
 
@@ -658,6 +727,133 @@ func TestDetermineStageFromStatus(t *testing.T) {
 			wantStage:      domain.StagePlan,
 			wantConfidence: domain.ConfidenceCertain,
 			wantReasoning:  "Story 2.1 in backlog, needs drafting", // 1-1-feature is ignored, no orphan warning
+		},
+		// G23: Retrospective stage detection
+		{
+			name: "G23: all epics done with retro in-progress",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-6":               "done",
+					"6-1-feature":          "done",
+					"epic-7":               "done",
+					"7-1-feature":          "done",
+					"epic-7-retrospective": "in-progress",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Retrospective for Epic 7 in progress",
+		},
+		{
+			name: "G23: all epics done with retro completed",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-6":               "done",
+					"6-1-feature":          "done",
+					"epic-7":               "done",
+					"7-1-feature":          "done",
+					"epic-7-retrospective": "completed",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "All epics complete - project done",
+		},
+		{
+			name: "G23: all epics done with retro optional",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-6":               "done",
+					"6-1-feature":          "done",
+					"epic-7":               "done",
+					"7-1-feature":          "done",
+					"epic-7-retrospective": "optional",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "All epics complete - project done",
+		},
+		{
+			name: "G23: epic in-progress - retro ignored",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-6":               "done",
+					"epic-7":               "in-progress",
+					"7-1-feature":          "in-progress",
+					"epic-7-retrospective": "in-progress", // Should be ignored when not all-done
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Story 7.1 being implemented",
+		},
+		{
+			name: "G23: multiple retros - uses first by epic number",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-6":               "done",
+					"epic-7":               "done",
+					"epic-6-retrospective": "in-progress",
+					"epic-7-retrospective": "in-progress",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Retrospective for Epic 6 in progress", // 6 < 7 by string sort
+		},
+		{
+			name: "G23: retro status normalization - WIP",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-7":               "done",
+					"7-1-feature":          "done",
+					"epic-7-retrospective": "WIP",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Retrospective for Epic 7 in progress",
+		},
+		{
+			name: "G23: sub-epic retrospective format",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-4-5":               "done",
+					"4-5-1-feature":          "done",
+					"epic-4-5-retrospective": "in-progress",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Retrospective for Epic 4-5 in progress",
+		},
+		{
+			name: "G23: retro status started",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-7":               "done",
+					"7-1-feature":          "done",
+					"epic-7-retrospective": "started",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "Retrospective for Epic 7 in progress",
+		},
+		{
+			name: "G23: deferred epic retrospective ignored",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":               "deferred-post-mvp",
+					"epic-1-retrospective": "in-progress", // Retro for deferred epic - ignored
+					"epic-2":               "done",
+					"2-1-feature":          "done",
+				},
+			},
+			wantStage:      domain.StageImplement,
+			wantConfidence: domain.ConfidenceCertain,
+			wantReasoning:  "All epics complete - project done", // Only non-deferred epics count
 		},
 	}
 
