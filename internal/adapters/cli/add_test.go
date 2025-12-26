@@ -2,155 +2,27 @@ package cli_test
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/cli"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/testhelpers"
 )
-
-// MockDetector implements ports.Detector for testing
-type MockDetector struct {
-	detectResult   *domain.DetectionResult
-	detectErr      error
-	multipleResult []*domain.DetectionResult
-	multipleErr    error
-}
-
-func (m *MockDetector) Detect(_ context.Context, _ string) (*domain.DetectionResult, error) {
-	return m.detectResult, m.detectErr
-}
-
-func (m *MockDetector) DetectMultiple(_ context.Context, _ string) ([]*domain.DetectionResult, error) {
-	return m.multipleResult, m.multipleErr
-}
-
-// MockRepository implements ports.ProjectRepository for testing
-type MockRepository struct {
-	projects  map[string]*domain.Project
-	saveErr   error
-	deleteErr error
-}
-
-func NewMockRepository() *MockRepository {
-	return &MockRepository{projects: make(map[string]*domain.Project)}
-}
-
-func (m *MockRepository) Save(_ context.Context, project *domain.Project) error {
-	if m.saveErr != nil {
-		return m.saveErr
-	}
-	m.projects[project.Path] = project
-	return nil
-}
-
-func (m *MockRepository) FindByID(_ context.Context, id string) (*domain.Project, error) {
-	for _, p := range m.projects {
-		if p.ID == id {
-			return p, nil
-		}
-	}
-	return nil, domain.ErrProjectNotFound
-}
-
-func (m *MockRepository) FindByPath(_ context.Context, path string) (*domain.Project, error) {
-	if p, ok := m.projects[path]; ok {
-		return p, nil
-	}
-	return nil, domain.ErrProjectNotFound
-}
-
-func (m *MockRepository) FindAll(_ context.Context) ([]*domain.Project, error) {
-	result := make([]*domain.Project, 0, len(m.projects))
-	for _, p := range m.projects {
-		result = append(result, p)
-	}
-	return result, nil
-}
-
-func (m *MockRepository) FindActive(_ context.Context) ([]*domain.Project, error) {
-	result := make([]*domain.Project, 0)
-	for _, p := range m.projects {
-		if p.State == domain.StateActive {
-			result = append(result, p)
-		}
-	}
-	return result, nil
-}
-
-func (m *MockRepository) FindHibernated(_ context.Context) ([]*domain.Project, error) {
-	result := make([]*domain.Project, 0)
-	for _, p := range m.projects {
-		if p.State == domain.StateHibernated {
-			result = append(result, p)
-		}
-	}
-	return result, nil
-}
-
-func (m *MockRepository) Delete(_ context.Context, id string) error {
-	if m.deleteErr != nil {
-		return m.deleteErr
-	}
-	for path, p := range m.projects {
-		if p.ID == id {
-			delete(m.projects, path)
-			return nil
-		}
-	}
-	return domain.ErrProjectNotFound
-}
-
-func (m *MockRepository) UpdateState(_ context.Context, id string, state domain.ProjectState) error {
-	for _, p := range m.projects {
-		if p.ID == id {
-			p.State = state
-			return nil
-		}
-	}
-	return domain.ErrProjectNotFound
-}
-
-func (m *MockRepository) UpdateLastActivity(_ context.Context, _ string, _ time.Time) error {
-	return nil
-}
-
-// ResetProject implements ports.ProjectRepository (Story 7.3)
-func (m *MockRepository) ResetProject(_ context.Context, _ string) error {
-	return nil
-}
-
-// ResetAll implements ports.ProjectRepository (Story 7.3)
-func (m *MockRepository) ResetAll(_ context.Context) (int, error) {
-	return 0, nil
-}
 
 // executeAddCommand runs the add command with given args and returns output/error
 func executeAddCommand(args []string) (string, error) {
 	// Reset flags and root command for clean test
 	cli.ResetAddFlags()
-	cmd := cli.NewRootCmd()
-	cli.RegisterAddCommand(cmd)
-
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-
-	fullArgs := append([]string{"add"}, args...)
-	cmd.SetArgs(fullArgs)
-
-	err := cmd.Execute()
-	return buf.String(), err
+	return testhelpers.ExecuteCommand(cli.NewRootCmd, cli.RegisterAddCommand, "add", args)
 }
 
 func TestAdd_CurrentDirectory(t *testing.T) {
 	// Setup mock
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	cli.SetRepository(mock)
 
 	// Create temp directory
@@ -171,12 +43,12 @@ func TestAdd_CurrentDirectory(t *testing.T) {
 	}
 
 	// Verify project was saved
-	if len(mock.projects) != 1 {
-		t.Errorf("expected 1 project, got %d", len(mock.projects))
+	if len(mock.Projects) != 1 {
+		t.Errorf("expected 1 project, got %d", len(mock.Projects))
 	}
 
 	// Verify correct path was stored
-	for path := range mock.projects {
+	for path := range mock.Projects {
 		// Path should be canonical (might differ due to symlinks)
 		if !filepath.IsAbs(path) {
 			t.Errorf("expected absolute path, got %s", path)
@@ -185,7 +57,7 @@ func TestAdd_CurrentDirectory(t *testing.T) {
 }
 
 func TestAdd_AbsolutePath(t *testing.T) {
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	cli.SetRepository(mock)
 
 	tmpDir := t.TempDir()
@@ -196,13 +68,13 @@ func TestAdd_AbsolutePath(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	if len(mock.projects) != 1 {
-		t.Errorf("expected 1 project, got %d", len(mock.projects))
+	if len(mock.Projects) != 1 {
+		t.Errorf("expected 1 project, got %d", len(mock.Projects))
 	}
 }
 
 func TestAdd_WithNameFlag(t *testing.T) {
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	cli.SetRepository(mock)
 
 	tmpDir := t.TempDir()
@@ -214,7 +86,7 @@ func TestAdd_WithNameFlag(t *testing.T) {
 	}
 
 	// Verify display name was set
-	for _, p := range mock.projects {
+	for _, p := range mock.Projects {
 		if p.DisplayName != "Custom Name" {
 			t.Errorf("expected DisplayName 'Custom Name', got '%s'", p.DisplayName)
 		}
@@ -222,7 +94,7 @@ func TestAdd_WithNameFlag(t *testing.T) {
 }
 
 func TestAdd_NonExistentPath(t *testing.T) {
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	cli.SetRepository(mock)
 
 	_, err := executeAddCommand([]string{"/this/path/does/not/exist"})
@@ -248,8 +120,8 @@ func TestAdd_AlreadyTracked(t *testing.T) {
 	}
 
 	// Setup mock with existing project at tmpDir path
-	mock := NewMockRepository()
-	mock.projects[canonicalPath] = &domain.Project{
+	mock := testhelpers.NewMockRepository()
+	mock.Projects[canonicalPath] = &domain.Project{
 		ID:   "abc123",
 		Name: "existing-project",
 		Path: canonicalPath,
@@ -287,8 +159,8 @@ func TestAdd_SymlinkCollision(t *testing.T) {
 	}
 
 	// Setup mock with project at canonical path
-	mock := NewMockRepository()
-	mock.projects[canonicalPath] = &domain.Project{
+	mock := testhelpers.NewMockRepository()
+	mock.Projects[canonicalPath] = &domain.Project{
 		ID:   "abc123",
 		Name: "project",
 		Path: canonicalPath,
@@ -307,7 +179,7 @@ func TestAdd_SymlinkCollision(t *testing.T) {
 }
 
 func TestAdd_HomeDirectory(t *testing.T) {
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	cli.SetRepository(mock)
 
 	// Get home directory for comparison
@@ -323,8 +195,8 @@ func TestAdd_HomeDirectory(t *testing.T) {
 	}
 
 	// Verify home directory was added
-	if len(mock.projects) != 1 {
-		t.Errorf("expected 1 project, got %d", len(mock.projects))
+	if len(mock.Projects) != 1 {
+		t.Errorf("expected 1 project, got %d", len(mock.Projects))
 	}
 
 	// Get canonical home path for comparison
@@ -334,7 +206,7 @@ func TestAdd_HomeDirectory(t *testing.T) {
 	}
 
 	found := false
-	for path := range mock.projects {
+	for path := range mock.Projects {
 		if path == canonicalHome {
 			found = true
 			break
@@ -346,7 +218,7 @@ func TestAdd_HomeDirectory(t *testing.T) {
 }
 
 func TestAdd_NoArgs_DefaultsToCurrentDirectory(t *testing.T) {
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	cli.SetRepository(mock)
 
 	tmpDir := t.TempDir()
@@ -365,13 +237,13 @@ func TestAdd_NoArgs_DefaultsToCurrentDirectory(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	if len(mock.projects) != 1 {
-		t.Errorf("expected 1 project, got %d", len(mock.projects))
+	if len(mock.Projects) != 1 {
+		t.Errorf("expected 1 project, got %d", len(mock.Projects))
 	}
 }
 
 func TestAdd_VerifyProjectFields(t *testing.T) {
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	cli.SetRepository(mock)
 
 	tmpDir := t.TempDir()
@@ -383,12 +255,12 @@ func TestAdd_VerifyProjectFields(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	if len(mock.projects) != 1 {
-		t.Fatalf("expected 1 project, got %d", len(mock.projects))
+	if len(mock.Projects) != 1 {
+		t.Fatalf("expected 1 project, got %d", len(mock.Projects))
 	}
 
 	var project *domain.Project
-	for _, p := range mock.projects {
+	for _, p := range mock.Projects {
 		project = p
 	}
 
@@ -410,8 +282,8 @@ func TestAdd_VerifyProjectFields(t *testing.T) {
 }
 
 func TestAdd_SaveFailure(t *testing.T) {
-	mock := NewMockRepository()
-	mock.saveErr = errors.New("database connection failed")
+	mock := testhelpers.NewMockRepository()
+	mock.SetSaveError(errors.New("database connection failed"))
 	cli.SetRepository(mock)
 
 	tmpDir := t.TempDir()
@@ -428,13 +300,13 @@ func TestAdd_SaveFailure(t *testing.T) {
 	}
 
 	// Verify no project was saved
-	if len(mock.projects) != 0 {
-		t.Errorf("expected 0 projects saved on error, got %d", len(mock.projects))
+	if len(mock.Projects) != 0 {
+		t.Errorf("expected 0 projects saved on error, got %d", len(mock.Projects))
 	}
 }
 
 func TestAdd_WithDetectionService(t *testing.T) {
-	repoMock := NewMockRepository()
+	repoMock := testhelpers.NewMockRepository()
 	cli.SetRepository(repoMock)
 
 	// Create mock detector with speckit result
@@ -444,9 +316,8 @@ func TestAdd_WithDetectionService(t *testing.T) {
 		domain.ConfidenceCertain,
 		"plan.md found",
 	)
-	detectorMock := &MockDetector{
-		detectResult: &detectionResult,
-	}
+	detectorMock := testhelpers.NewMockDetector()
+	detectorMock.SetResult(&detectionResult)
 	cli.SetDetectionService(detectorMock)
 	defer cli.SetDetectionService(nil) // Reset after test
 
@@ -467,7 +338,7 @@ func TestAdd_WithDetectionService(t *testing.T) {
 	}
 
 	// Verify project has detection fields populated
-	for _, p := range repoMock.projects {
+	for _, p := range repoMock.Projects {
 		if p.DetectedMethod != "speckit" {
 			t.Errorf("expected DetectedMethod 'speckit', got '%s'", p.DetectedMethod)
 		}
@@ -478,13 +349,12 @@ func TestAdd_WithDetectionService(t *testing.T) {
 }
 
 func TestAdd_DetectionFailureIsNonFatal(t *testing.T) {
-	repoMock := NewMockRepository()
+	repoMock := testhelpers.NewMockRepository()
 	cli.SetRepository(repoMock)
 
 	// Create mock detector that returns an error
-	detectorMock := &MockDetector{
-		detectErr: errors.New("detection failed"),
-	}
+	detectorMock := testhelpers.NewMockDetector()
+	detectorMock.SetError(errors.New("detection failed"))
 	cli.SetDetectionService(detectorMock)
 	defer cli.SetDetectionService(nil) // Reset after test
 
@@ -498,12 +368,12 @@ func TestAdd_DetectionFailureIsNonFatal(t *testing.T) {
 	}
 
 	// Verify project was still saved
-	if len(repoMock.projects) != 1 {
-		t.Errorf("expected 1 project saved, got %d", len(repoMock.projects))
+	if len(repoMock.Projects) != 1 {
+		t.Errorf("expected 1 project saved, got %d", len(repoMock.Projects))
 	}
 
 	// Verify project has default detection values
-	for _, p := range repoMock.projects {
+	for _, p := range repoMock.Projects {
 		if p.DetectedMethod != "" {
 			t.Errorf("expected empty DetectedMethod on detection failure, got '%s'", p.DetectedMethod)
 		}
@@ -511,7 +381,7 @@ func TestAdd_DetectionFailureIsNonFatal(t *testing.T) {
 }
 
 func TestAdd_WithoutDetectionService(t *testing.T) {
-	repoMock := NewMockRepository()
+	repoMock := testhelpers.NewMockRepository()
 	cli.SetRepository(repoMock)
 	cli.SetDetectionService(nil) // Explicitly nil
 
@@ -524,8 +394,8 @@ func TestAdd_WithoutDetectionService(t *testing.T) {
 		t.Fatalf("expected no error without detection service, got: %v", err)
 	}
 
-	if len(repoMock.projects) != 1 {
-		t.Errorf("expected 1 project, got %d", len(repoMock.projects))
+	if len(repoMock.Projects) != 1 {
+		t.Errorf("expected 1 project, got %d", len(repoMock.Projects))
 	}
 }
 
@@ -550,9 +420,9 @@ func TestAdd_NameCollision_Detected(t *testing.T) {
 	canonicalA, _ := filepath.EvalSymlinks(clientADir)
 
 	// Setup mock with existing project at client-a/api-service
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	existingProject, _ := domain.NewProject(canonicalA, "")
-	mock.projects[canonicalA] = existingProject
+	mock.Projects[canonicalA] = existingProject
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -595,9 +465,9 @@ func TestAdd_NameCollision_UserSelectsSuggested(t *testing.T) {
 	canonicalB, _ := filepath.EvalSymlinks(clientBDir)
 
 	// Setup mock with existing project at client-a/api-service
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	existingProject, _ := domain.NewProject(canonicalA, "")
-	mock.projects[canonicalA] = existingProject
+	mock.Projects[canonicalA] = existingProject
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -625,7 +495,7 @@ func TestAdd_NameCollision_UserSelectsSuggested(t *testing.T) {
 	}
 
 	// Verify project saved with disambiguated name (parent-prefixed)
-	if saved, ok := mock.projects[canonicalB]; ok {
+	if saved, ok := mock.Projects[canonicalB]; ok {
 		if saved.DisplayName == "" || saved.DisplayName == "api-service" {
 			t.Errorf("expected disambiguated DisplayName, got: %s", saved.DisplayName)
 		}
@@ -656,9 +526,9 @@ func TestAdd_NameCollision_UserEntersCustomName(t *testing.T) {
 	canonicalB, _ := filepath.EvalSymlinks(clientBDir)
 
 	// Setup mock with existing project at client-a/api-service
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	existingProject, _ := domain.NewProject(canonicalA, "")
-	mock.projects[canonicalA] = existingProject
+	mock.Projects[canonicalA] = existingProject
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -680,7 +550,7 @@ func TestAdd_NameCollision_UserEntersCustomName(t *testing.T) {
 	}
 
 	// Verify project saved with custom name
-	if saved, ok := mock.projects[canonicalB]; ok {
+	if saved, ok := mock.Projects[canonicalB]; ok {
 		if saved.DisplayName != "my-custom-api" {
 			t.Errorf("expected DisplayName 'my-custom-api', got: %s", saved.DisplayName)
 		}
@@ -707,9 +577,9 @@ func TestAdd_NameCollision_ForceFlag(t *testing.T) {
 	canonicalB, _ := filepath.EvalSymlinks(clientBDir)
 
 	// Setup mock with existing project at client-a/api-service
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	existingProject, _ := domain.NewProject(canonicalA, "")
-	mock.projects[canonicalA] = existingProject
+	mock.Projects[canonicalA] = existingProject
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -741,7 +611,7 @@ func TestAdd_NameCollision_ForceFlag(t *testing.T) {
 	}
 
 	// Verify project saved with auto-disambiguated name
-	if saved, ok := mock.projects[canonicalB]; ok {
+	if saved, ok := mock.Projects[canonicalB]; ok {
 		if saved.DisplayName == "" || saved.DisplayName == "api-service" {
 			t.Errorf("expected auto-disambiguated DisplayName, got: %s", saved.DisplayName)
 		}
@@ -776,13 +646,13 @@ func TestAdd_NameCollision_CustomNameAlsoCollides(t *testing.T) {
 	canonicalNew, _ := filepath.EvalSymlinks(newDir)
 
 	// Setup mock with two existing projects
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	project1, _ := domain.NewProject(canonical1, "")
-	mock.projects[canonical1] = project1
+	mock.Projects[canonical1] = project1
 
 	project2, _ := domain.NewProject(canonical2, "")
 	project2.DisplayName = "my-api" // Also reserve "my-api"
-	mock.projects[canonical2] = project2
+	mock.Projects[canonical2] = project2
 
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
@@ -811,7 +681,7 @@ func TestAdd_NameCollision_CustomNameAlsoCollides(t *testing.T) {
 	}
 
 	// Verify project saved with unique-name
-	if saved, ok := mock.projects[canonicalNew]; ok {
+	if saved, ok := mock.Projects[canonicalNew]; ok {
 		if saved.DisplayName != "unique-name" {
 			t.Errorf("expected DisplayName 'unique-name', got: %s", saved.DisplayName)
 		}
@@ -837,9 +707,9 @@ func TestAdd_NameCollision_EmptyCustomName(t *testing.T) {
 	canonicalB, _ := filepath.EvalSymlinks(clientBDir)
 
 	// Setup mock
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	existingProject, _ := domain.NewProject(canonicalA, "")
-	mock.projects[canonicalA] = existingProject
+	mock.Projects[canonicalA] = existingProject
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -867,7 +737,7 @@ func TestAdd_NameCollision_EmptyCustomName(t *testing.T) {
 	}
 
 	// Verify project saved with valid-name
-	if saved, ok := mock.projects[canonicalB]; ok {
+	if saved, ok := mock.Projects[canonicalB]; ok {
 		if saved.DisplayName != "valid-name" {
 			t.Errorf("expected DisplayName 'valid-name', got: %s", saved.DisplayName)
 		}
@@ -898,13 +768,13 @@ func TestAdd_NameCollision_MultipleCollisionLevels(t *testing.T) {
 	canonical3, _ := filepath.EvalSymlinks(dir3)
 
 	// Setup mock with existing projects
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	project1, _ := domain.NewProject(canonical1, "")
-	mock.projects[canonical1] = project1 // "api-service"
+	mock.Projects[canonical1] = project1 // "api-service"
 
 	project2, _ := domain.NewProject(canonical2, "")
 	project2.DisplayName = "client-a-api-service" // Reserve parent-prefixed name
-	mock.projects[canonical2] = project2
+	mock.Projects[canonical2] = project2
 
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
@@ -926,7 +796,7 @@ func TestAdd_NameCollision_MultipleCollisionLevels(t *testing.T) {
 	}
 
 	// Verify project saved - should have unique name (grandparent or timestamp)
-	if saved, ok := mock.projects[canonical3]; ok {
+	if saved, ok := mock.Projects[canonical3]; ok {
 		if saved.DisplayName == "" || saved.DisplayName == "api-service" || saved.DisplayName == "client-a-api-service" {
 			t.Errorf("expected unique disambiguated DisplayName, got: %s", saved.DisplayName)
 		}
@@ -950,9 +820,9 @@ func TestAdd_PathCollision_SymlinkToSameLocation(t *testing.T) {
 	canonicalPath, _ := filepath.EvalSymlinks(projectDir)
 
 	// Setup mock with project at canonical path
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	existingProject, _ := domain.NewProject(canonicalPath, "")
-	mock.projects[canonicalPath] = existingProject
+	mock.Projects[canonicalPath] = existingProject
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -996,9 +866,9 @@ func TestAdd_NoCollision_DifferentNames(t *testing.T) {
 	canonical2, _ := filepath.EvalSymlinks(dir2)
 
 	// Setup mock with existing project
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	existingProject, _ := domain.NewProject(canonical1, "")
-	mock.projects[canonical1] = existingProject
+	mock.Projects[canonical1] = existingProject
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -1015,12 +885,12 @@ func TestAdd_NoCollision_DifferentNames(t *testing.T) {
 	}
 
 	// Verify both projects exist
-	if len(mock.projects) != 2 {
-		t.Errorf("expected 2 projects, got %d", len(mock.projects))
+	if len(mock.Projects) != 2 {
+		t.Errorf("expected 2 projects, got %d", len(mock.Projects))
 	}
 
 	// Verify new project has no DisplayName (since no collision)
-	if saved, ok := mock.projects[canonical2]; ok {
+	if saved, ok := mock.Projects[canonical2]; ok {
 		if saved.DisplayName != "" {
 			t.Errorf("expected empty DisplayName for no collision, got: %s", saved.DisplayName)
 		}
@@ -1046,9 +916,9 @@ func TestAdd_AC5_DisplayNameShownInOutput(t *testing.T) {
 	canonicalB, _ := filepath.EvalSymlinks(clientBDir)
 
 	// Setup mock with existing project
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	existingProject, _ := domain.NewProject(canonicalA, "")
-	mock.projects[canonicalA] = existingProject
+	mock.Projects[canonicalA] = existingProject
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -1076,7 +946,7 @@ func TestAdd_AC5_DisplayNameShownInOutput(t *testing.T) {
 	}
 
 	// Verify project was saved at correct path
-	if _, ok := mock.projects[canonicalB]; !ok {
+	if _, ok := mock.Projects[canonicalB]; !ok {
 		t.Error("expected project to be saved at canonicalB path")
 	}
 
@@ -1109,7 +979,7 @@ func TestAdd_AC5_DisplayNameShownInOutput(t *testing.T) {
 	}
 
 	// Verify the saved project has no DisplayName
-	if saved, ok := mock.projects[canonicalUnique]; ok {
+	if saved, ok := mock.Projects[canonicalUnique]; ok {
 		if saved.DisplayName != "" {
 			t.Errorf("expected empty DisplayName for non-collision project, got: %s", saved.DisplayName)
 		}
@@ -1132,9 +1002,9 @@ func TestAdd_InvalidChoiceReprompts(t *testing.T) {
 	canonicalA, _ := filepath.EvalSymlinks(clientADir)
 	canonicalB, _ := filepath.EvalSymlinks(clientBDir)
 
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	existingProject, _ := domain.NewProject(canonicalA, "")
-	mock.projects[canonicalA] = existingProject
+	mock.Projects[canonicalA] = existingProject
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -1167,7 +1037,7 @@ func TestAdd_InvalidChoiceReprompts(t *testing.T) {
 	}
 
 	// Verify project saved
-	if _, ok := mock.projects[canonicalB]; !ok {
+	if _, ok := mock.Projects[canonicalB]; !ok {
 		t.Error("expected project to be saved after re-prompting")
 	}
 }
@@ -1189,10 +1059,10 @@ func TestAdd_DisplayNameCollision(t *testing.T) {
 	canonical2, _ := filepath.EvalSymlinks(dir2)
 
 	// Setup mock with existing project that has a DisplayName
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	existingProject, _ := domain.NewProject(canonical1, "")
 	existingProject.DisplayName = "my-display-name" // Set DisplayName different from directory name
-	mock.projects[canonical1] = existingProject
+	mock.Projects[canonical1] = existingProject
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -1220,7 +1090,7 @@ func TestAdd_DisplayNameCollision(t *testing.T) {
 	}
 
 	// Verify project saved with different name
-	if saved, ok := mock.projects[canonical2]; ok {
+	if saved, ok := mock.Projects[canonical2]; ok {
 		if saved.DisplayName == "my-display-name" {
 			t.Errorf("DisplayName should have been disambiguated, got: %s", saved.DisplayName)
 		}
@@ -1234,7 +1104,7 @@ func TestAdd_DisplayNameCollision(t *testing.T) {
 // ============================================================================
 
 func TestAdd_QuietMode_SuppressesOutput(t *testing.T) {
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -1267,14 +1137,14 @@ func TestAdd_QuietMode_SuppressesOutput(t *testing.T) {
 	}
 
 	// Verify project was still saved
-	if len(mock.projects) != 1 {
-		t.Errorf("expected 1 project saved, got %d", len(mock.projects))
+	if len(mock.Projects) != 1 {
+		t.Errorf("expected 1 project saved, got %d", len(mock.Projects))
 	}
 }
 
 func TestAdd_QuietMode_GlobalFlagPosition(t *testing.T) {
 	// Test AC8: vibe -q add . (global flag BEFORE subcommand)
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -1321,9 +1191,9 @@ func TestAdd_QuietMode_WithForce(t *testing.T) {
 	canonicalA, _ := filepath.EvalSymlinks(clientADir)
 	canonicalB, _ := filepath.EvalSymlinks(clientBDir)
 
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	existingProject, _ := domain.NewProject(canonicalA, "")
-	mock.projects[canonicalA] = existingProject
+	mock.Projects[canonicalA] = existingProject
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -1353,7 +1223,7 @@ func TestAdd_QuietMode_WithForce(t *testing.T) {
 	}
 
 	// Verify project was saved with disambiguated name
-	if saved, ok := mock.projects[canonicalB]; ok {
+	if saved, ok := mock.Projects[canonicalB]; ok {
 		if saved.DisplayName == "" || saved.DisplayName == "api-service" {
 			t.Errorf("expected auto-disambiguated DisplayName, got: %s", saved.DisplayName)
 		}
@@ -1364,7 +1234,7 @@ func TestAdd_QuietMode_WithForce(t *testing.T) {
 
 func TestAdd_QuietMode_ErrorsStillReturned(t *testing.T) {
 	// AC7: Errors are still returned even in quiet mode
-	mock := NewMockRepository()
+	mock := testhelpers.NewMockRepository()
 	cli.SetRepository(mock)
 	cli.SetDetectionService(nil)
 
@@ -1401,7 +1271,7 @@ func TestAdd_QuietMode_ErrorsStillReturned(t *testing.T) {
 
 func TestAdd_ShowsDetectionProgress(t *testing.T) {
 	// AC4: "Detecting methodology..." is shown before detection
-	repoMock := NewMockRepository()
+	repoMock := testhelpers.NewMockRepository()
 	cli.SetRepository(repoMock)
 
 	// Create mock detector with result
@@ -1411,9 +1281,8 @@ func TestAdd_ShowsDetectionProgress(t *testing.T) {
 		domain.ConfidenceCertain,
 		"bmad config found",
 	)
-	detectorMock := &MockDetector{
-		detectResult: &detectionResult,
-	}
+	detectorMock := testhelpers.NewMockDetector()
+	detectorMock.SetResult(&detectionResult)
 	cli.SetDetectionService(detectorMock)
 	defer cli.SetDetectionService(nil)
 
@@ -1443,7 +1312,7 @@ func TestAdd_ShowsDetectionProgress(t *testing.T) {
 
 func TestAdd_NoDetectionProgress_QuietMode(t *testing.T) {
 	// AC4: Detection progress is suppressed in quiet mode
-	repoMock := NewMockRepository()
+	repoMock := testhelpers.NewMockRepository()
 	cli.SetRepository(repoMock)
 
 	// Create mock detector with result
@@ -1453,9 +1322,8 @@ func TestAdd_NoDetectionProgress_QuietMode(t *testing.T) {
 		domain.ConfidenceCertain,
 		"bmad config found",
 	)
-	detectorMock := &MockDetector{
-		detectResult: &detectionResult,
-	}
+	detectorMock := testhelpers.NewMockDetector()
+	detectorMock.SetResult(&detectionResult)
 	cli.SetDetectionService(detectorMock)
 	defer cli.SetDetectionService(nil)
 
@@ -1493,10 +1361,10 @@ func TestAdd_NoDetectionProgress_QuietMode(t *testing.T) {
 	}
 
 	// Verify project was still saved with detection result
-	if len(repoMock.projects) != 1 {
-		t.Errorf("expected 1 project, got %d", len(repoMock.projects))
+	if len(repoMock.Projects) != 1 {
+		t.Errorf("expected 1 project, got %d", len(repoMock.Projects))
 	}
-	for _, p := range repoMock.projects {
+	for _, p := range repoMock.Projects {
 		if p.DetectedMethod != "bmad" {
 			t.Errorf("expected DetectedMethod 'bmad', got '%s'", p.DetectedMethod)
 		}
@@ -1505,7 +1373,7 @@ func TestAdd_NoDetectionProgress_QuietMode(t *testing.T) {
 
 func TestAdd_NoDetectionProgress_WithoutDetector(t *testing.T) {
 	// When no detection service is set, no detection progress should be shown
-	repoMock := NewMockRepository()
+	repoMock := testhelpers.NewMockRepository()
 	cli.SetRepository(repoMock)
 	cli.SetDetectionService(nil) // No detection service
 

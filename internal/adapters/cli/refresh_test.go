@@ -29,13 +29,25 @@ func executeRefreshCommand() (string, error) {
 	return buf.String(), err
 }
 
+// newMockDetectorWithResult creates a MockDetector with a preset result.
+func newMockDetectorWithResult(result *domain.DetectionResult) *MockDetector {
+	d := NewMockDetector()
+	d.SetResult(result)
+	return d
+}
+
+// newMockDetectorWithError creates a MockDetector with a preset error.
+func newMockDetectorWithError(err error) *MockDetector {
+	d := NewMockDetector()
+	d.SetError(err)
+	return d
+}
+
 func TestRefreshCmd_NoProjects(t *testing.T) {
 	// Setup empty repository
 	mock := NewMockRepository()
 	cli.SetRepository(mock)
-	cli.SetDetectionService(&MockDetector{
-		detectResult: &domain.DetectionResult{Method: "test", Stage: domain.StagePlan},
-	})
+	cli.SetDetectionService(newMockDetectorWithResult(&domain.DetectionResult{Method: "test", Stage: domain.StagePlan}))
 
 	output, err := executeRefreshCommand()
 
@@ -56,9 +68,7 @@ func TestRefreshCmd_Success(t *testing.T) {
 	_ = mock.Save(context.Background(), project2)
 
 	cli.SetRepository(mock)
-	cli.SetDetectionService(&MockDetector{
-		detectResult: &domain.DetectionResult{Method: "bmad", Stage: domain.StagePlan},
-	})
+	cli.SetDetectionService(newMockDetectorWithResult(&domain.DetectionResult{Method: "bmad", Stage: domain.StagePlan}))
 
 	output, err := executeRefreshCommand()
 
@@ -76,9 +86,7 @@ func TestRefreshCmd_SingleProject(t *testing.T) {
 	_ = mock.Save(context.Background(), project)
 
 	cli.SetRepository(mock)
-	cli.SetDetectionService(&MockDetector{
-		detectResult: &domain.DetectionResult{Method: "speckit", Stage: domain.StageSpecify},
-	})
+	cli.SetDetectionService(newMockDetectorWithResult(&domain.DetectionResult{Method: "speckit", Stage: domain.StageSpecify}))
 
 	output, err := executeRefreshCommand()
 
@@ -100,10 +108,8 @@ func TestRefreshCmd_PartialFailure(t *testing.T) {
 
 	callCount := 0
 	cli.SetRepository(mock)
-	cli.SetDetectionService(&MockDetector{
-		// This is a simplified mock - in reality we'd need path-based logic
-		detectResult: &domain.DetectionResult{Method: "test", Stage: domain.StagePlan},
-	})
+	// Note: We use CallCountDetector below, so this initial mock is replaced
+	cli.SetDetectionService(newMockDetectorWithResult(&domain.DetectionResult{Method: "test", Stage: domain.StagePlan}))
 
 	// For partial failure test, we need a more sophisticated mock
 	// Since our mock is simple, let's use a mock that tracks calls
@@ -137,9 +143,7 @@ func TestRefreshCmd_AllFail(t *testing.T) {
 	_ = mock.Save(context.Background(), project)
 
 	cli.SetRepository(mock)
-	cli.SetDetectionService(&MockDetector{
-		detectErr: errors.New("detection failed"),
-	})
+	cli.SetDetectionService(newMockDetectorWithError(errors.New("detection failed")))
 
 	_, err := executeRefreshCommand()
 
@@ -154,7 +158,7 @@ func TestRefreshCmd_AllFail(t *testing.T) {
 
 func TestRefreshCmd_NoRepository(t *testing.T) {
 	cli.SetRepository(nil)
-	cli.SetDetectionService(&MockDetector{})
+	cli.SetDetectionService(NewMockDetector())
 
 	_, err := executeRefreshCommand()
 
@@ -193,14 +197,12 @@ func TestRefreshCmd_UpdatesProjectFields(t *testing.T) {
 	_ = mock.Save(context.Background(), project)
 
 	cli.SetRepository(mock)
-	cli.SetDetectionService(&MockDetector{
-		detectResult: &domain.DetectionResult{
-			Method:     "bmad",
-			Stage:      domain.StagePlan,
-			Confidence: domain.ConfidenceCertain,
-			Reasoning:  "Found BMAD artifacts",
-		},
-	})
+	cli.SetDetectionService(newMockDetectorWithResult(&domain.DetectionResult{
+		Method:     "bmad",
+		Stage:      domain.StagePlan,
+		Confidence: domain.ConfidenceCertain,
+		Reasoning:  "Found BMAD artifacts",
+	}))
 
 	_, err := executeRefreshCommand()
 	if err != nil {

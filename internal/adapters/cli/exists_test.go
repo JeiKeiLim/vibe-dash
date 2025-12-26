@@ -33,7 +33,7 @@ func executeExistsCommand(args []string) (string, error) {
 func TestExists_ProjectByName(t *testing.T) {
 	mock := NewMockRepository()
 	p1, _ := domain.NewProject("/home/user/projects/client-alpha", "")
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	output, err := executeExistsCommand([]string{"client-alpha"})
@@ -57,7 +57,7 @@ func TestExists_ProjectByDisplayName(t *testing.T) {
 	mock := NewMockRepository()
 	p1, _ := domain.NewProject("/home/user/projects/original-dir", "")
 	p1.DisplayName = "My Cool App"
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	output, err := executeExistsCommand([]string{"My Cool App"})
@@ -94,7 +94,7 @@ func TestExists_ProjectByPath(t *testing.T) {
 	mock := NewMockRepository()
 	// Store with canonical path to match lookup
 	p1, _ := domain.NewProject(canonicalPath, "")
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	output, err := executeExistsCommand([]string{projectPath})
@@ -209,12 +209,12 @@ func TestExists_LookupPriority_NameBeforeDisplayName(t *testing.T) {
 	// Project 1: name matches the query
 	p1, _ := domain.NewProject("/path/to/alpha", "")
 	p1.DisplayName = "Some Other Name"
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 
 	// Project 2: display_name matches the query
 	p2, _ := domain.NewProject("/path/to/beta", "")
 	p2.DisplayName = "alpha" // Same as p1's name
-	mock.projects[p2.Path] = p2
+	mock.Projects[p2.Path] = p2
 
 	cli.SetRepository(mock)
 

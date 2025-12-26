@@ -44,7 +44,7 @@ func TestStatus_PlainText_SingleProject(t *testing.T) {
 	p1.IsFavorite = false
 	p1.Notes = "Waiting on API specs"
 	p1.LastActivityAt = time.Now().Add(-2 * time.Hour)
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	output, err := executeStatusCommand([]string{"client-alpha"})
@@ -90,7 +90,7 @@ func TestStatus_PlainText_WithDisplayName(t *testing.T) {
 	p1, _ := domain.NewProject("/home/user/projects/my-dir", "")
 	p1.DisplayName = "My Cool App"
 	p1.IsFavorite = true
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	output, err := executeStatusCommand([]string{"my-dir"})
@@ -114,7 +114,7 @@ func TestStatus_PlainText_NoNotes(t *testing.T) {
 	mock := NewMockRepository()
 	p1, _ := domain.NewProject("/home/user/projects/test", "")
 	p1.Notes = "" // No notes
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	output, err := executeStatusCommand([]string{"test"})
@@ -144,7 +144,7 @@ func TestStatus_JSON_SingleProject(t *testing.T) {
 	p1.Notes = "Waiting on API specs"
 	p1.DetectionReasoning = "plan.md exists"
 	p1.LastActivityAt = time.Now().Add(-45 * time.Minute)
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	// Set up mock waiting detector
@@ -273,7 +273,7 @@ func TestStatus_LookupByDisplayName(t *testing.T) {
 	mock := NewMockRepository()
 	p1, _ := domain.NewProject("/home/user/projects/original-dir", "")
 	p1.DisplayName = "My Cool App"
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	output, err := executeStatusCommand([]string{"My Cool App"})
@@ -309,7 +309,7 @@ func TestStatus_LookupByPath(t *testing.T) {
 	mock := NewMockRepository()
 	// Store with canonical path to match lookup
 	p1, _ := domain.NewProject(canonicalPath, "")
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	output, err := executeStatusCommand([]string{projectPath})
@@ -331,11 +331,11 @@ func TestStatus_AllFlag_PlainText(t *testing.T) {
 	mock := NewMockRepository()
 	p1, _ := domain.NewProject("/path/to/bravo", "")
 	p1.CurrentStage = domain.StageTasks
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 
 	p2, _ := domain.NewProject("/path/to/alpha", "")
 	p2.CurrentStage = domain.StagePlan
-	mock.projects[p2.Path] = p2
+	mock.Projects[p2.Path] = p2
 
 	cli.SetRepository(mock)
 
@@ -368,7 +368,7 @@ func TestStatus_AllFlag_PlainText(t *testing.T) {
 func TestStatus_AllFlag_JSON(t *testing.T) {
 	mock := NewMockRepository()
 	p1, _ := domain.NewProject("/path/to/test", "")
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	output, err := executeStatusCommand([]string{"--all", "--json"})
@@ -429,7 +429,7 @@ func TestStatus_MissingProjectName(t *testing.T) {
 func TestStatus_InvalidAPIVersion(t *testing.T) {
 	mock := NewMockRepository()
 	p1, _ := domain.NewProject("/path/to/test", "")
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	// v1 should be accepted
@@ -517,12 +517,12 @@ func TestStatus_LookupPriority_NameBeforeDisplayName(t *testing.T) {
 	// Project 1: name matches the query
 	p1, _ := domain.NewProject("/path/to/alpha", "")
 	p1.DisplayName = "Some Other Name"
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 
 	// Project 2: display_name matches the query
 	p2, _ := domain.NewProject("/path/to/beta", "")
 	p2.DisplayName = "alpha" // Same as p1's name
-	mock.projects[p2.Path] = p2
+	mock.Projects[p2.Path] = p2
 
 	cli.SetRepository(mock)
 

@@ -2,7 +2,6 @@ package cli_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -41,12 +40,12 @@ func TestList_PlainText_MultipleProjects(t *testing.T) {
 	p1, _ := domain.NewProject("/path/to/bravo", "")
 	p1.CurrentStage = domain.StageTasks
 	p1.LastActivityAt = time.Now().Add(-2 * time.Hour)
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 
 	p2, _ := domain.NewProject("/path/to/alpha", "")
 	p2.CurrentStage = domain.StagePlan
 	p2.LastActivityAt = time.Now().Add(-5 * time.Minute)
-	mock.projects[p2.Path] = p2
+	mock.Projects[p2.Path] = p2
 
 	cli.SetRepository(mock)
 
@@ -89,19 +88,19 @@ func TestList_PlainText_RelativeTime(t *testing.T) {
 	// Test different time ranges
 	p1, _ := domain.NewProject("/path/to/project1", "")
 	p1.LastActivityAt = time.Now().Add(-30 * time.Second) // just now
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 
 	p2, _ := domain.NewProject("/path/to/project2", "")
 	p2.LastActivityAt = time.Now().Add(-5 * time.Minute) // 5m ago
-	mock.projects[p2.Path] = p2
+	mock.Projects[p2.Path] = p2
 
 	p3, _ := domain.NewProject("/path/to/project3", "")
 	p3.LastActivityAt = time.Now().Add(-3 * time.Hour) // 3h ago
-	mock.projects[p3.Path] = p3
+	mock.Projects[p3.Path] = p3
 
 	p4, _ := domain.NewProject("/path/to/project4", "")
 	p4.LastActivityAt = time.Now().Add(-48 * time.Hour) // 2d ago
-	mock.projects[p4.Path] = p4
+	mock.Projects[p4.Path] = p4
 
 	cli.SetRepository(mock)
 
@@ -135,7 +134,7 @@ func TestList_JSON_Structure(t *testing.T) {
 	p1.CurrentStage = domain.StagePlan
 	p1.State = domain.StateActive
 	p1.DetectedMethod = "speckit"
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	output, err := executeListCommand([]string{"--json"})
@@ -201,7 +200,7 @@ func TestList_JSON_WithDisplayName(t *testing.T) {
 	mock := NewMockRepository()
 	p1, _ := domain.NewProject("/path/to/test", "")
 	p1.DisplayName = "Custom Display"
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	output, err := executeListCommand([]string{"--json"})
@@ -282,13 +281,13 @@ func TestList_SortedAlphabetically(t *testing.T) {
 
 	// Create projects in non-alphabetical order
 	p1, _ := domain.NewProject("/path/to/zebra", "")
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 
 	p2, _ := domain.NewProject("/path/to/alpha", "")
-	mock.projects[p2.Path] = p2
+	mock.Projects[p2.Path] = p2
 
 	p3, _ := domain.NewProject("/path/to/middle", "")
-	mock.projects[p3.Path] = p3
+	mock.Projects[p3.Path] = p3
 
 	cli.SetRepository(mock)
 
@@ -316,11 +315,11 @@ func TestList_SortedByEffectiveName(t *testing.T) {
 	// p1: Name=zebra, DisplayName="aaa" -> effective name = "aaa"
 	p1, _ := domain.NewProject("/path/to/zebra", "")
 	p1.DisplayName = "aaa"
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 
 	// p2: Name=alpha, no DisplayName -> effective name = "alpha"
 	p2, _ := domain.NewProject("/path/to/alpha", "")
-	mock.projects[p2.Path] = p2
+	mock.Projects[p2.Path] = p2
 
 	cli.SetRepository(mock)
 
@@ -342,10 +341,10 @@ func TestList_SortedCaseInsensitive(t *testing.T) {
 	mock := NewMockRepository()
 
 	p1, _ := domain.NewProject("/path/to/Zebra", "")
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 
 	p2, _ := domain.NewProject("/path/to/alpha", "")
-	mock.projects[p2.Path] = p2
+	mock.Projects[p2.Path] = p2
 
 	cli.SetRepository(mock)
 
@@ -368,13 +367,13 @@ func TestList_JSON_SortedAlphabetically(t *testing.T) {
 
 	// Create projects in non-alphabetical order
 	p1, _ := domain.NewProject("/path/to/zebra", "")
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 
 	p2, _ := domain.NewProject("/path/to/alpha", "")
-	mock.projects[p2.Path] = p2
+	mock.Projects[p2.Path] = p2
 
 	p3, _ := domain.NewProject("/path/to/middle", "")
-	mock.projects[p3.Path] = p3
+	mock.Projects[p3.Path] = p3
 
 	cli.SetRepository(mock)
 
@@ -411,16 +410,16 @@ func TestList_JSON_SortedByEffectiveName(t *testing.T) {
 	// p1: Name=zebra, DisplayName="aaa" -> effective name = "aaa"
 	p1, _ := domain.NewProject("/path/to/zebra", "")
 	p1.DisplayName = "aaa"
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 
 	// p2: Name=alpha, no DisplayName -> effective name = "alpha"
 	p2, _ := domain.NewProject("/path/to/alpha", "")
-	mock.projects[p2.Path] = p2
+	mock.Projects[p2.Path] = p2
 
 	// p3: Name=beta, DisplayName="zzz" -> effective name = "zzz"
 	p3, _ := domain.NewProject("/path/to/beta", "")
 	p3.DisplayName = "zzz"
-	mock.projects[p3.Path] = p3
+	mock.Projects[p3.Path] = p3
 
 	cli.SetRepository(mock)
 
@@ -470,7 +469,7 @@ func TestList_DisplayNameShownWhenSet(t *testing.T) {
 	mock := NewMockRepository()
 	p1, _ := domain.NewProject("/path/to/original-dir-name", "")
 	p1.DisplayName = "Custom Name"
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	output, err := executeListCommand([]string{})
@@ -491,11 +490,11 @@ func TestList_BothActiveAndHibernated(t *testing.T) {
 
 	p1, _ := domain.NewProject("/path/to/active-project", "")
 	p1.State = domain.StateActive
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 
 	p2, _ := domain.NewProject("/path/to/hibernated-project", "")
 	p2.State = domain.StateHibernated
-	mock.projects[p2.Path] = p2
+	mock.Projects[p2.Path] = p2
 
 	cli.SetRepository(mock)
 
@@ -514,9 +513,8 @@ func TestList_BothActiveAndHibernated(t *testing.T) {
 }
 
 func TestList_RepositoryError(t *testing.T) {
-	mock := &MockRepositoryWithFindAllError{
-		findAllErr: errors.New("database connection failed"),
-	}
+	mock := NewMockRepository()
+	mock.SetFindAllError(errors.New("database connection failed"))
 	cli.SetRepository(mock)
 
 	_, err := executeListCommand([]string{})
@@ -550,7 +548,7 @@ func TestList_LongProjectNameTruncated(t *testing.T) {
 	// Create project with very long name (>40 chars)
 	longName := "this-is-a-very-long-project-name-that-exceeds-forty-characters-limit"
 	p1, _ := domain.NewProject("/path/to/"+longName, "")
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	output, err := executeListCommand([]string{})
@@ -564,72 +562,11 @@ func TestList_LongProjectNameTruncated(t *testing.T) {
 	}
 }
 
-// MockRepositoryWithFindAllError implements ports.ProjectRepository with FindAll error
-type MockRepositoryWithFindAllError struct {
-	findAllErr error
-}
-
-func (m *MockRepositoryWithFindAllError) Save(_ context.Context, _ *domain.Project) error {
-	return nil
-}
-
-func (m *MockRepositoryWithFindAllError) FindByID(_ context.Context, _ string) (*domain.Project, error) {
-	return nil, domain.ErrProjectNotFound
-}
-
-func (m *MockRepositoryWithFindAllError) FindByPath(_ context.Context, _ string) (*domain.Project, error) {
-	return nil, domain.ErrProjectNotFound
-}
-
-func (m *MockRepositoryWithFindAllError) FindAll(_ context.Context) ([]*domain.Project, error) {
-	return nil, m.findAllErr
-}
-
-func (m *MockRepositoryWithFindAllError) FindActive(_ context.Context) ([]*domain.Project, error) {
-	return nil, m.findAllErr
-}
-
-func (m *MockRepositoryWithFindAllError) FindHibernated(_ context.Context) ([]*domain.Project, error) {
-	return nil, m.findAllErr
-}
-
-func (m *MockRepositoryWithFindAllError) Delete(_ context.Context, _ string) error {
-	return nil
-}
-
-func (m *MockRepositoryWithFindAllError) UpdateState(_ context.Context, _ string, _ domain.ProjectState) error {
-	return nil
-}
-
-func (m *MockRepositoryWithFindAllError) UpdateLastActivity(_ context.Context, _ string, _ time.Time) error {
-	return nil
-}
-
-func (m *MockRepositoryWithFindAllError) ResetProject(_ context.Context, _ string) error {
-	return nil
-}
-
-func (m *MockRepositoryWithFindAllError) ResetAll(_ context.Context) (int, error) {
-	return 0, nil
-}
-
 // ============================================================================
 // Story 6.1: JSON Output Format - New Tests
 // ============================================================================
 
-// MockWaitingDetector implements ports.WaitingDetector for testing
-type MockWaitingDetector struct {
-	isWaiting       bool
-	waitingDuration time.Duration
-}
-
-func (m *MockWaitingDetector) IsWaiting(_ context.Context, _ *domain.Project) bool {
-	return m.isWaiting
-}
-
-func (m *MockWaitingDetector) WaitingDuration(_ context.Context, _ *domain.Project) time.Duration {
-	return m.waitingDuration
-}
+// Note: MockWaitingDetector is defined in mocks_test.go
 
 func TestList_JSON_AllFieldsPresent(t *testing.T) {
 	mock := NewMockRepository()
@@ -641,7 +578,7 @@ func TestList_JSON_AllFieldsPresent(t *testing.T) {
 	p1.Notes = "Test notes"
 	p1.DetectionReasoning = "Found .bmad folder"
 	p1.IsFavorite = true
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	// Set up mock waiting detector
@@ -730,7 +667,7 @@ func TestList_JSON_NullableFieldsWhenEmpty(t *testing.T) {
 	mock := NewMockRepository()
 	p1, _ := domain.NewProject("/path/to/test", "")
 	// Don't set Notes or DetectionReasoning
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	// Set up mock waiting detector - not waiting
@@ -811,7 +748,7 @@ func TestList_JSON_ConfidenceLevels(t *testing.T) {
 			mock := NewMockRepository()
 			p1, _ := domain.NewProject("/path/to/test", "")
 			p1.Confidence = tt.confidence
-			mock.projects[p1.Path] = p1
+			mock.Projects[p1.Path] = p1
 			cli.SetRepository(mock)
 
 			output, err := executeListCommand([]string{"--json"})
@@ -838,7 +775,7 @@ func TestList_JSON_ConfidenceLevels(t *testing.T) {
 func TestList_JSON_WaitingDetectorNotSet(t *testing.T) {
 	mock := NewMockRepository()
 	p1, _ := domain.NewProject("/path/to/test", "")
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	// Ensure waiting detector is nil
@@ -875,7 +812,7 @@ func TestList_JSON_WaitingDetectorNotSet(t *testing.T) {
 func TestList_JSON_ConfigWarningIncluded(t *testing.T) {
 	mock := NewMockRepository()
 	p1, _ := domain.NewProject("/path/to/test", "")
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	// Set config warning
@@ -914,7 +851,7 @@ func TestList_JSON_ConfigWarningIncluded(t *testing.T) {
 func TestList_JSON_ConfigWarningOmittedWhenEmpty(t *testing.T) {
 	mock := NewMockRepository()
 	p1, _ := domain.NewProject("/path/to/test", "")
-	mock.projects[p1.Path] = p1
+	mock.Projects[p1.Path] = p1
 	cli.SetRepository(mock)
 
 	// Ensure no config warning

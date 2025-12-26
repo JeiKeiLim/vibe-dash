@@ -68,7 +68,7 @@ func TestRemove_ByDisplayName(t *testing.T) {
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/client-alpha", "")
 	p.DisplayName = "My Alpha Project"
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	output, err := executeRemoveCommand(t, []string{"My Alpha Project", "--force"}, "")
@@ -81,7 +81,7 @@ func TestRemove_ByDisplayName(t *testing.T) {
 	}
 
 	// Verify project was deleted
-	if len(mock.projects) != 0 {
+	if len(mock.Projects) != 0 {
 		t.Error("expected project to be deleted from repository")
 	}
 }
@@ -90,7 +90,7 @@ func TestRemove_ByName(t *testing.T) {
 	// Basic removal by Name field
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/client-alpha", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	output, err := executeRemoveCommand(t, []string{"client-alpha", "--force"}, "")
@@ -103,7 +103,7 @@ func TestRemove_ByName(t *testing.T) {
 	}
 
 	// Verify project was deleted
-	if len(mock.projects) != 0 {
+	if len(mock.Projects) != 0 {
 		t.Error("expected project to be deleted from repository")
 	}
 }
@@ -115,7 +115,7 @@ func TestRemove_ByName(t *testing.T) {
 func TestRemove_ConfirmY_ProjectRemoved(t *testing.T) {
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/client-alpha", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	output, err := executeRemoveCommand(t, []string{"client-alpha"}, "y\n")
@@ -134,7 +134,7 @@ func TestRemove_ConfirmY_ProjectRemoved(t *testing.T) {
 	}
 
 	// Verify project was deleted
-	if len(mock.projects) != 0 {
+	if len(mock.Projects) != 0 {
 		t.Error("expected project to be deleted from repository")
 	}
 }
@@ -142,7 +142,7 @@ func TestRemove_ConfirmY_ProjectRemoved(t *testing.T) {
 func TestRemove_ConfirmN_ProjectKept(t *testing.T) {
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/client-alpha", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	output, err := executeRemoveCommand(t, []string{"client-alpha"}, "n\n")
@@ -156,7 +156,7 @@ func TestRemove_ConfirmN_ProjectKept(t *testing.T) {
 	}
 
 	// Verify project was NOT deleted
-	if len(mock.projects) != 1 {
+	if len(mock.Projects) != 1 {
 		t.Error("expected project to remain in repository")
 	}
 }
@@ -181,7 +181,7 @@ func TestRemove_CaseInsensitiveConfirmation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockRepository()
 			p, _ := domain.NewProject("/path/to/test", "")
-			mock.projects[p.Path] = p
+			mock.Projects[p.Path] = p
 			cli.SetRepository(mock)
 
 			output, err := executeRemoveCommand(t, []string{"test"}, tt.input)
@@ -193,14 +193,14 @@ func TestRemove_CaseInsensitiveConfirmation(t *testing.T) {
 				if !strings.Contains(output, "✓ Removed") {
 					t.Errorf("expected removal, got: %s", output)
 				}
-				if len(mock.projects) != 0 {
+				if len(mock.Projects) != 0 {
 					t.Error("expected project to be deleted")
 				}
 			} else {
 				if !strings.Contains(output, "Cancelled") {
 					t.Errorf("expected cancellation, got: %s", output)
 				}
-				if len(mock.projects) != 1 {
+				if len(mock.Projects) != 1 {
 					t.Error("expected project to remain")
 				}
 			}
@@ -215,7 +215,7 @@ func TestRemove_CaseInsensitiveConfirmation(t *testing.T) {
 func TestRemove_ForceFlag_NoPrompt(t *testing.T) {
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/client-alpha", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	output, err := executeRemoveCommand(t, []string{"client-alpha", "--force"}, "")
@@ -234,7 +234,7 @@ func TestRemove_ForceFlag_NoPrompt(t *testing.T) {
 	}
 
 	// Verify project was deleted
-	if len(mock.projects) != 0 {
+	if len(mock.Projects) != 0 {
 		t.Error("expected project to be deleted from repository")
 	}
 }
@@ -246,7 +246,7 @@ func TestRemove_ForceFlag_NoPrompt(t *testing.T) {
 func TestRemove_InvalidInput_Reprompts(t *testing.T) {
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/test", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	// First invalid, then valid
@@ -281,7 +281,7 @@ func TestRemove_MissingArgument(t *testing.T) {
 func TestRemove_EOF_GracefulCancellation(t *testing.T) {
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/test", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	// Empty stdin simulates EOF (Ctrl+D)
@@ -295,7 +295,7 @@ func TestRemove_EOF_GracefulCancellation(t *testing.T) {
 	}
 
 	// Verify project was NOT deleted
-	if len(mock.projects) != 1 {
+	if len(mock.Projects) != 1 {
 		t.Error("expected project to remain after EOF cancellation")
 	}
 }
@@ -309,7 +309,7 @@ func TestRemove_ShowsDisplayNameInPrompt(t *testing.T) {
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/project", "")
 	p.DisplayName = "My Cool Project"
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	output, err := executeRemoveCommand(t, []string{"My Cool Project"}, "n\n")
@@ -326,7 +326,7 @@ func TestRemove_ShowsDisplayNameInPrompt(t *testing.T) {
 func TestRemove_ExitCodeZeroOnCancellation(t *testing.T) {
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/test", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	_, err := executeRemoveCommand(t, []string{"test"}, "n\n")
@@ -341,7 +341,7 @@ func TestRemove_ExitCodeZeroOnCancellation(t *testing.T) {
 func TestRemove_ExitCodeZeroOnSuccess(t *testing.T) {
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/test", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	_, err := executeRemoveCommand(t, []string{"test", "--force"}, "")
@@ -360,9 +360,9 @@ func TestRemove_ExitCodeZeroOnSuccess(t *testing.T) {
 func TestRemove_DeleteFailure(t *testing.T) {
 	// H2: Test repository.Delete() failure path
 	mock := NewMockRepository()
-	mock.deleteErr = errors.New("database error")
+	mock.SetDeleteError(errors.New("database error"))
 	p, _ := domain.NewProject("/path/to/test", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	_, err := executeRemoveCommand(t, []string{"test", "--force"}, "")
@@ -375,7 +375,7 @@ func TestRemove_DeleteFailure(t *testing.T) {
 	}
 
 	// Project should still exist since delete failed
-	if len(mock.projects) != 1 {
+	if len(mock.Projects) != 1 {
 		t.Error("expected project to remain after delete failure")
 	}
 }
@@ -384,7 +384,7 @@ func TestRemove_MultipleInvalidInputs_Reprompts(t *testing.T) {
 	// M3: Test multiple consecutive invalid inputs before valid
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/test", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	// Three invalid inputs, then valid
@@ -404,7 +404,7 @@ func TestRemove_MultipleInvalidInputs_Reprompts(t *testing.T) {
 	}
 
 	// Verify project was eventually deleted
-	if len(mock.projects) != 0 {
+	if len(mock.Projects) != 0 {
 		t.Error("expected project to be deleted after valid input")
 	}
 }
@@ -417,7 +417,7 @@ func TestRemove_CallsDeleteProjectDir(t *testing.T) {
 	// AC2: Verify DeleteProjectDir is called after repository.Delete()
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/test-project", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	// Set up mock directory manager
@@ -435,10 +435,10 @@ func TestRemove_CallsDeleteProjectDir(t *testing.T) {
 	}
 
 	// Verify DeleteProjectDir was called with the project path
-	if len(mockDM.deleteCalls) != 1 {
-		t.Errorf("expected 1 DeleteProjectDir call, got %d", len(mockDM.deleteCalls))
-	} else if mockDM.deleteCalls[0] != "/path/to/test-project" {
-		t.Errorf("DeleteProjectDir called with wrong path: got %s, want /path/to/test-project", mockDM.deleteCalls[0])
+	if len(mockDM.DeleteCalls()) != 1 {
+		t.Errorf("expected 1 DeleteProjectDir call, got %d", len(mockDM.DeleteCalls()))
+	} else if mockDM.DeleteCalls()[0] != "/path/to/test-project" {
+		t.Errorf("DeleteProjectDir called with wrong path: got %s, want /path/to/test-project", mockDM.DeleteCalls()[0])
 	}
 }
 
@@ -446,12 +446,12 @@ func TestRemove_DirectoryDeletionErrorIsNonFatal(t *testing.T) {
 	// AC2: Verify directory deletion failure doesn't fail the remove command
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/test-project", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	// Set up mock directory manager with error
 	mockDM := NewMockDirectoryManager()
-	mockDM.deleteErr = errors.New("permission denied")
+	mockDM.SetDeleteError(errors.New("permission denied"))
 	SetMockDirectoryManager(mockDM)
 	defer ClearMockDirectoryManager()
 
@@ -467,13 +467,13 @@ func TestRemove_DirectoryDeletionErrorIsNonFatal(t *testing.T) {
 	}
 
 	// Verify project was removed from repository
-	if len(mock.projects) != 0 {
+	if len(mock.Projects) != 0 {
 		t.Error("expected project to be removed from repository")
 	}
 
 	// Verify DeleteProjectDir was still called
-	if len(mockDM.deleteCalls) != 1 {
-		t.Errorf("expected DeleteProjectDir to be called, got %d calls", len(mockDM.deleteCalls))
+	if len(mockDM.DeleteCalls()) != 1 {
+		t.Errorf("expected DeleteProjectDir to be called, got %d calls", len(mockDM.DeleteCalls()))
 	}
 }
 
@@ -481,7 +481,7 @@ func TestRemove_NoDirectoryManagerIsGraceful(t *testing.T) {
 	// Verify remove works when directoryManager is nil (backward compatibility)
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/test-project", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	// Explicitly clear directory manager
@@ -497,7 +497,7 @@ func TestRemove_NoDirectoryManagerIsGraceful(t *testing.T) {
 	}
 
 	// Verify project was removed from repository
-	if len(mock.projects) != 0 {
+	if len(mock.Projects) != 0 {
 		t.Error("expected project to be removed from repository")
 	}
 }
@@ -510,7 +510,7 @@ func TestRemove_QuietMode_SuppressesOutput(t *testing.T) {
 	// AC3: remove with --quiet --force produces no output
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/test-project", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	cli.ResetRemoveFlags()
@@ -538,7 +538,7 @@ func TestRemove_QuietMode_SuppressesOutput(t *testing.T) {
 	}
 
 	// Verify project was still removed
-	if len(mock.projects) != 0 {
+	if len(mock.Projects) != 0 {
 		t.Error("expected project to be deleted from repository")
 	}
 }
@@ -547,7 +547,7 @@ func TestRemove_QuietMode_ForceRequired(t *testing.T) {
 	// AC6: Combined --force --quiet works together
 	mock := NewMockRepository()
 	p, _ := domain.NewProject("/path/to/test-project", "")
-	mock.projects[p.Path] = p
+	mock.Projects[p.Path] = p
 	cli.SetRepository(mock)
 
 	cli.ResetRemoveFlags()

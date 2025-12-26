@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-26
-updated_by: Dev Agent - Story 7-9 done (code review passed, fixes applied)
+updated_by: Dev Agent - Story 7-10 done (code review passed, fixes applied)
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -184,7 +184,8 @@ development_status:
   # Decision: Extract to internal/shared/testhelpers or similar
   # Carried forward: 6 times (since Epic 3)
   # Reference: epic-6-retro-2025-12-25.md → "Action Items" H1
-  7-10-m2-shared-test-helpers-package: backlog
+  # DONE: 2025-12-26 - Code review passed, fixes applied
+  7-10-m2-shared-test-helpers-package: done
 
   # 7-11: M3 - Shared styles package
   # Problem: Lipgloss styles duplicated across TUI components
