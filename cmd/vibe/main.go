@@ -96,6 +96,9 @@ func run(ctx context.Context) error {
 	// Story 8.6: Set detail panel layout mode for TUI
 	cli.SetDetailLayout(cfg.DetailLayout)
 
+	// Story 8.7: Store config for TUI help overlay display
+	cli.SetConfig(cfg)
+
 	// Get base path with safety check (Story 3.5.6)
 	basePath := config.GetDefaultBasePath()
 	if basePath == "" {

@@ -16,7 +16,9 @@ import (
 // The fileWatcher parameter is optional - if nil, real-time updates are disabled (Story 4.6).
 // The detailLayout parameter controls detail panel position (Story 8.6):
 // "vertical" (default) = side-by-side, "horizontal" = stacked (top/bottom).
-func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detector, waitingDetector ports.WaitingDetector, fileWatcher ports.FileWatcher, detailLayout string) error {
+// The config parameter is used for help overlay display (Story 8.7) - nil-safe.
+// Note: Config passed as parameter to avoid cli→tui→cli import cycle.
+func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detector, waitingDetector ports.WaitingDetector, fileWatcher ports.FileWatcher, detailLayout string, config *ports.Config) error {
 	m := NewModel(repo)
 	if detector != nil {
 		m.SetDetectionService(detector)
@@ -31,6 +33,8 @@ func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detec
 	}
 	// Story 8.6: Set detail panel layout mode from config
 	m.SetDetailLayout(detailLayout)
+	// Story 8.7: Set config for help overlay display
+	m.SetConfig(config)
 
 	p := tea.NewProgram(
 		m,

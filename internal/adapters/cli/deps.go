@@ -13,6 +13,9 @@ var configWarning string
 // Valid values: "horizontal" (default, stacked), "vertical" (side-by-side).
 var detailLayout = "horizontal"
 
+// appConfig stores the loaded configuration for TUI access (Story 8.7).
+var appConfig *ports.Config
+
 // SetDirectoryManager sets the directory manager for CLI commands.
 func SetDirectoryManager(dm ports.DirectoryManager) {
 	directoryManager = dm
@@ -42,4 +45,18 @@ func SetDetailLayout(layout string) {
 // GetDetailLayout returns the current detail panel layout mode (Story 8.6).
 func GetDetailLayout() string {
 	return detailLayout
+}
+
+// SetConfig stores the config for TUI components to access (Story 8.7).
+func SetConfig(cfg *ports.Config) {
+	appConfig = cfg
+}
+
+// GetConfig returns the stored config, or defaults if not set (Story 8.7).
+// CRITICAL: Always returns non-nil - never crashes on missing config.
+func GetConfig() *ports.Config {
+	if appConfig == nil {
+		return ports.NewConfig()
+	}
+	return appConfig
 }

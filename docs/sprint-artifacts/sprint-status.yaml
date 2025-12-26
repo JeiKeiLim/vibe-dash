@@ -24,8 +24,8 @@
 # - Dev moves story to 'review', dev reviews, then Dev moves to 'done'
 
 generated: 2025-12-12
-updated: 2025-12-26
-updated_by: Dev Agent - Story 8.6 hotfix (default=horizontal), Story 8-12 created
+updated: 2025-12-27
+updated_by: Dev Agent - Story 8.7 code review passed, status done
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -223,7 +223,7 @@ development_status:
   8-4-fix-layout-width-bugs: done
   8-5-favorites-sort-first: done
   8-6-horizontal-split-layout-option: done
-  8-7-config-display-in-tui: backlog
+  8-7-config-display-in-tui: done
   8-8-clarify-or-remove-confidence: backlog
   8-9-visual-polish-bundle: backlog
   # Added via correct-course workflow 2025-12-26

@@ -3,12 +3,14 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 )
 
 func TestRenderHelpOverlay_ContainsAllSections(t *testing.T) {
-	result := renderHelpOverlay(100, 40)
+	result := renderHelpOverlay(100, 40, nil) // Story 8.7: nil-safe
 
-	sections := []string{"Navigation", "Actions", "Views", "General"}
+	sections := []string{"Navigation", "Actions", "Views", "General", "Settings"} // Story 8.7: Added Settings
 	for _, section := range sections {
 		if !strings.Contains(result, section) {
 			t.Errorf("Expected help overlay to contain section %q", section)
@@ -17,7 +19,7 @@ func TestRenderHelpOverlay_ContainsAllSections(t *testing.T) {
 }
 
 func TestRenderHelpOverlay_ContainsNavigationShortcuts(t *testing.T) {
-	result := renderHelpOverlay(100, 40)
+	result := renderHelpOverlay(100, 40, nil)
 
 	shortcuts := []string{
 		"j/\u2193", // j/↓
@@ -33,7 +35,7 @@ func TestRenderHelpOverlay_ContainsNavigationShortcuts(t *testing.T) {
 }
 
 func TestRenderHelpOverlay_ContainsActionShortcuts(t *testing.T) {
-	result := renderHelpOverlay(100, 40)
+	result := renderHelpOverlay(100, 40, nil)
 
 	shortcuts := []struct {
 		key  string
@@ -57,7 +59,7 @@ func TestRenderHelpOverlay_ContainsActionShortcuts(t *testing.T) {
 }
 
 func TestRenderHelpOverlay_ContainsViewShortcuts(t *testing.T) {
-	result := renderHelpOverlay(100, 40)
+	result := renderHelpOverlay(100, 40, nil)
 
 	// Check for specific "h" key line pattern (not just "h" which matches "this", "Show", etc.)
 	if !strings.Contains(result, "h        View hibernated") {
@@ -66,7 +68,7 @@ func TestRenderHelpOverlay_ContainsViewShortcuts(t *testing.T) {
 }
 
 func TestRenderHelpOverlay_ContainsGeneralShortcuts(t *testing.T) {
-	result := renderHelpOverlay(100, 40)
+	result := renderHelpOverlay(100, 40, nil)
 
 	shortcuts := []struct {
 		key  string
@@ -87,7 +89,7 @@ func TestRenderHelpOverlay_ContainsGeneralShortcuts(t *testing.T) {
 }
 
 func TestRenderHelpOverlay_ContainsCloseHint(t *testing.T) {
-	result := renderHelpOverlay(100, 40)
+	result := renderHelpOverlay(100, 40, nil)
 
 	if !strings.Contains(result, "Press any key to close") {
 		t.Error("Expected help overlay to contain 'Press any key to close'")
@@ -95,7 +97,7 @@ func TestRenderHelpOverlay_ContainsCloseHint(t *testing.T) {
 }
 
 func TestRenderHelpOverlay_ContainsTitle(t *testing.T) {
-	result := renderHelpOverlay(100, 40)
+	result := renderHelpOverlay(100, 40, nil)
 
 	if !strings.Contains(result, "KEYBOARD SHORTCUTS") {
 		t.Error("Expected help overlay to contain 'KEYBOARD SHORTCUTS' title")
@@ -114,7 +116,7 @@ func TestRenderHelpOverlay_CenteredInTerminal(t *testing.T) {
 	}
 
 	for _, size := range sizes {
-		result := renderHelpOverlay(size.width, size.height)
+		result := renderHelpOverlay(size.width, size.height, nil)
 
 		// Output should exist and contain the title
 		if !strings.Contains(result, "KEYBOARD SHORTCUTS") {
@@ -141,12 +143,73 @@ func TestRenderHelpOverlay_EdgeCase_ZeroDimensions(t *testing.T) {
 
 	for _, tc := range edgeCases {
 		// Should not panic
-		result := renderHelpOverlay(tc.width, tc.height)
+		result := renderHelpOverlay(tc.width, tc.height, nil)
 
 		// Should still contain content (lipgloss handles small sizes gracefully)
 		if len(result) == 0 {
 			t.Errorf("renderHelpOverlay(%d, %d) should not be empty", tc.width, tc.height)
 		}
+	}
+}
+
+// ============================================================================
+// Story 8.7: Config Display in Help Overlay Tests
+// ============================================================================
+
+func TestRenderHelpOverlay_ShowsConfigValues(t *testing.T) {
+	cfg := &ports.Config{
+		AgentWaitingThresholdMinutes: 15,
+		RefreshIntervalSeconds:       30,
+		RefreshDebounceMs:            500,
+		DetailLayout:                 "vertical",
+		HibernationDays:              7,
+	}
+	result := renderHelpOverlay(100, 50, cfg)
+
+	// Story 8.7 AC1: Settings section with config values
+	expectedValues := []string{
+		"Settings",
+		"Waiting:     15 min",
+		"Refresh:     30 sec",
+		"Debounce:    500 ms",
+		"Layout:      vertical",
+		"Hibernation: 7 days",
+	}
+	for _, expected := range expectedValues {
+		if !strings.Contains(result, expected) {
+			t.Errorf("Expected help overlay to contain %q", expected)
+		}
+	}
+}
+
+func TestRenderHelpOverlay_NilConfig_UsesDefaults(t *testing.T) {
+	// Story 8.7 AC5: No crash on nil config, shows defaults
+	result := renderHelpOverlay(100, 50, nil)
+
+	// Default values from ports.NewConfig()
+	expectedDefaults := []string{
+		"Waiting:     10 min",     // Default AgentWaitingThresholdMinutes
+		"Refresh:     10 sec",     // Default RefreshIntervalSeconds
+		"Debounce:    200 ms",     // Default RefreshDebounceMs
+		"Layout:      horizontal", // Default DetailLayout
+		"Hibernation: 14 days",    // Default HibernationDays
+	}
+	for _, expected := range expectedDefaults {
+		if !strings.Contains(result, expected) {
+			t.Errorf("Expected help overlay to contain default value %q", expected)
+		}
+	}
+}
+
+func TestRenderHelpOverlay_ConfigPathsStillPresent(t *testing.T) {
+	// Story 8.7 AC4: Config file paths still shown
+	result := renderHelpOverlay(100, 50, nil)
+
+	if !strings.Contains(result, "Config: ~/.vibe-dash/config.yaml") {
+		t.Error("Expected help overlay to contain config path")
+	}
+	if !strings.Contains(result, "Per-project: ~/.vibe-dash/<project>/config.yaml") {
+		t.Error("Expected help overlay to contain per-project config path")
 	}
 }
 

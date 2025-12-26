@@ -6,6 +6,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 )
 
 // Minimum terminal dimensions
@@ -66,8 +68,14 @@ func renderEmptyView(width, height int) string {
 }
 
 // renderHelpOverlay renders the help screen with keyboard shortcuts.
-func renderHelpOverlay(width, height int) string {
+// Story 8.7: cfg parameter displays current config values (nil-safe - uses defaults).
+func renderHelpOverlay(width, height int, cfg *ports.Config) string {
 	title := titleStyle.Render("KEYBOARD SHORTCUTS")
+
+	// Story 8.7: Use defaults if config is nil (AC5: no crash on missing config)
+	if cfg == nil {
+		cfg = ports.NewConfig()
+	}
 
 	// Unicode arrows: \u2193 renders as ↓, \u2191 renders as ↑
 	content := strings.Join([]string{
@@ -91,6 +99,14 @@ func renderHelpOverlay(width, height int) string {
 		"?        Show this help",
 		"q        Quit",
 		"Esc      Cancel/close",
+		"",
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+		"Settings",
+		fmt.Sprintf("Waiting:     %d min", cfg.AgentWaitingThresholdMinutes),
+		fmt.Sprintf("Refresh:     %d sec", cfg.RefreshIntervalSeconds),
+		fmt.Sprintf("Debounce:    %d ms", cfg.RefreshDebounceMs),
+		fmt.Sprintf("Layout:      %s", cfg.DetailLayout),
+		fmt.Sprintf("Hibernation: %d days", cfg.HibernationDays),
 		"",
 		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
 		hintStyle.Render("Config: ~/.vibe-dash/config.yaml"),

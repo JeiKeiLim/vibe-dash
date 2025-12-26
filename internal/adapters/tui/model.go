@@ -91,6 +91,9 @@ type Model struct {
 
 	// Story 8.6: Layout configuration
 	detailLayout string // "vertical" (left/right) or "horizontal" (top/bottom)
+
+	// Story 8.7: Config for help overlay display
+	config *ports.Config
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -223,11 +226,11 @@ func NewModel(repo ports.ProjectRepository) Model {
 	return Model{
 		ready:           false,
 		showHelp:        false,
-		showDetailPanel: false,      // Default closed, set based on height in resizeTickMsg
+		showDetailPanel: false, // Default closed, set based on height in resizeTickMsg
 		viewMode:        viewModeNormal,
 		repository:      repo,
 		statusBar:       components.NewStatusBarModel(0), // Width set in resizeTickMsg
-		detailLayout:    "horizontal",                     // Story 8.6: Default layout mode
+		detailLayout:    "horizontal",                    // Story 8.6: Default layout mode
 	}
 }
 
@@ -263,6 +266,16 @@ func (m *Model) SetDetailLayout(layout string) {
 // isHorizontalLayout returns true if detail panel should be below project list (Story 8.6).
 func (m Model) isHorizontalLayout() bool {
 	return m.detailLayout == "horizontal"
+}
+
+// SetConfig stores config for help overlay display (Story 8.7).
+// Config passed as parameter to avoid cli→tui→cli import cycle.
+// Nil-safe: stores defaults if cfg is nil.
+func (m *Model) SetConfig(cfg *ports.Config) {
+	if cfg == nil {
+		cfg = ports.NewConfig()
+	}
+	m.config = cfg
 }
 
 // isProjectWaiting wraps WaitingDetector.IsWaiting for component callbacks.
@@ -1304,7 +1317,7 @@ func (m Model) View() string {
 
 	// Render help overlay (overlays everything)
 	if m.showHelp {
-		return renderHelpOverlay(m.width, m.height)
+		return renderHelpOverlay(m.width, m.height, m.config)
 	}
 
 	// Render note editor dialog (overlays everything) (Story 3.7)
