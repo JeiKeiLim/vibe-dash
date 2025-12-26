@@ -173,7 +173,8 @@ type removeConfirmTimeoutMsg struct{}
 // clearRemoveFeedbackMsg signals to clear remove feedback message (Story 3.9).
 type clearRemoveFeedbackMsg struct{}
 
-// tickMsg is sent every 60 seconds to trigger timestamp recalculation (Story 4.2, AC4).
+// tickMsg is sent every 5 seconds for responsive waiting detection (Story 8.2, AC2).
+// Originally 60 seconds for Story 4.2 AC4, reduced for 24/7 reliability.
 type tickMsg time.Time
 
 // fileEventMsg wraps file system events for Bubble Tea message passing (Story 4.6).
@@ -318,9 +319,10 @@ func (m Model) loadProjectsCmd() tea.Cmd {
 	}
 }
 
-// tickCmd returns a command that ticks every 60 seconds for timestamp refresh (Story 4.2, AC4).
+// tickCmd returns a command that ticks every 5 seconds for responsive waiting detection (Story 8.2).
+// Story 4.2 AC4 originally used 1-minute interval, but 24/7 usage requires faster updates.
 func tickCmd() tea.Cmd {
-	return tea.Tick(time.Minute, func(t time.Time) tea.Msg {
+	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
