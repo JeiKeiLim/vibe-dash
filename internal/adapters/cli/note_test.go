@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/cli"
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/filesystem"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 )
 
@@ -352,8 +353,8 @@ func TestNoteCmd_FindAllError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when FindAll fails")
 	}
-	if !strings.Contains(err.Error(), "failed to load projects") {
-		t.Errorf("expected 'failed to load projects' error, got: %v", err)
+	if !strings.Contains(err.Error(), "failed to find project") {
+		t.Errorf("expected 'failed to find project' error, got: %v", err)
 	}
 }
 
@@ -475,5 +476,85 @@ func TestNoteCmd_QuietMode_ClearNote(t *testing.T) {
 	// Verify note was cleared
 	if projects[0].Notes != "" {
 		t.Errorf("expected note to be cleared, got: %s", projects[0].Notes)
+	}
+}
+
+// ============================================================================
+// Story 7.12: Path-Based Lookup Tests (AC3, AC6)
+// ============================================================================
+
+// TestNoteCmd_FindByPath verifies path-based project lookup works (AC3).
+// This is a NEW capability enabled by reusing findProjectByIdentifier.
+func TestNoteCmd_FindByPath(t *testing.T) {
+	// Setup: Create temp directory and get its canonical path (resolves symlinks)
+	tempDir := t.TempDir()
+	canonicalDir, err := filesystem.CanonicalPath(tempDir)
+	if err != nil {
+		t.Fatalf("failed to get canonical path: %v", err)
+	}
+
+	projects := []*domain.Project{
+		{ID: "1", Path: canonicalDir, Name: "temp-project", Notes: ""},
+	}
+	cli.SetRepository(newNoteMockRepository().withProjects(projects))
+
+	// Execute using path instead of name
+	output, err := executeNoteCommand([]string{tempDir, "path-based note"})
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected path-based lookup to succeed, got error: %v", err)
+	}
+	if !strings.Contains(output, "✓ Note saved") {
+		t.Errorf("expected success message, got: %s", output)
+	}
+	if projects[0].Notes != "path-based note" {
+		t.Errorf("expected note to be set via path lookup, got: %s", projects[0].Notes)
+	}
+}
+
+// TestNoteCmd_ViewByPath verifies viewing notes via path-based lookup.
+func TestNoteCmd_ViewByPath(t *testing.T) {
+	// Setup: Create temp directory and get its canonical path (resolves symlinks)
+	tempDir := t.TempDir()
+	canonicalDir, err := filesystem.CanonicalPath(tempDir)
+	if err != nil {
+		t.Fatalf("failed to get canonical path: %v", err)
+	}
+
+	projects := []*domain.Project{
+		{ID: "1", Path: canonicalDir, Name: "temp-project", Notes: "existing note via path"},
+	}
+	cli.SetRepository(newNoteMockRepository().withProjects(projects))
+
+	// Execute view mode using path
+	output, err := executeNoteCommand([]string{tempDir})
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected path-based view to succeed, got error: %v", err)
+	}
+	if !strings.Contains(output, "existing note via path") {
+		t.Errorf("expected note content in output, got: %s", output)
+	}
+}
+
+// TestNoteCmd_FindByPath_NotFound verifies error when path exists but no project matches.
+func TestNoteCmd_FindByPath_NotFound(t *testing.T) {
+	// Setup: Create temp directory but don't register it as a project
+	tempDir := t.TempDir()
+
+	// Empty repository - no projects registered
+	cli.SetRepository(newNoteMockRepository())
+
+	// Execute using unregistered path
+	_, err := executeNoteCommand([]string{tempDir})
+
+	// Assert: Should fail with not found error
+	if err == nil {
+		t.Fatal("expected error for unregistered path")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' error, got: %v", err)
 	}
 }

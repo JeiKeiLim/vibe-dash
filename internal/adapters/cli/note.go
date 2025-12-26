@@ -48,24 +48,10 @@ func runNote(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("repository not initialized")
 	}
 
-	projectName := args[0]
+	identifier := args[0]
 
-	// Find project by name or display name
-	projects, err := repository.FindAll(ctx)
+	targetProject, err := findProjectByIdentifier(ctx, identifier)
 	if err != nil {
-		return fmt.Errorf("failed to load projects: %w", err)
-	}
-
-	var targetProject *domain.Project
-	for _, p := range projects {
-		if p.Name == projectName || p.DisplayName == projectName {
-			targetProject = p
-			break
-		}
-	}
-
-	if targetProject == nil {
-		err := fmt.Errorf("%w: %s", domain.ErrProjectNotFound, projectName)
 		if errors.Is(err, domain.ErrProjectNotFound) {
 			cmd.SilenceErrors = true
 			cmd.SilenceUsage = true
