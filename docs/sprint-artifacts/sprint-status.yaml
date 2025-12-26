@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-26
-updated_by: Dev Agent - Story 7-12 code review passed, marked done
+updated_by: Dev Agent - Story 7-13 code review passed, marked done
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -208,7 +208,8 @@ development_status:
   # Impact: Dashboard shows wrong "next story" when story numbers exceed single digits
   # Root cause: stage_parser.go uses string comparison for sorting
   # Locations: stage_parser.go:241-242 (story sort), stage_parser.go:126 (epic sort)
-  7-13-numeric-story-sorting: ready-for-dev
+  # DONE: 2025-12-26 - Code review passed, naturalCompare implemented for stories/epics/retrospectives
+  7-13-numeric-story-sorting: done
   epic-7-retrospective: optional
 
   # Epic 8: UX Polish

@@ -182,7 +182,10 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 	}
 
 	// Sort epic order for deterministic behavior (map iteration is random)
-	sort.Strings(epicOrder)
+	// Use naturalCompare for numeric ordering (AC2/AC3: epic-2 < epic-10, epic-4 < epic-4-5 < epic-5)
+	sort.Slice(epicOrder, func(i, j int) bool {
+		return naturalCompare(epicOrder[i], epicOrder[j])
+	})
 
 	// G24: Check if all epics are deferred (no active epics found)
 	if len(epics) == 0 {
@@ -261,8 +264,9 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 	}
 
 	// G23: Sort retrospectives by epicNum for deterministic behavior (AC5)
+	// Use naturalCompare for numeric ordering (AC7: epic-6-retrospective < epic-10-retrospective)
 	sort.Slice(retrospectives, func(i, j int) bool {
-		return retrospectives[i].epicNum < retrospectives[j].epicNum
+		return naturalCompare(retrospectives[i].epicNum, retrospectives[j].epicNum)
 	})
 
 	// G7: Check for done epics with active stories (check before all-done shortcut)
@@ -320,7 +324,7 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 		}, len(firstInProgressEpic.stories))
 		copy(sortedStories, firstInProgressEpic.stories)
 		sort.Slice(sortedStories, func(i, j int) bool {
-			return sortedStories[i].key < sortedStories[j].key
+			return naturalCompare(sortedStories[i].key, sortedStories[j].key)
 		})
 
 		// G2/G3/G19: Priority-based story selection
@@ -449,6 +453,105 @@ func isNumeric(s string) bool {
 		}
 	}
 	return len(s) > 0
+}
+
+// naturalCompare returns true if a should sort before b using natural ordering.
+// Handles: "7-2" vs "7-10", "epic-4" vs "epic-10", "epic-4-5" vs "epic-5"
+// Uses chunk-based comparison: splits into numeric and non-numeric segments,
+// compares numeric chunks as integers and non-numeric chunks lexicographically.
+func naturalCompare(a, b string) bool {
+	// Handle empty strings
+	if a == "" && b == "" {
+		return false
+	}
+	if a == "" {
+		return true
+	}
+	if b == "" {
+		return false
+	}
+
+	// Split into chunks and compare
+	chunksA := splitIntoChunks(a)
+	chunksB := splitIntoChunks(b)
+
+	minLen := len(chunksA)
+	if len(chunksB) < minLen {
+		minLen = len(chunksB)
+	}
+
+	for i := 0; i < minLen; i++ {
+		cA := chunksA[i]
+		cB := chunksB[i]
+
+		// If both are numeric, compare as integers
+		if isNumeric(cA) && isNumeric(cB) {
+			nA := parseUint(cA)
+			nB := parseUint(cB)
+			if nA != nB {
+				return nA < nB
+			}
+			continue
+		}
+
+		// Compare as strings
+		if cA != cB {
+			return cA < cB
+		}
+	}
+
+	// If all compared chunks are equal, shorter string comes first
+	return len(chunksA) < len(chunksB)
+}
+
+// splitIntoChunks splits a string into alternating numeric and non-numeric chunks.
+// Each transition between digits and non-digits creates a new chunk.
+// Examples:
+//   - "epic-4-5" -> ["epic", "-", "4", "-", "5"]
+//   - "7-10-feature" -> ["7", "-", "10", "-", "feature"]
+//   - Dashes are separate chunks because they are non-numeric
+func splitIntoChunks(s string) []string {
+	if s == "" {
+		return nil
+	}
+
+	var chunks []string
+	var current []rune
+	var inNumeric bool
+
+	runes := []rune(s)
+	if len(runes) > 0 {
+		inNumeric = runes[0] >= '0' && runes[0] <= '9'
+	}
+
+	for _, r := range runes {
+		isDigit := r >= '0' && r <= '9'
+		if isDigit == inNumeric {
+			current = append(current, r)
+		} else {
+			if len(current) > 0 {
+				chunks = append(chunks, string(current))
+			}
+			current = []rune{r}
+			inNumeric = isDigit
+		}
+	}
+
+	if len(current) > 0 {
+		chunks = append(chunks, string(current))
+	}
+
+	return chunks
+}
+
+// parseUint parses a string as an unsigned integer.
+// Assumes input is a valid numeric string (checked by isNumeric).
+func parseUint(s string) uint64 {
+	var n uint64
+	for _, c := range s {
+		n = n*10 + uint64(c-'0')
+	}
+	return n
 }
 
 // formatStoryKey formats a story key for display.

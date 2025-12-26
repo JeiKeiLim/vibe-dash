@@ -1086,6 +1086,343 @@ func TestIsNumeric(t *testing.T) {
 }
 
 // =============================================================================
+// naturalCompare Tests (Story 7.13: Numeric Story Sorting)
+// =============================================================================
+
+func TestNaturalCompare(t *testing.T) {
+	tests := []struct {
+		name string
+		a    string
+		b    string
+		want bool // true if a < b
+	}{
+		// AC1: Stories sort numerically within epic
+		{"story 7-2 < 7-10", "7-2", "7-10", true},
+		{"story 7-10 > 7-2", "7-10", "7-2", false},
+		{"story 7-1 < 7-2", "7-1", "7-2", true},
+		{"story 7-9 < 7-10", "7-9", "7-10", true},
+		{"story 7-10 < 7-11", "7-10", "7-11", true},
+
+		// AC2: Epics sort numerically
+		{"epic-2 < epic-10", "epic-2", "epic-10", true},
+		{"epic-10 > epic-2", "epic-10", "epic-2", false},
+		{"epic-1 < epic-2", "epic-1", "epic-2", true},
+		{"epic-9 < epic-10", "epic-9", "epic-10", true},
+
+		// AC3: Sub-epics sort correctly
+		{"epic-4 < epic-4-5", "epic-4", "epic-4-5", true},
+		{"epic-4-5 < epic-4-6", "epic-4-5", "epic-4-6", true},
+		{"epic-4-6 < epic-5", "epic-4-6", "epic-5", true},
+		{"epic-4-5 < epic-5", "epic-4-5", "epic-5", true},
+		{"epic-10 > epic-4-5", "epic-10", "epic-4-5", false},
+
+		// AC7: Retrospectives sort numerically
+		{"epic-6-retrospective < epic-7-retrospective", "6", "7", true},
+		{"epic-7-retrospective < epic-10-retrospective", "7", "10", true},
+		{"epic-10-retrospective > epic-6-retrospective", "10", "6", false},
+
+		// Full story keys with descriptors
+		{"story key 7-2-feature < 7-10-feature", "7-2-feature", "7-10-feature", true},
+		{"story key 7-10-feature > 7-2-feature", "7-10-feature", "7-2-feature", false},
+		{"story key 1-1-feature < 1-2-feature", "1-1-feature", "1-2-feature", true},
+		{"story key 1-9-feature < 1-10-feature", "1-9-feature", "1-10-feature", true},
+
+		// Sub-epic story keys
+		{"sub-epic story 4-5-2-xxx < 4-5-10-xxx", "4-5-2-xxx", "4-5-10-xxx", true},
+		{"sub-epic story 4-5-10-xxx > 4-5-2-xxx", "4-5-10-xxx", "4-5-2-xxx", false},
+
+		// Edge cases
+		{"empty strings equal", "", "", false},
+		{"empty < non-empty", "", "a", true},
+		{"non-empty > empty", "a", "", false},
+		{"equal strings", "abc", "abc", false},
+		{"pure numeric 2 < 10", "2", "10", true},
+		{"pure numeric 10 > 2", "10", "2", false},
+
+		// M3 fix: Leading zeros handling
+		{"leading zero 7-01 < 7-2", "7-01", "7-2", true},   // 01 = 1 < 2
+		{"leading zero 7-1 == 7-01", "7-1", "7-01", false}, // 1 == 1, then lengths equal
+		{"leading zero 7-01 == 7-1", "7-01", "7-1", false}, // 1 == 1, then lengths equal
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := naturalCompare(tt.a, tt.b)
+			if got != tt.want {
+				t.Errorf("naturalCompare(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+
+			// M1 fix: Verify antisymmetry property for non-equal pairs
+			// If a < b, then b > a (i.e., !naturalCompare(b, a))
+			if tt.a != tt.b {
+				reverse := naturalCompare(tt.b, tt.a)
+				if tt.want && reverse {
+					t.Errorf("antisymmetry violation: naturalCompare(%q, %q)=true but naturalCompare(%q, %q)=true also", tt.a, tt.b, tt.b, tt.a)
+				}
+				// Note: Both can be false for numerically equal values like "7-01" vs "7-1"
+			}
+		})
+	}
+}
+
+// TestNaturalCompare_Antisymmetry explicitly verifies the antisymmetry property (M1 fix)
+func TestNaturalCompare_Antisymmetry(t *testing.T) {
+	// For any a != b: if naturalCompare(a, b) == true, then naturalCompare(b, a) must be false
+	pairs := []struct{ a, b string }{
+		{"7-2", "7-10"},
+		{"epic-2", "epic-10"},
+		{"epic-4", "epic-4-5"},
+		{"1-1-feature", "1-2-feature"},
+		{"a", "b"},
+		{"1", "2"},
+	}
+
+	for _, p := range pairs {
+		t.Run(p.a+"_vs_"+p.b, func(t *testing.T) {
+			ab := naturalCompare(p.a, p.b)
+			ba := naturalCompare(p.b, p.a)
+
+			// Both can't be true (antisymmetry)
+			if ab && ba {
+				t.Errorf("antisymmetry violated: both naturalCompare(%q, %q) and naturalCompare(%q, %q) are true", p.a, p.b, p.b, p.a)
+			}
+			// Note: Both can be false for numerically equal values like "7-01" vs "7-1"
+		})
+	}
+}
+
+// =============================================================================
+// Numeric Ordering Integration Tests (Story 7.13)
+// =============================================================================
+
+// TestDetermineStageFromStatus_DoubleDigitStories verifies natural ordering (AC1, AC4)
+func TestDetermineStageFromStatus_DoubleDigitStories(t *testing.T) {
+	tests := []struct {
+		name          string
+		status        *SprintStatus
+		wantStage     domain.Stage
+		wantReasoning string
+	}{
+		{
+			name: "AC1/AC4: stories 7-1 done, 7-2 and 7-10 backlog - should pick 7-2",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-7":       "in-progress",
+					"7-1-feature":  "done",
+					"7-2-feature":  "backlog",
+					"7-10-feature": "backlog",
+					"7-11-feature": "backlog",
+				},
+			},
+			wantStage:     domain.StagePlan,
+			wantReasoning: "Story 7.2 in backlog, needs drafting", // NOT 7.10
+		},
+		{
+			name: "stories 7-1 through 7-12, 7-2 in-progress",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-7":       "in-progress",
+					"7-1-feature":  "done",
+					"7-2-feature":  "in-progress",
+					"7-3-feature":  "backlog",
+					"7-9-feature":  "backlog",
+					"7-10-feature": "backlog",
+					"7-11-feature": "backlog",
+					"7-12-feature": "backlog",
+				},
+			},
+			wantStage:     domain.StageImplement,
+			wantReasoning: "Story 7.2 being implemented",
+		},
+		{
+			name: "all stories backlog, should pick 7-1 not 7-10",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-7":       "in-progress",
+					"7-1-feature":  "backlog",
+					"7-10-feature": "backlog",
+					"7-11-feature": "backlog",
+				},
+			},
+			wantStage:     domain.StagePlan,
+			wantReasoning: "Story 7.1 in backlog, needs drafting", // NOT 7.10
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stage, _, reasoning := determineStageFromStatus(tt.status)
+			if stage != tt.wantStage {
+				t.Errorf("stage = %v, want %v", stage, tt.wantStage)
+			}
+			if reasoning != tt.wantReasoning {
+				t.Errorf("reasoning = %q, want %q", reasoning, tt.wantReasoning)
+			}
+		})
+	}
+}
+
+// TestDetermineStageFromStatus_DoubleDigitEpics verifies epic ordering (AC2, AC3)
+func TestDetermineStageFromStatus_DoubleDigitEpics(t *testing.T) {
+	tests := []struct {
+		name          string
+		status        *SprintStatus
+		wantStage     domain.Stage
+		wantReasoning string
+	}{
+		{
+			name: "AC2: epic-2 in-progress, epic-10 backlog",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":       "done",
+					"epic-2":       "in-progress",
+					"2-1-feature":  "in-progress",
+					"epic-10":      "backlog",
+					"10-1-feature": "backlog",
+				},
+			},
+			wantStage:     domain.StageImplement,
+			wantReasoning: "Story 2.1 being implemented", // epic-2 found first, not epic-10
+		},
+		{
+			name: "AC2: epic-10 in-progress, epic-2 done",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":       "done",
+					"epic-2":       "done",
+					"2-1-feature":  "done",
+					"epic-10":      "in-progress",
+					"10-1-feature": "backlog",
+				},
+			},
+			wantStage:     domain.StagePlan,
+			wantReasoning: "Story 10.1 in backlog, needs drafting",
+		},
+		{
+			name: "AC3: sub-epic ordering epic-4, epic-4-5, epic-4-6, epic-5",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-4":        "done",
+					"epic-4-5":      "in-progress",
+					"4-5-1-feature": "backlog",
+					"epic-4-6":      "backlog",
+					"epic-5":        "backlog",
+				},
+			},
+			wantStage:     domain.StagePlan,
+			wantReasoning: "Story 4.5.1 in backlog, needs drafting", // epic-4-5 is in-progress
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stage, _, reasoning := determineStageFromStatus(tt.status)
+			if stage != tt.wantStage {
+				t.Errorf("stage = %v, want %v", stage, tt.wantStage)
+			}
+			if reasoning != tt.wantReasoning {
+				t.Errorf("reasoning = %q, want %q", reasoning, tt.wantReasoning)
+			}
+		})
+	}
+}
+
+// TestDetermineStageFromStatus_DoubleDigitRetrospectives verifies retrospective ordering (AC7)
+func TestDetermineStageFromStatus_DoubleDigitRetrospectives(t *testing.T) {
+	tests := []struct {
+		name          string
+		status        *SprintStatus
+		wantStage     domain.Stage
+		wantReasoning string
+	}{
+		{
+			name: "AC7: epic-6, epic-7, epic-10 retrospectives - should pick epic-6 first",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-6":                "done",
+					"6-1-feature":           "done",
+					"epic-7":                "done",
+					"7-1-feature":           "done",
+					"epic-10":               "done",
+					"10-1-feature":          "done",
+					"epic-6-retrospective":  "in-progress",
+					"epic-7-retrospective":  "backlog",
+					"epic-10-retrospective": "backlog",
+				},
+			},
+			wantStage:     domain.StageImplement,
+			wantReasoning: "Retrospective for Epic 6 in progress", // NOT epic-10
+		},
+		{
+			name: "AC7: only epic-10 retrospective in-progress",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-6":                "done",
+					"epic-7":                "done",
+					"epic-10":               "done",
+					"epic-6-retrospective":  "done",
+					"epic-7-retrospective":  "done",
+					"epic-10-retrospective": "in-progress",
+				},
+			},
+			wantStage:     domain.StageImplement,
+			wantReasoning: "Retrospective for Epic 10 in progress",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stage, _, reasoning := determineStageFromStatus(tt.status)
+			if stage != tt.wantStage {
+				t.Errorf("stage = %v, want %v", stage, tt.wantStage)
+			}
+			if reasoning != tt.wantReasoning {
+				t.Errorf("reasoning = %q, want %q", reasoning, tt.wantReasoning)
+			}
+		})
+	}
+}
+
+// TestDetermineStageFromStatus_MixedDoubleDigitScenario verifies combined scenario (AC5)
+func TestDetermineStageFromStatus_MixedDoubleDigitScenario(t *testing.T) {
+	// This test verifies that existing G-tests still pass with new sorting
+	// and exercises a complex scenario with sub-epics and double-digit stories
+	status := &SprintStatus{
+		DevelopmentStatus: map[string]string{
+			// Epic 4 (sub-epic structure)
+			"epic-4":         "done",
+			"4-1-feature":    "done",
+			"epic-4-5":       "done",
+			"4-5-1-feature":  "done",
+			"4-5-2-feature":  "done",
+			"4-5-10-feature": "done",
+			// Epic 7 (double-digit stories)
+			"epic-7":       "in-progress",
+			"7-1-feature":  "done",
+			"7-2-feature":  "done",
+			"7-9-feature":  "done",
+			"7-10-feature": "in-progress", // This is correctly picked
+			"7-11-feature": "backlog",
+			// Epic 10
+			"epic-10":      "backlog",
+			"10-1-feature": "backlog",
+		},
+	}
+
+	stage, confidence, reasoning := determineStageFromStatus(status)
+
+	if stage != domain.StageImplement {
+		t.Errorf("stage = %v, want StageImplement", stage)
+	}
+	if confidence != domain.ConfidenceCertain {
+		t.Errorf("confidence = %v, want ConfidenceCertain", confidence)
+	}
+	if reasoning != "Story 7.10 being implemented" {
+		t.Errorf("reasoning = %q, want %q", reasoning, "Story 7.10 being implemented")
+	}
+}
+
+// =============================================================================
 // findSprintStatusPath Tests
 // =============================================================================
 
