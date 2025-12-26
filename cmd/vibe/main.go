@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
 	"time"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/cli"
@@ -34,8 +33,12 @@ func (a *configPathAdapter) GetDirForPath(path string) string {
 	return dirName
 }
 
+// shutdownTimeout is the maximum time to wait for graceful shutdown
+const shutdownTimeout = 5 * time.Second
+
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 
 	// Setup signal handling
 	sigCh := make(chan os.Signal, 1)
@@ -45,16 +48,33 @@ func main() {
 		<-sigCh
 		slog.Info("shutdown signal received")
 		cancel()
+
+		// Start timeout countdown
+		select {
+		case <-time.After(shutdownTimeout):
+			slog.Warn("shutdown timeout exceeded, forcing exit")
+			os.Exit(1)
+		case <-done:
+			// Clean exit - run() completed
+		case <-sigCh:
+			// Second signal - force exit immediately
+			slog.Warn("force exit on repeated signal")
+			os.Exit(1)
+		}
 	}()
 
 	// Run application with cancellable context
+	exitCode := 0
 	if err := run(ctx); err != nil {
 		// Only log if not a silent error (e.g., "exists" command uses exit codes only)
 		if !cli.IsSilentError(err) {
 			slog.Error("application error", "error", err)
 		}
-		os.Exit(cli.MapErrorToExitCode(err))
+		exitCode = cli.MapErrorToExitCode(err)
 	}
+	// Signal clean completion to signal handler before exiting
+	close(done)
+	os.Exit(exitCode)
 }
 
 func run(ctx context.Context) error {
@@ -89,6 +109,16 @@ func run(ctx context.Context) error {
 
 	// Create RepositoryCoordinator (replaces single-DB sqlite.NewSQLiteRepository)
 	coordinator := persistence.NewRepositoryCoordinator(loader, dirMgr, basePath)
+
+	// Cleanup coordinator with FRESH context (not cancelled ctx) for clean shutdown
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cleanupCancel()
+		if err := coordinator.Close(cleanupCtx); err != nil {
+			slog.Error("coordinator cleanup failed", "error", err)
+		}
+		slog.Debug("coordinator closed")
+	}()
 
 	// Set repository (coordinator implements ports.ProjectRepository)
 	cli.SetRepository(coordinator)

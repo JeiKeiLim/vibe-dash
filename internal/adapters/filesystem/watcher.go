@@ -166,6 +166,7 @@ func (w *FsnotifyWatcher) Close() error {
 		w.watcher = nil
 	}
 
+	slog.Debug("file watcher closed")
 	return nil
 }
 

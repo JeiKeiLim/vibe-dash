@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-26
-updated_by: Dev (Amelia) - Story 7-6 code review complete, story done
+updated_by: Dev (Amelia) - Story 7-7 Graceful Shutdown done with code review fixes
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -161,7 +161,7 @@ development_status:
   7-4-progress-indicators: done
   7-5-verbose-and-debug-logging: done
   7-6-feedback-messages-polish: done
-  7-7-graceful-shutdown: backlog
+  7-7-graceful-shutdown: done
   # Epic 6 Retro Action Items (HIGH PRIORITY)
   # Source: docs/sprint-artifacts/retrospectives/epic-6-retro-2025-12-25.md
 
