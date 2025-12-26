@@ -141,15 +141,16 @@ func TestProjectItemDelegate_RenderContainsProjectName(t *testing.T) {
 func TestProjectItemDelegate_RenderContainsStageName(t *testing.T) {
 	project := &domain.Project{
 		Name:           "project",
+		DetectedMethod: "speckit", // Story 8.3: Need DetectedMethod to show stage
 		CurrentStage:   domain.StagePlan,
 		LastActivityAt: time.Now(),
 	}
 
-	delegate := NewProjectItemDelegate(80)
+	delegate := NewProjectItemDelegate(100) // Story 8.3: Need width >= 80 to show stage
 	item := ProjectItem{Project: project}
 
 	items := []list.Item{item}
-	l := list.New(items, delegate, 80, 10)
+	l := list.New(items, delegate, 100, 10)
 
 	var buf bytes.Buffer
 	delegate.Render(&buf, l, 0, item)
@@ -475,5 +476,161 @@ func TestProjectItemDelegate_RendersWaitingIndicator_DurationFormats(t *testing.
 				t.Errorf("Render() should contain %q for %v duration, got: %q", tt.expected, tt.duration, output)
 			}
 		})
+	}
+}
+
+// Story 8.3: Stage info display tests
+
+func TestProjectItemDelegate_RendersStageInfo_BMAD(t *testing.T) {
+	delegate := NewProjectItemDelegate(100) // Full width for full stage display
+
+	project := &domain.Project{
+		ID:                 "1",
+		Name:               "bmad-project",
+		Path:               "/test",
+		DetectedMethod:     "bmad",
+		DetectionReasoning: "Story 8.3 in code review",
+		CurrentStage:       domain.StageTasks,
+		LastActivityAt:     time.Now(),
+	}
+	item := ProjectItem{Project: project}
+
+	items := []list.Item{item}
+	l := list.New(items, delegate, 100, 10)
+
+	var buf bytes.Buffer
+	delegate.Render(&buf, l, 0, item)
+	output := buf.String()
+
+	// Should contain BMAD-formatted stage info
+	if !strings.Contains(output, "E8 S8.3 review") {
+		t.Errorf("Render() should contain 'E8 S8.3 review' for BMAD project, got: %q", output)
+	}
+}
+
+func TestProjectItemDelegate_RendersStageInfo_Speckit(t *testing.T) {
+	delegate := NewProjectItemDelegate(100)
+
+	project := &domain.Project{
+		ID:             "1",
+		Name:           "speckit-project",
+		Path:           "/test",
+		DetectedMethod: "speckit",
+		CurrentStage:   domain.StagePlan,
+		LastActivityAt: time.Now(),
+	}
+	item := ProjectItem{Project: project}
+
+	items := []list.Item{item}
+	l := list.New(items, delegate, 100, 10)
+
+	var buf bytes.Buffer
+	delegate.Render(&buf, l, 0, item)
+	output := buf.String()
+
+	// Should contain basic stage name
+	if !strings.Contains(output, "Plan") {
+		t.Errorf("Render() should contain 'Plan' for Speckit project, got: %q", output)
+	}
+}
+
+func TestProjectItemDelegate_RendersStageInfo_Unknown(t *testing.T) {
+	delegate := NewProjectItemDelegate(100)
+
+	project := &domain.Project{
+		ID:             "1",
+		Name:           "unknown-project",
+		Path:           "/test",
+		DetectedMethod: "unknown",
+		CurrentStage:   domain.StageUnknown,
+		LastActivityAt: time.Now(),
+	}
+	item := ProjectItem{Project: project}
+
+	items := []list.Item{item}
+	l := list.New(items, delegate, 100, 10)
+
+	var buf bytes.Buffer
+	delegate.Render(&buf, l, 0, item)
+	output := buf.String()
+
+	// Should contain "-" for unknown
+	if !strings.Contains(output, "-") {
+		t.Errorf("Render() should contain '-' for unknown project, got: %q", output)
+	}
+}
+
+func TestProjectItemDelegate_StageColumnWidth_Responsive(t *testing.T) {
+	tests := []struct {
+		name        string
+		width       int
+		expectWidth int
+	}{
+		{"full width 100", 100, colStageFull},
+		{"full width 120", 120, colStageFull},
+		{"short width 90", 90, colStageShort},
+		{"short width 80", 80, colStageShort},
+		{"hidden width 79", 79, 0},
+		{"hidden width 50", 50, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			delegate := NewProjectItemDelegate(tt.width)
+			gotWidth := delegate.stageColumnWidth()
+			if gotWidth != tt.expectWidth {
+				t.Errorf("stageColumnWidth() = %d, want %d", gotWidth, tt.expectWidth)
+			}
+		})
+	}
+}
+
+func TestProjectItemDelegate_ShowStageColumn(t *testing.T) {
+	tests := []struct {
+		name   string
+		width  int
+		expect bool
+	}{
+		{"show at 100", 100, true},
+		{"show at 80", 80, true},
+		{"hide at 79", 79, false},
+		{"hide at 50", 50, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			delegate := NewProjectItemDelegate(tt.width)
+			got := delegate.showStageColumn()
+			if got != tt.expect {
+				t.Errorf("showStageColumn() = %v, want %v", got, tt.expect)
+			}
+		})
+	}
+}
+
+func TestProjectItemDelegate_StageHiddenAtNarrowWidth(t *testing.T) {
+	delegate := NewProjectItemDelegate(70) // Narrow width
+
+	project := &domain.Project{
+		ID:                 "1",
+		Name:               "test-project",
+		Path:               "/test",
+		DetectedMethod:     "bmad",
+		DetectionReasoning: "Story 8.3 in code review",
+		CurrentStage:       domain.StageTasks,
+		LastActivityAt:     time.Now(),
+	}
+	item := ProjectItem{Project: project}
+
+	items := []list.Item{item}
+	l := list.New(items, delegate, 70, 10)
+
+	var buf bytes.Buffer
+	delegate.Render(&buf, l, 0, item)
+	output := buf.String()
+
+	// Should NOT contain stage info at narrow width
+	if strings.Contains(output, "E8 S8.3") {
+		t.Errorf("Render() should NOT contain stage info at narrow width, got: %q", output)
 	}
 }

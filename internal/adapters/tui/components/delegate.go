@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/stageformat"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/styles"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/timeformat"
 )
@@ -20,9 +21,15 @@ const (
 	colFavorite  = 2  // styled "⭐" or "  " (Story 3.8)
 	colNameMin   = 15 // Minimum name width
 	colIndicator = 3  // "✨ " or "⚡ " or "   "
-	colStage     = 10 // "Implement" is longest
+	colStage     = 16 // "E8 S8.3 review" needs 14, allow 16 for padding (Story 8.3)
 	colWaiting   = 14 // "⏸️ WAITING Xh" or empty
 	colTime      = 8  // "2w ago" max
+
+	// Width breakpoints for responsive stage display (Story 8.3)
+	widthBreakpointFull  = 100 // >= 100: Full stage info "E8 S8.3 review"
+	widthBreakpointShort = 80  // 80-99: Shortened "E8 S8.3"
+	colStageShort        = 10  // Column width for shortened stage
+	colStageFull         = 16  // Column width for full stage
 )
 
 // WaitingChecker checks if a project is waiting.
@@ -102,12 +109,37 @@ func (d ProjectItemDelegate) Render(w io.Writer, m list.Model, index int, listIt
 	fmt.Fprint(w, row)
 }
 
+// stageColumnWidth returns the stage column width based on terminal width.
+// Story 8.3: Responsive breakpoints for stage display.
+func (d ProjectItemDelegate) stageColumnWidth() int {
+	if d.width >= widthBreakpointFull {
+		return colStageFull // Full stage info: "E8 S8.3 review"
+	}
+	if d.width >= widthBreakpointShort {
+		return colStageShort // Shortened: "E8 S8.3"
+	}
+	return 0 // Hidden at narrow widths
+}
+
+// showStageColumn returns true if stage column should be shown.
+// Story 8.3: Hide at width < 80.
+func (d ProjectItemDelegate) showStageColumn() bool {
+	return d.width >= widthBreakpointShort
+}
+
 // calculateNameWidth calculates the dynamic name column width based on terminal width.
 func (d ProjectItemDelegate) calculateNameWidth() int {
 	// Calculate available space for name
 	// width - selection - favorite - indicator - stage - waiting - time - spacing (Story 3.8: added favorite)
 	// Spacing breakdown: 5 = 1 (after name) + 1 (after indicator) + 1 (after stage) + 1 (after waiting) + 1 (before time)
-	nameWidth := d.width - colSelection - colFavorite - colIndicator - colStage - colWaiting - colTime - 5
+	// Story 8.3: Stage column size is responsive
+	stageWidth := d.stageColumnWidth()
+	nameWidth := d.width - colSelection - colFavorite - colIndicator - stageWidth - colWaiting - colTime - 5
+
+	// Story 8.3: If stage is hidden, reclaim that space
+	if !d.showStageColumn() {
+		nameWidth += 1 // Reclaim the space after stage column
+	}
 
 	if nameWidth < colNameMin {
 		nameWidth = colNameMin
@@ -161,11 +193,14 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 	}
 	sb.WriteString(" ")
 
-	// Stage name
-	stage := item.Project.CurrentStage.String()
-	stageStr := fmt.Sprintf("%-*s", colStage, stage)
-	sb.WriteString(stageStr)
-	sb.WriteString(" ")
+	// Stage info (Story 8.3: Rich BMAD stage display with responsive breakpoints)
+	if d.showStageColumn() {
+		stageWidth := d.stageColumnWidth()
+		stage := stageformat.FormatStageInfoWithWidth(item.Project, stageWidth)
+		stageStr := fmt.Sprintf("%-*s", stageWidth, stage)
+		sb.WriteString(styles.DimStyle.Render(stageStr))
+		sb.WriteString(" ")
+	}
 
 	// WAITING indicator (Story 4.5)
 	waiting := d.waitingIndicator(item.Project)
