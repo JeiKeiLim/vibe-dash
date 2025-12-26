@@ -418,6 +418,79 @@ AC3: Given emoji usage
 
 ---
 
+### Story 8.10: Full-Width Layout & Column Rebalancing
+
+**Status:** Backlog
+**Priority:** High
+**Added:** 2025-12-26 via correct-course workflow
+
+**As a** user viewing the project list,
+**I want** column widths optimized for actual content,
+**So that** stage info and waiting status are readable without wasted space on short project names.
+
+**Problem:**
+1. MaxContentWidth=120 wastes space on wide monitors
+2. Column proportions unbalanced: name too wide, stage/status too narrow
+
+**Acceptance Criteria:**
+
+```gherkin
+AC1: Given normal terminal width (80-120 cols)
+     When viewing project list
+     Then column proportions prioritize stage and status readability
+
+AC2: Given config `max_content_width: 0` (disabled)
+     When terminal is 200+ columns
+     Then content uses full width with proportional columns
+
+AC3: Given ultra-wide terminal (>180 cols)
+     When proportional widths calculated
+     Then columns have sensible max widths
+```
+
+**Tasks:**
+- [ ] Redefine column proportions (name smaller, stage larger)
+- [ ] Add max-width caps per column for ultra-wide
+- [ ] Add `max_content_width` config option
+- [ ] Test across various terminal widths
+
+---
+
+### Story 8.11: Periodic Stage Re-Detection
+
+**Status:** Backlog
+**Priority:** High
+**Added:** 2025-12-26 via correct-course workflow
+
+**As a** user monitoring project progress,
+**I want** stage detection to refresh automatically,
+**So that** I see updated epic/story status without pressing [r] manually.
+
+**Problem:** Stage detection only runs on manual [r] refresh, while waiting status auto-updates via file watcher.
+
+**Design Decision:** Periodic timer (default 30s, configurable) - method-agnostic, no hardcoded file patterns.
+
+**Acceptance Criteria:**
+
+```gherkin
+AC1: Given default config
+     When 30 seconds pass since last detection
+     Then stage detection runs automatically
+
+AC2: Given config `stage_refresh_interval: 0`
+     Then stage detection only runs on manual [r] refresh
+
+AC3: Given user presses [r] manually
+     Then periodic timer resets
+```
+
+**Tasks:**
+- [ ] Add `stage_refresh_interval` config option (default 30s)
+- [ ] Create `stageRefreshTickMsg` in model.go
+- [ ] Handle periodic detection with timer reset on manual refresh
+
+---
+
 ## Post-MVP Items (Captured but Deferred)
 
 | # | Item | Rationale |

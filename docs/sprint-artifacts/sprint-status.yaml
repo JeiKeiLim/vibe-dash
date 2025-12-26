@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-26
-updated_by: Dev Agent - Story 8.4 code review passed, done
+updated_by: SM Agent - Added stories 8-10, 8-11 via correct-course workflow
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -226,4 +226,8 @@ development_status:
   8-7-config-display-in-tui: backlog
   8-8-clarify-or-remove-confidence: backlog
   8-9-visual-polish-bundle: backlog
+  # Added via correct-course workflow 2025-12-26
+  # Triggered by: User feedback during Story 8.4 code review
+  8-10-full-width-layout-column-rebalancing: backlog
+  8-11-periodic-stage-redetection: backlog
   epic-8-retrospective: optional
