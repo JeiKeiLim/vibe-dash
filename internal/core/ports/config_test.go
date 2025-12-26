@@ -42,9 +42,9 @@ func TestNewConfig_Defaults(t *testing.T) {
 		}
 	})
 
-	t.Run("DetailLayout defaults to vertical", func(t *testing.T) {
-		if config.DetailLayout != "vertical" {
-			t.Errorf("DetailLayout = %q, want %q", config.DetailLayout, "vertical")
+	t.Run("DetailLayout defaults to horizontal", func(t *testing.T) {
+		if config.DetailLayout != "horizontal" {
+			t.Errorf("DetailLayout = %q, want %q", config.DetailLayout, "horizontal")
 		}
 	})
 }

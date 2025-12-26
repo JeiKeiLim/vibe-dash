@@ -10,8 +10,8 @@ var directoryManager ports.DirectoryManager
 var configWarning string
 
 // detailLayout stores the detail panel layout mode (Story 8.6).
-// Valid values: "vertical" (default, side-by-side), "horizontal" (stacked).
-var detailLayout = "vertical"
+// Valid values: "horizontal" (default, stacked), "vertical" (side-by-side).
+var detailLayout = "horizontal"
 
 // SetDirectoryManager sets the directory manager for CLI commands.
 func SetDirectoryManager(dm ports.DirectoryManager) {
@@ -30,12 +30,12 @@ func GetConfigWarning() string {
 }
 
 // SetDetailLayout sets the detail panel layout mode (Story 8.6).
-// Valid values: "vertical" (default, side-by-side), "horizontal" (stacked).
+// Valid values: "horizontal" (default, stacked), "vertical" (side-by-side).
 func SetDetailLayout(layout string) {
 	if layout == "horizontal" || layout == "vertical" {
 		detailLayout = layout
 	} else {
-		detailLayout = "vertical" // Fallback to default
+		detailLayout = "horizontal" // Fallback to default
 	}
 }
 

@@ -31,7 +31,7 @@ type Config struct {
 	AgentWaitingThresholdMinutes int
 
 	// DetailLayout controls detail panel position: vertical (left/right) or horizontal (top/bottom)
-	// Default: vertical. Story 8.6.
+	// Default: horizontal. Story 8.6.
 	DetailLayout string
 
 	// Projects contains per-project configuration overrides
@@ -78,7 +78,7 @@ func NewConfig() *Config {
 		RefreshIntervalSeconds:       10,
 		RefreshDebounceMs:            200,
 		AgentWaitingThresholdMinutes: 10,
-		DetailLayout:                 "vertical",
+		DetailLayout:                 "horizontal",
 		Projects:                     make(map[string]ProjectConfig),
 	}
 }

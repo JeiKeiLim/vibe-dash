@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-26
-updated_by: Dev Agent - Story 8.6 code review completed and marked done
+updated_by: Dev Agent - Story 8.6 hotfix (default=horizontal), Story 8-12 created
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -230,4 +230,7 @@ development_status:
   # Triggered by: User feedback during Story 8.4 code review
   8-10-full-width-layout-column-rebalancing: backlog
   8-11-periodic-stage-redetection: backlog
+  # Added from Story 8.6 manual testing feedback 2025-12-26
+  # Issues: height priority, anchor points, margin between components
+  8-12-horizontal-layout-height-handling: backlog
   epic-8-retrospective: optional

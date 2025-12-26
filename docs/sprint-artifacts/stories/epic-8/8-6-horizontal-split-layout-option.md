@@ -470,6 +470,24 @@ N/A
 
 **AC Validation:** All 6 ACs verified implemented with evidence.
 
+### Hotfix (2025-12-26)
+
+**Change:** Default layout changed from "vertical" to "horizontal" based on user feedback.
+
+**Rationale:** User prefers horizontal (stacked) layout as default for better screen utilization.
+
+**Files updated:**
+- `config.go:81` - NewConfig() default
+- `deps.go:14,38` - Package variable and fallback
+- `model.go:230,259` - NewModel() default and fallback
+- `config_test.go:45-48` - Updated default test
+- `model_test.go:2266-2272` - Updated fallback tests
+
+**Known issues tracked in Story 8-12:**
+- Height priority when insufficient space
+- Anchor point independence
+- Margin reduction between components
+
 ### File List
 
 - `internal/core/ports/config.go` - Added DetailLayout field, Validate() check, NewConfig() default

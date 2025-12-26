@@ -2263,13 +2263,13 @@ func TestModel_SetDetailLayout_Valid(t *testing.T) {
 func TestModel_SetDetailLayout_Invalid(t *testing.T) {
 	tests := []struct {
 		input    string
-		expected string // Should fallback to "vertical"
+		expected string // Should fallback to "horizontal" (default)
 	}{
-		{"", "vertical"},
-		{"diagonal", "vertical"},
-		{"VERTICAL", "vertical"},
-		{"Horizontal", "vertical"},
-		{"side-by-side", "vertical"},
+		{"", "horizontal"},
+		{"diagonal", "horizontal"},
+		{"VERTICAL", "horizontal"},
+		{"Horizontal", "horizontal"},
+		{"side-by-side", "horizontal"},
 	}
 
 	for _, tt := range tests {
@@ -2358,13 +2358,13 @@ func TestModel_RenderMainContent_VerticalLayout(t *testing.T) {
 	}
 }
 
-// TestModel_RenderMainContent_EmptyLayoutDefaultsToVertical tests that
-// empty detailLayout defaults to vertical behavior.
-func TestModel_RenderMainContent_EmptyLayoutDefaultsToVertical(t *testing.T) {
+// TestModel_RenderMainContent_EmptyLayoutFallsBackToVertical tests that
+// empty detailLayout uses vertical behavior (isHorizontalLayout returns false).
+func TestModel_RenderMainContent_EmptyLayoutFallsBackToVertical(t *testing.T) {
 	m := createModelWithProjects(2)
 	m.height = 40
 	m.showDetailPanel = true
-	m.detailLayout = "" // Empty - should behave as vertical
+	m.detailLayout = "" // Empty - should use vertical code path (not equal to "horizontal")
 	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
 	m.detailPanel.SetVisible(true)
 	m.detailPanel.SetProject(m.projectList.SelectedProject())

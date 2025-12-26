@@ -227,7 +227,7 @@ func NewModel(repo ports.ProjectRepository) Model {
 		viewMode:        viewModeNormal,
 		repository:      repo,
 		statusBar:       components.NewStatusBarModel(0), // Width set in resizeTickMsg
-		detailLayout:    "vertical",                      // Story 8.6: Default layout mode
+		detailLayout:    "horizontal",                     // Story 8.6: Default layout mode
 	}
 }
 
@@ -251,12 +251,12 @@ func (m *Model) SetFileWatcher(watcher ports.FileWatcher) {
 }
 
 // SetDetailLayout configures the detail panel layout mode (Story 8.6).
-// Supports "vertical" (default, side-by-side) and "horizontal" (stacked top/bottom).
+// Supports "horizontal" (default, stacked top/bottom) and "vertical" (side-by-side).
 func (m *Model) SetDetailLayout(layout string) {
 	if layout == "horizontal" || layout == "vertical" {
 		m.detailLayout = layout
 	} else {
-		m.detailLayout = "vertical" // Fallback to default
+		m.detailLayout = "horizontal" // Fallback to default
 	}
 }
 
