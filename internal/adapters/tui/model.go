@@ -718,6 +718,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case favoriteSavedMsg:
+		// Story 8.5: Capture selected project ID BEFORE re-sort
+		selectedID := ""
+		if selected := m.projectList.SelectedProject(); selected != nil {
+			selectedID = selected.ID
+		}
+
 		// Update local project state (Story 3.8)
 		for _, p := range m.projects {
 			if p.ID == msg.projectID {
@@ -725,7 +731,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-		// Update detail panel
+
+		// Story 8.5: Re-sort list (triggers SortByName via SetProjects)
+		m.projectList.SetProjects(m.projects)
+
+		// Story 8.5: Restore selection by ID (project may have moved position)
+		if selectedID != "" {
+			found := false
+			for i, p := range m.projectList.Projects() {
+				if p.ID == selectedID {
+					m.projectList.SelectByIndex(i)
+					found = true
+					break
+				}
+			}
+			// Edge case: If project was removed from list, select first item
+			if !found && m.projectList.Len() > 0 {
+				m.projectList.SelectByIndex(0)
+			}
+		}
+
+		// Update detail panel with (possibly moved) selection
 		m.detailPanel.SetProject(m.projectList.SelectedProject())
 		// Set feedback message
 		var feedback string

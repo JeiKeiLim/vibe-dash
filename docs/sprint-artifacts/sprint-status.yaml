@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-26
-updated_by: SM Agent - Added stories 8-10, 8-11 via correct-course workflow
+updated_by: Dev Agent - Story 8.5 code review completed, all fixes applied
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -221,7 +221,7 @@ development_status:
   8-2-auto-refresh-reliability: done
   8-3-stage-info-in-project-list: done
   8-4-fix-layout-width-bugs: done
-  8-5-favorites-sort-first: backlog
+  8-5-favorites-sort-first: done
   8-6-horizontal-split-layout-option: backlog
   8-7-config-display-in-tui: backlog
   8-8-clarify-or-remove-confidence: backlog

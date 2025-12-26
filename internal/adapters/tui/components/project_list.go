@@ -147,3 +147,16 @@ func (m *ProjectListModel) SetDelegateWaitingCallbacks(checker WaitingChecker, g
 func (m ProjectListModel) Width() int {
 	return m.width
 }
+
+// SelectByIndex selects the item at the given index.
+// Story 8.5: Used for selection preservation after list re-sort.
+func (m *ProjectListModel) SelectByIndex(idx int) {
+	if idx >= 0 && idx < len(m.projects) {
+		m.list.Select(idx)
+	}
+}
+
+// Projects returns the internal sorted projects slice.
+func (m ProjectListModel) Projects() []*domain.Project {
+	return m.projects
+}
