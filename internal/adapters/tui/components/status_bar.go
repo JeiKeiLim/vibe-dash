@@ -4,27 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
-)
-
-// Styles duplicated from tui/styles.go to avoid import cycle
-// (components package cannot import tui package).
-// Keep in sync with styles.go definitions.
-var (
-	// statusBarWaitingStyle matches tui.WaitingStyle (bold red for WAITING)
-	statusBarWaitingStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("1")) // Red
-
-	// statusBarWaitingZeroStyle is dim style for "0 waiting" (Epic 4 Hotfix H1)
-	statusBarWaitingZeroStyle = lipgloss.NewStyle().
-					Faint(true)
-
-	// statusBarWarningStyle matches tui.WarningStyle (yellow) (Story 7.1)
-	statusBarWarningStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("3")) // Yellow
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/styles"
 )
 
 // Shortcut string constants (AC7: responsive width)
@@ -161,9 +142,9 @@ func (s StatusBarModel) renderCondensed() string {
 
 	// Epic 4 Hotfix H1: Always show waiting count in condensed mode too
 	if s.waitingCount > 0 {
-		counts += " " + statusBarWaitingStyle.Render(fmt.Sprintf("%dW", s.waitingCount))
+		counts += " " + styles.WaitingStyle.Render(fmt.Sprintf("%dW", s.waitingCount))
 	} else {
-		counts += " " + statusBarWaitingZeroStyle.Render("0W")
+		counts += " " + styles.DimStyle.Render("0W")
 	}
 
 	// Include refresh message if present (Story 3.6)
@@ -173,12 +154,12 @@ func (s StatusBarModel) renderCondensed() string {
 
 	// Show abbreviated watcher warning if present (Story 4.6 AC3, Story 7.1: yellow styling)
 	if s.watcherWarning != "" {
-		counts += " " + statusBarWarningStyle.Render("⚠️")
+		counts += " " + styles.WarningStyle.Render("⚠️")
 	}
 
 	// Story 7.2: Show abbreviated config warning if present (AC6)
 	if s.configWarning != "" {
-		counts += " " + statusBarWarningStyle.Render("⚠ cfg")
+		counts += " " + styles.WarningStyle.Render("⚠ cfg")
 	}
 
 	return "│ " + counts + " │ [j/k][?][q] │"
@@ -206,10 +187,10 @@ func (s StatusBarModel) renderCounts() string {
 	// AC4: If waitingCount > 0, show with waitingStyle (bold red)
 	// H1: If waitingCount == 0, show with dim style
 	if s.waitingCount > 0 {
-		waitingText := statusBarWaitingStyle.Render(fmt.Sprintf("⏸️ %d WAITING", s.waitingCount))
+		waitingText := styles.WaitingStyle.Render(fmt.Sprintf("⏸️ %d WAITING", s.waitingCount))
 		parts = append(parts, waitingText)
 	} else {
-		waitingText := statusBarWaitingZeroStyle.Render("0 waiting")
+		waitingText := styles.DimStyle.Render("0 waiting")
 		parts = append(parts, waitingText)
 	}
 
@@ -220,12 +201,12 @@ func (s StatusBarModel) renderCounts() string {
 
 	// Show watcher warning if present (Story 4.6 AC3, Story 7.1: yellow styling)
 	if s.watcherWarning != "" {
-		parts = append(parts, statusBarWarningStyle.Render(s.watcherWarning))
+		parts = append(parts, styles.WarningStyle.Render(s.watcherWarning))
 	}
 
 	// Story 7.2: Show config warning if present (AC6)
 	if s.configWarning != "" {
-		parts = append(parts, statusBarWarningStyle.Render(s.configWarning))
+		parts = append(parts, styles.WarningStyle.Render(s.configWarning))
 	}
 
 	return "│ " + strings.Join(parts, " │ ") + " │"

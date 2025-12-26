@@ -9,33 +9,8 @@ import (
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/project"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/styles"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/timeformat"
-)
-
-// Styles duplicated from tui/styles.go to avoid import cycle
-// (components package cannot import tui package).
-// Keep in sync with styles.go definitions.
-// Note: dimStyle is already declared in delegate.go
-var (
-	// detailBorderStyle matches tui.BorderStyle
-	detailBorderStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("8"))
-
-	// detailTitleStyle matches tui.TitleStyle
-	detailTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("39")) // Cyan
-
-	// uncertainStyle matches tui.UncertainStyle
-	uncertainStyle = lipgloss.NewStyle().
-			Faint(true).
-			Foreground(lipgloss.Color("8")) // Bright black (gray)
-
-	// detailWaitingStyle mirrors tui.WaitingStyle - keep in sync with styles.go (Story 4.5)
-	detailWaitingStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("1")) // Red
 )
 
 const labelWidth = 12
@@ -109,12 +84,12 @@ func (m DetailPanelModel) View() string {
 
 // renderEmpty renders a placeholder when no project is selected.
 func (m DetailPanelModel) renderEmpty() string {
-	// Use local detailBorderStyle (matches tui.BorderStyle)
-	panelBorder := detailBorderStyle.
+	// Use shared BorderStyle
+	panelBorder := styles.BorderStyle.
 		Width(m.width - 2).
 		Height(m.height - 2)
 
-	content := dimStyle.Render("No project selected")
+	content := styles.DimStyle.Render("No project selected")
 
 	return panelBorder.Render(content)
 }
@@ -126,9 +101,9 @@ func (m DetailPanelModel) renderProject() string {
 	// Build content lines
 	var lines []string
 
-	// Title with project name using local detailTitleStyle (matches tui.TitleStyle)
+	// Title with project name using shared TitleStyle
 	effectiveName := project.EffectiveName(p)
-	title := detailTitleStyle.Render("DETAILS: " + effectiveName)
+	title := styles.TitleStyle.Render("DETAILS: " + effectiveName)
 	lines = append(lines, title)
 	lines = append(lines, "") // Empty line after title
 
@@ -188,15 +163,15 @@ func (m DetailPanelModel) renderProject() string {
 			duration = m.durationGetter(p)
 		}
 		waitingText := fmt.Sprintf("⏸️ %s", timeformat.FormatWaitingDuration(duration, true))
-		styledWaiting := detailWaitingStyle.Render(waitingText)
+		styledWaiting := styles.WaitingStyle.Render(waitingText)
 		lines = append(lines, formatField("Waiting", styledWaiting))
 	}
 
 	// Join lines
 	content := strings.Join(lines, "\n")
 
-	// Apply local detailBorderStyle with dimensions (matches tui.BorderStyle)
-	panelBorder := detailBorderStyle.
+	// Apply shared BorderStyle with dimensions
+	panelBorder := styles.BorderStyle.
 		Width(m.width-2).
 		Height(m.height-2).
 		Padding(0, 1)
@@ -220,8 +195,8 @@ func renderConfidence(conf domain.Confidence) string {
 	case domain.ConfidenceLikely:
 		return "Likely"
 	case domain.ConfidenceUncertain:
-		// Apply local uncertainStyle (matches tui.UncertainStyle)
-		return uncertainStyle.Render("Uncertain")
+		// Apply shared UncertainStyle
+		return styles.UncertainStyle.Render("Uncertain")
 	default:
 		return fmt.Sprintf("Unknown (%d)", conf)
 	}

@@ -1,86 +1,67 @@
 package tui
 
 import (
-	"os"
-
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/styles"
 )
 
-// UseColor determines if colors should be used based on NO_COLOR and TERM env vars.
-// Respects NO_COLOR environment variable per accessibility guidelines.
-var UseColor = os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
+// UseColor re-exports the color setting from shared styles.
+// Determines if colors should be used based on NO_COLOR and TERM env vars.
+var UseColor = styles.UseColor
 
 // ============================================================================
-// Base Styles (from Story 1.5)
+// Base Styles (re-exported from shared package)
 // ============================================================================
 
 var (
 	// boxStyle is used for bordered containers with rounded corners.
-	boxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("240")).
-			Padding(1, 2)
+	boxStyle = styles.BoxStyle
 
 	// titleStyle is used for headings.
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("39")) // Cyan
+	titleStyle = styles.TitleStyle
 
 	// hintStyle is used for dimmed help text.
-	hintStyle = lipgloss.NewStyle().
-			Faint(true)
+	hintStyle = styles.HintStyle
 )
 
 // ============================================================================
-// Dashboard Component Styles (Story 1.6)
+// Dashboard Component Styles (re-exported from shared package)
 // Uses 16-color ANSI palette for maximum terminal compatibility.
 // ============================================================================
 
 // SelectedStyle is used for the currently selected row in lists.
 // Uses cyan background for visibility on both dark and light themes.
-var SelectedStyle = lipgloss.NewStyle().
-	Background(lipgloss.Color("6")) // Cyan
+var SelectedStyle = styles.SelectedStyle
 
 // WaitingStyle is used ONLY for the WAITING indicator (killer feature).
 // Bold red to catch peripheral vision. Reserved exclusively for agent waiting state.
-var WaitingStyle = lipgloss.NewStyle().
-	Bold(true).
-	Foreground(lipgloss.Color("1")) // Red
+var WaitingStyle = styles.WaitingStyle
 
 // RecentStyle is used for today indicator (within 24 hours).
-var RecentStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("2")) // Green
+var RecentStyle = styles.RecentStyle
 
 // ActiveStyle is used for this week indicator (within 7 days).
-var ActiveStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("3")) // Yellow
+var ActiveStyle = styles.ActiveStyle
 
 // UncertainStyle is used for uncertain detection state.
-var UncertainStyle = lipgloss.NewStyle().
-	Faint(true).
-	Foreground(lipgloss.Color("8")) // Bright black (gray)
+var UncertainStyle = styles.UncertainStyle
 
 // FavoriteStyle is used for favorite/starred project indicator.
-var FavoriteStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("5")) // Magenta
+var FavoriteStyle = styles.FavoriteStyle
 
 // WarningStyle is used for warning indicators (e.g., missing path).
-var WarningStyle = lipgloss.NewStyle().
-	Bold(true).
-	Foreground(lipgloss.Color("3")) // Yellow
+var WarningStyle = styles.WarningStyle
 
 // DimStyle is used for hints, secondary info, and less important text.
 // Note: Functionally similar to hintStyle but with different semantic purpose.
 // hintStyle is for help text overlays, DimStyle is for general dimming.
-var DimStyle = lipgloss.NewStyle().
-	Faint(true)
+var DimStyle = styles.DimStyle
 
 // BorderStyle is used for panel boundaries with square corners.
 // Uses ANSI color 8 (bright black/gray) for 16-color palette compatibility.
-var BorderStyle = lipgloss.NewStyle().
-	Border(lipgloss.NormalBorder()).
-	BorderForeground(lipgloss.Color("8"))
+var BorderStyle = styles.BorderStyle
 
 // ============================================================================
 // Style Helper Functions

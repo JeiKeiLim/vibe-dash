@@ -8,9 +8,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/styles"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/timeformat"
 )
 
@@ -23,29 +23,6 @@ const (
 	colStage     = 10 // "Implement" is longest
 	colWaiting   = 14 // "⏸️ WAITING Xh" or empty
 	colTime      = 8  // "2w ago" max
-)
-
-// Styles for project row rendering (mirrored from tui/styles.go to avoid import cycle)
-var (
-	selectedStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("6")) // Cyan
-
-	waitingStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("1")) // Red
-
-	recentStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("2")) // Green
-
-	activeStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("3")) // Yellow
-
-	dimStyle = lipgloss.NewStyle().
-			Faint(true)
-
-	// favoriteStyle mirrors tui.FavoriteStyle (ANSI color 5 magenta) - keep in sync with styles.go (Story 3.8)
-	favoriteStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("5")) // Magenta
 )
 
 // WaitingChecker checks if a project is waiting.
@@ -155,7 +132,7 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 
 	// Favorite indicator (Story 3.8)
 	if item.Project.IsFavorite {
-		sb.WriteString(favoriteStyle.Render("⭐"))
+		sb.WriteString(styles.FavoriteStyle.Render("⭐"))
 	} else {
 		sb.WriteString("  ")
 	}
@@ -167,7 +144,7 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 	}
 	nameStr := fmt.Sprintf("%-*s", nameWidth, name)
 	if isSelected {
-		nameStr = selectedStyle.Render(nameStr)
+		nameStr = styles.SelectedStyle.Render(nameStr)
 	}
 	sb.WriteString(nameStr)
 	sb.WriteString(" ")
@@ -176,9 +153,9 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 	indicator := timeformat.RecencyIndicator(item.Project.LastActivityAt)
 	switch indicator {
 	case "✨":
-		sb.WriteString(recentStyle.Render("✨"))
+		sb.WriteString(styles.RecentStyle.Render("✨"))
 	case "⚡":
-		sb.WriteString(activeStyle.Render("⚡"))
+		sb.WriteString(styles.ActiveStyle.Render("⚡"))
 	default:
 		sb.WriteString("  ")
 	}
@@ -194,7 +171,7 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 	waiting := d.waitingIndicator(item.Project)
 	if waiting != "" {
 		waitingStr := fmt.Sprintf("%-*s", colWaiting, waiting)
-		sb.WriteString(waitingStyle.Render(waitingStr))
+		sb.WriteString(styles.WaitingStyle.Render(waitingStr))
 	} else {
 		sb.WriteString(fmt.Sprintf("%-*s", colWaiting, ""))
 	}
@@ -203,7 +180,7 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 	// Last activity time
 	lastActive := timeformat.FormatRelativeTime(item.Project.LastActivityAt)
 	timeStr := fmt.Sprintf("%*s", colTime, lastActive)
-	sb.WriteString(dimStyle.Render(timeStr))
+	sb.WriteString(styles.DimStyle.Render(timeStr))
 
 	return sb.String()
 }
