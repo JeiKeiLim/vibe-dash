@@ -810,3 +810,307 @@ func TestFsnotifyWatcher_GetFailedPaths_ReturnsCopy(t *testing.T) {
 		t.Error("GetFailedPaths should return a copy, not the original slice")
 	}
 }
+
+// =============================================================================
+// Story 8.1: Recursive Directory Enumeration Tests
+// =============================================================================
+
+// TestGetAllSubdirectories_BasicEnumeration tests basic subdirectory enumeration.
+func TestGetAllSubdirectories_BasicEnumeration(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create nested structure
+	subdirs := []string{
+		"src",
+		"src/pkg",
+		"src/pkg/core",
+		"tests",
+	}
+	for _, subdir := range subdirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, subdir), 0755); err != nil {
+			t.Fatalf("failed to create %s: %v", subdir, err)
+		}
+	}
+
+	dirs, err := getAllSubdirectories(tmpDir, 10, 500)
+	if err != nil {
+		t.Fatalf("getAllSubdirectories failed: %v", err)
+	}
+
+	// Should include root + 4 subdirs
+	if len(dirs) != 5 {
+		t.Errorf("expected 5 directories, got %d: %v", len(dirs), dirs)
+	}
+
+	// Verify root is included
+	found := false
+	for _, d := range dirs {
+		if d == tmpDir {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("root directory should be included in results")
+	}
+}
+
+// TestGetAllSubdirectories_SkipPatterns tests that vendor/build directories are skipped.
+func TestGetAllSubdirectories_SkipPatterns(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create structure with skip patterns
+	subdirs := []string{
+		"src",
+		"node_modules",
+		"node_modules/pkg",
+		".git",
+		".git/objects",
+		"vendor",
+		"__pycache__",
+	}
+	for _, subdir := range subdirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, subdir), 0755); err != nil {
+			t.Fatalf("failed to create %s: %v", subdir, err)
+		}
+	}
+
+	dirs, err := getAllSubdirectories(tmpDir, 10, 500)
+	if err != nil {
+		t.Fatalf("getAllSubdirectories failed: %v", err)
+	}
+
+	// Should only include root + src (node_modules, .git, vendor, __pycache__ skipped)
+	if len(dirs) != 2 {
+		t.Errorf("expected 2 directories (root + src), got %d: %v", len(dirs), dirs)
+	}
+
+	// Verify skipped directories are not included
+	for _, d := range dirs {
+		name := filepath.Base(d)
+		if name == "node_modules" || name == ".git" || name == "vendor" || name == "__pycache__" {
+			t.Errorf("directory %s should be skipped", name)
+		}
+	}
+}
+
+// TestGetAllSubdirectories_BmadException tests that .bmad is included (exception).
+func TestGetAllSubdirectories_BmadException(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create structure with .bmad
+	subdirs := []string{
+		"src",
+		".bmad",
+		".bmad/agents",
+		".git",
+	}
+	for _, subdir := range subdirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, subdir), 0755); err != nil {
+			t.Fatalf("failed to create %s: %v", subdir, err)
+		}
+	}
+
+	dirs, err := getAllSubdirectories(tmpDir, 10, 500)
+	if err != nil {
+		t.Fatalf("getAllSubdirectories failed: %v", err)
+	}
+
+	// Should include root, src, .bmad, .bmad/agents (NOT .git)
+	if len(dirs) != 4 {
+		t.Errorf("expected 4 directories, got %d: %v", len(dirs), dirs)
+	}
+
+	// Verify .bmad is included
+	bmadFound := false
+	gitFound := false
+	for _, d := range dirs {
+		if filepath.Base(d) == ".bmad" {
+			bmadFound = true
+		}
+		if filepath.Base(d) == ".git" {
+			gitFound = true
+		}
+	}
+	if !bmadFound {
+		t.Error(".bmad directory should be included (exception to hidden dir rule)")
+	}
+	if gitFound {
+		t.Error(".git directory should be skipped")
+	}
+}
+
+// TestGetAllSubdirectories_DepthLimit tests that depth limit is enforced.
+func TestGetAllSubdirectories_DepthLimit(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create deep structure: a/b/c/d/e/f
+	deepPath := filepath.Join(tmpDir, "a", "b", "c", "d", "e", "f")
+	if err := os.MkdirAll(deepPath, 0755); err != nil {
+		t.Fatalf("failed to create deep path: %v", err)
+	}
+
+	// Limit to depth 3 (root=0, a=1, b=2, c=3)
+	dirs, err := getAllSubdirectories(tmpDir, 3, 500)
+	if err != nil {
+		t.Fatalf("getAllSubdirectories failed: %v", err)
+	}
+
+	// Should include: root, a, a/b, a/b/c (depth 0-3), NOT d, e, f
+	if len(dirs) != 4 {
+		t.Errorf("expected 4 directories with depth limit 3, got %d: %v", len(dirs), dirs)
+	}
+
+	// Verify d, e, f are not included
+	for _, d := range dirs {
+		name := filepath.Base(d)
+		if name == "d" || name == "e" || name == "f" {
+			t.Errorf("directory %s should be excluded by depth limit", name)
+		}
+	}
+}
+
+// TestGetAllSubdirectories_DirectoryCountLimit tests that directory count limit is enforced.
+func TestGetAllSubdirectories_DirectoryCountLimit(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create many directories
+	for i := 0; i < 20; i++ {
+		if err := os.MkdirAll(filepath.Join(tmpDir, "dir"+string(rune('a'+i))), 0755); err != nil {
+			t.Fatalf("failed to create dir: %v", err)
+		}
+	}
+
+	// Limit to 10 directories
+	dirs, err := getAllSubdirectories(tmpDir, 10, 10)
+	if err != nil {
+		t.Fatalf("getAllSubdirectories failed: %v", err)
+	}
+
+	// Should be limited to 10
+	if len(dirs) > 10 {
+		t.Errorf("expected max 10 directories, got %d", len(dirs))
+	}
+}
+
+// TestShouldSkipDirectory tests the skip logic for directories.
+func TestShouldSkipDirectory(t *testing.T) {
+	tests := []struct {
+		name     string
+		dir      string
+		expected bool
+	}{
+		// VCS directories
+		{"skip .git", ".git", true},
+		{"skip .svn", ".svn", true},
+		{"skip .hg", ".hg", true},
+		// Build/vendor directories
+		{"skip node_modules", "node_modules", true},
+		{"skip vendor", "vendor", true},
+		{"skip __pycache__", "__pycache__", true},
+		{"skip target", "target", true},
+		// IDE directories
+		{"skip .vscode", ".vscode", true},
+		{"skip .idea", ".idea", true},
+		{"skip .cache", ".cache", true},
+		// Hidden directories (general rule)
+		{"skip hidden dir", ".hidden", true},
+		// EXCEPTION: .bmad is always watched
+		{"include .bmad", ".bmad", false},
+		// Normal directories should be included
+		{"include normal dir", "src", false},
+		{"include pkg", "pkg", false},
+		{"include tests", "tests", false},
+		// Story 8.1: Intentionally NOT skipping common source dirs
+		{"include bin", "bin", false},
+		{"include build", "build", false},
+		{"include dist", "dist", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := shouldSkipDirectory(tc.dir)
+			if result != tc.expected {
+				t.Errorf("shouldSkipDirectory(%q) = %v, want %v", tc.dir, result, tc.expected)
+			}
+		})
+	}
+}
+
+// TestGetAllSubdirectories_Performance tests enumeration performance with many files.
+func TestGetAllSubdirectories_Performance(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create structure with many files (simulating large project)
+	// 50 directories with 20 files each = 1000 files
+	for i := 0; i < 50; i++ {
+		dir := filepath.Join(tmpDir, "pkg"+string(rune('a'+i/26))+string(rune('a'+i%26)))
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("failed to create dir: %v", err)
+		}
+		// Create files in each directory
+		for j := 0; j < 20; j++ {
+			file := filepath.Join(dir, "file"+string(rune('a'+j))+".go")
+			if err := os.WriteFile(file, []byte("package pkg"), 0644); err != nil {
+				t.Fatalf("failed to create file: %v", err)
+			}
+		}
+	}
+
+	// Time the enumeration
+	start := time.Now()
+	dirs, err := getAllSubdirectories(tmpDir, 10, 500)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("getAllSubdirectories failed: %v", err)
+	}
+
+	// Should complete quickly (< 500ms for 50 dirs + 1000 files)
+	if elapsed > 500*time.Millisecond {
+		t.Errorf("enumeration took too long: %v", elapsed)
+	}
+
+	// Should have 51 directories (root + 50 subdirs)
+	if len(dirs) != 51 {
+		t.Errorf("expected 51 directories, got %d", len(dirs))
+	}
+
+	t.Logf("Enumerated %d directories in %v", len(dirs), elapsed)
+}
+
+// TestGetAllSubdirectories_TrailingSlash tests that trailing slashes are handled correctly.
+// This verifies the depth calculation works regardless of trailing slash in rootPath.
+func TestGetAllSubdirectories_TrailingSlash(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create structure: a/b/c
+	deepPath := filepath.Join(tmpDir, "a", "b", "c")
+	if err := os.MkdirAll(deepPath, 0755); err != nil {
+		t.Fatalf("failed to create path: %v", err)
+	}
+
+	// Test with trailing slash
+	rootWithSlash := tmpDir + string(filepath.Separator)
+	dirs, err := getAllSubdirectories(rootWithSlash, 10, 500)
+	if err != nil {
+		t.Fatalf("getAllSubdirectories with trailing slash failed: %v", err)
+	}
+
+	// Should still enumerate all directories correctly
+	// Root (with slash) + a + a/b + a/b/c = 4 directories
+	if len(dirs) != 4 {
+		t.Errorf("expected 4 directories with trailing slash, got %d: %v", len(dirs), dirs)
+	}
+
+	// Test without trailing slash for comparison
+	dirsNoSlash, err := getAllSubdirectories(tmpDir, 10, 500)
+	if err != nil {
+		t.Fatalf("getAllSubdirectories without trailing slash failed: %v", err)
+	}
+
+	// Both should return same count
+	if len(dirs) != len(dirsNoSlash) {
+		t.Errorf("trailing slash caused different results: with=%d, without=%d", len(dirs), len(dirsNoSlash))
+	}
+}

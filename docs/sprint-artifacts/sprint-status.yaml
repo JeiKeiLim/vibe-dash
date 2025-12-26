@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-26
-updated_by: SM Agent - Epic 7 retrospective completed
+updated_by: Dev Agent - Story 8.1 code review passed, marked done
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -216,8 +216,8 @@ development_status:
   # Created from systematic UX elicitation session (2025-12-22)
   # Focus: Improve dashboard glanceability, fix core UX gaps
   # Key insight: Dashboard is observation-only tool, optimize for glanceability
-  epic-8: backlog
-  8-1-recursive-file-watching: backlog
+  epic-8: in-progress
+  8-1-recursive-file-watching: done
   8-2-auto-refresh-reliability: backlog
   8-3-stage-info-in-project-list: backlog
   8-4-fix-layout-width-bugs: backlog
