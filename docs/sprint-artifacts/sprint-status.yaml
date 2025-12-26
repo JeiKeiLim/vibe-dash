@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-26
-updated_by: Dev Agent - Story 7-13 code review passed, marked done
+updated_by: SM Agent - Epic 7 retrospective completed
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -154,7 +154,7 @@ development_status:
   # - G24 is blocking (dashboard shows "Unknown status" for deferred epics)
   # - REFERENCE: docs/sprint-artifacts/retrospectives/epic-6-retro-2025-12-25.md
   #   Contains: problem details, decisions made, implementation approach
-  epic-7: in-progress
+  epic-7: done
   7-1-file-watcher-error-recovery: done
   7-2-configuration-error-handling: done
   7-3-database-recovery: done
@@ -210,7 +210,7 @@ development_status:
   # Locations: stage_parser.go:241-242 (story sort), stage_parser.go:126 (epic sort)
   # DONE: 2025-12-26 - Code review passed, naturalCompare implemented for stories/epics/retrospectives
   7-13-numeric-story-sorting: done
-  epic-7-retrospective: optional
+  epic-7-retrospective: done
 
   # Epic 8: UX Polish
   # Created from systematic UX elicitation session (2025-12-22)
