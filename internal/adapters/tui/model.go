@@ -85,6 +85,9 @@ type Model struct {
 
 	// Story 7.4: Loading state for initial project load
 	isLoading bool
+
+	// Story 8.4: Pending projects waiting for ready state (race condition fix)
+	pendingProjects []*domain.Project
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -463,8 +466,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Calculate content height using helper (Story 3.10 AC5)
 			contentHeight := m.height - statusBarHeight(m.height)
 
-			// Update component dimensions with effective width (Story 3.10)
-			if len(m.projects) > 0 {
+			// Story 8.4: Process pending projects now that we have valid dimensions
+			// Race condition fix: ProjectsLoadedMsg may arrive before WindowSizeMsg,
+			// causing components to be created with width=0. Pending projects are
+			// processed here after m.ready=true ensures correct dimensions.
+			if m.pendingProjects != nil {
+				m.projects = m.pendingProjects
+				m.pendingProjects = nil
+
+				// Create components with correct dimensions
+				m.projectList = components.NewProjectListModel(m.projects, effectiveWidth, contentHeight)
+				m.projectList.SetDelegateWaitingCallbacks(m.isProjectWaiting, m.getWaitingDuration)
+
+				m.detailPanel = components.NewDetailPanelModel(effectiveWidth, contentHeight)
+				m.detailPanel.SetProject(m.projectList.SelectedProject())
+				m.detailPanel.SetVisible(m.showDetailPanel)
+				m.detailPanel.SetWaitingCallbacks(m.isProjectWaiting, m.getWaitingDuration)
+
+				// Update status bar counts
+				active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
+				m.statusBar.SetCounts(active, hibernated, waiting)
+
+				// Story 4.6: Start file watcher (code review H1: use helper)
+				if watcherCmd := m.startFileWatcherForProjects(); watcherCmd != nil {
+					return m, watcherCmd
+				}
+			}
+
+			// Story 8.4: Update existing component dimensions (use zero-value check instead of len guard)
+			if m.projectList.Width() > 0 {
 				m.projectList.SetSize(effectiveWidth, contentHeight)
 				m.detailPanel.SetSize(effectiveWidth, contentHeight)
 			}
@@ -531,16 +561,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.projects = nil
 			return m, nil
 		}
+
+		// Story 8.4: Defer component creation until ready (race condition fix)
+		// If m.ready is false, WindowSizeMsg hasn't been processed yet, so m.width may be 0.
+		// Race condition: ProjectsLoadedMsg may arrive before WindowSizeMsg.
+		if !m.ready {
+			m.pendingProjects = msg.projects
+			return m, nil
+		}
+
 		m.projects = msg.projects
 		if len(m.projects) > 0 {
-			contentHeight := m.height - 2 // Reserve 2 lines for status bar
-			m.projectList = components.NewProjectListModel(m.projects, m.width, contentHeight)
+			// Story 8.4: Use effectiveWidth instead of raw m.width to cap at MaxContentWidth
+			effectiveWidth := m.width
+			if isWideWidth(m.width) {
+				effectiveWidth = MaxContentWidth
+			}
+			contentHeight := m.height - statusBarHeight(m.height)
+			m.projectList = components.NewProjectListModel(m.projects, effectiveWidth, contentHeight)
 
 			// Story 4.5: Wire waiting callbacks to project list delegate
 			m.projectList.SetDelegateWaitingCallbacks(m.isProjectWaiting, m.getWaitingDuration)
 
 			// Initialize detail panel with selected project
-			m.detailPanel = components.NewDetailPanelModel(m.width, contentHeight)
+			m.detailPanel = components.NewDetailPanelModel(effectiveWidth, contentHeight)
 			m.detailPanel.SetProject(m.projectList.SelectedProject())
 			m.detailPanel.SetVisible(m.showDetailPanel)
 
@@ -551,43 +595,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
 			m.statusBar.SetCounts(active, hibernated, waiting)
 
-			// Story 4.6: Start file watcher for real-time updates
-			if m.fileWatcher != nil && m.fileWatcherAvailable {
-				// Collect project paths
-				paths := make([]string, len(m.projects))
-				for i, p := range m.projects {
-					paths[i] = p.Path
-				}
-
-				// Create watch context for cancellation
-				m.watchCtx, m.watchCancel = context.WithCancel(context.Background())
-
-				// Start watching
-				eventCh, err := m.fileWatcher.Watch(m.watchCtx, paths)
-				if err != nil {
-					slog.Warn("failed to start file watcher", "error", err)
-					m.fileWatcherAvailable = false
-					m.statusBar.SetWatcherWarning("⚠️ File watching unavailable")
-				} else {
-					m.eventCh = eventCh
-					// Epic 4 Hotfix H3: Log when file watcher starts successfully
-					slog.Debug("file watcher started", "project_count", len(paths))
-
-					// Story 7.1: Check for partial failures and emit warning
-					failedPaths := m.fileWatcher.GetFailedPaths()
-					if len(failedPaths) > 0 {
-						return m, tea.Batch(
-							m.waitForNextFileEventCmd(),
-							func() tea.Msg {
-								return watcherWarningMsg{
-									failedPaths: failedPaths,
-									totalPaths:  len(paths),
-								}
-							},
-						)
-					}
-					return m, m.waitForNextFileEventCmd()
-				}
+			// Story 4.6: Start file watcher (code review H1: use helper)
+			if watcherCmd := m.startFileWatcherForProjects(); watcherCmd != nil {
+				return m, watcherCmd
 			}
 		}
 		return m, nil
@@ -1390,6 +1400,53 @@ func (m *Model) handleFileEvent(msg fileEventMsg) {
 	// Recalculate status bar (waiting may have cleared)
 	active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
 	m.statusBar.SetCounts(active, hibernated, waiting)
+}
+
+// startFileWatcherForProjects starts the file watcher for all projects if available.
+// Story 8.4 code review: Extracted to eliminate duplication between ProjectsLoadedMsg
+// and resizeTickMsg handlers.
+// Returns a tea.Cmd to wait for the next file event, or nil if watcher unavailable.
+func (m *Model) startFileWatcherForProjects() tea.Cmd {
+	if m.fileWatcher == nil || !m.fileWatcherAvailable || len(m.projects) == 0 {
+		return nil
+	}
+
+	// Collect project paths
+	paths := make([]string, len(m.projects))
+	for i, p := range m.projects {
+		paths[i] = p.Path
+	}
+
+	// Create watch context for cancellation
+	m.watchCtx, m.watchCancel = context.WithCancel(context.Background())
+
+	// Start watching
+	eventCh, err := m.fileWatcher.Watch(m.watchCtx, paths)
+	if err != nil {
+		slog.Warn("failed to start file watcher", "error", err)
+		m.fileWatcherAvailable = false
+		m.statusBar.SetWatcherWarning("⚠️ File watching unavailable")
+		return nil
+	}
+
+	m.eventCh = eventCh
+	slog.Debug("file watcher started", "project_count", len(paths))
+
+	// Story 7.1: Check for partial failures
+	failedPaths := m.fileWatcher.GetFailedPaths()
+	if len(failedPaths) > 0 {
+		return tea.Batch(
+			m.waitForNextFileEventCmd(),
+			func() tea.Msg {
+				return watcherWarningMsg{
+					failedPaths: failedPaths,
+					totalPaths:  len(paths),
+				}
+			},
+		)
+	}
+
+	return m.waitForNextFileEventCmd()
 }
 
 // findProjectByPath finds the project that owns the given file path (Story 4.6).

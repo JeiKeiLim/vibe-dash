@@ -141,3 +141,9 @@ func (m *ProjectListModel) SetDelegateWaitingCallbacks(checker WaitingChecker, g
 	m.delegate.SetWaitingCallbacks(checker, getter)
 	m.list.SetDelegate(m.delegate)
 }
+
+// Width returns the current width of the project list.
+// Story 8.4: Used to detect zero-value component (uninitialized).
+func (m ProjectListModel) Width() int {
+	return m.width
+}

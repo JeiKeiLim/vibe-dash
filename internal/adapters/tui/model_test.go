@@ -1862,3 +1862,373 @@ func TestModel_ConfigWarning_DoesNotAffectWatcherWarning(t *testing.T) {
 		t.Error("config warning should be present")
 	}
 }
+
+// =============================================================================
+// Story 8.4: Layout Width Bug Fix Tests (Race Condition)
+// =============================================================================
+
+// TestModel_ProjectsLoadedBeforeReady_StorePending tests that ProjectsLoadedMsg
+// before resizeTickMsg stores projects in pendingProjects (AC1, AC4).
+func TestModel_ProjectsLoadedBeforeReady_StorePending(t *testing.T) {
+	m := NewModel(nil)
+	// m.ready is false, m.width is 0 - simulating race condition
+
+	// Create test projects
+	projects := []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/home/user/project-a", State: domain.StateActive},
+		{ID: "b", Name: "project-b", Path: "/home/user/project-b", State: domain.StateActive},
+	}
+
+	// Send ProjectsLoadedMsg BEFORE WindowSizeMsg/resizeTickMsg
+	msg := ProjectsLoadedMsg{projects: projects}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Projects should be stored in pendingProjects, not m.projects
+	if updated.pendingProjects == nil {
+		t.Fatal("pendingProjects should store projects when !m.ready")
+	}
+	if len(updated.pendingProjects) != 2 {
+		t.Errorf("expected 2 pending projects, got %d", len(updated.pendingProjects))
+	}
+	if len(updated.projects) > 0 {
+		t.Error("m.projects should NOT be populated before ready")
+	}
+
+	// projectList should NOT be initialized (would have zero width)
+	if updated.projectList.Width() != 0 {
+		t.Errorf("projectList should not be initialized before ready, width=%d", updated.projectList.Width())
+	}
+}
+
+// TestModel_ResizeTickProcessesPending tests that resizeTickMsg processes
+// pending projects with correct dimensions (AC1, AC4).
+func TestModel_ResizeTickProcessesPending(t *testing.T) {
+	m := NewModel(nil)
+
+	// Create test projects
+	projects := []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/home/user/project-a", State: domain.StateActive},
+		{ID: "b", Name: "project-b", Path: "/home/user/project-b", State: domain.StateActive},
+	}
+
+	// First: ProjectsLoadedMsg arrives (m.ready = false)
+	msg := ProjectsLoadedMsg{projects: projects}
+	newModel, _ := m.Update(msg)
+	m = newModel.(Model)
+
+	// Verify pending state
+	if m.pendingProjects == nil {
+		t.Fatal("pendingProjects should be set")
+	}
+
+	// Second: WindowSizeMsg arrives
+	sizeMsg := tea.WindowSizeMsg{Width: 100, Height: 40}
+	newModel, _ = m.Update(sizeMsg)
+	m = newModel.(Model)
+
+	// Third: resizeTickMsg processes pending
+	newModel, _ = m.Update(resizeTickMsg{})
+	m = newModel.(Model)
+
+	// pendingProjects should be cleared
+	if m.pendingProjects != nil {
+		t.Error("pendingProjects should be nil after processing")
+	}
+
+	// m.projects should be populated
+	if len(m.projects) != 2 {
+		t.Errorf("expected 2 projects, got %d", len(m.projects))
+	}
+
+	// projectList should be initialized with correct width
+	if m.projectList.Width() != 100 {
+		t.Errorf("expected projectList width 100, got %d", m.projectList.Width())
+	}
+
+	// Model should be ready
+	if !m.ready {
+		t.Error("model should be ready after resize tick")
+	}
+}
+
+// TestModel_EffectiveWidth_WideTerminal tests that effectiveWidth is capped
+// at MaxContentWidth on wide terminals (AC1, AC4).
+func TestModel_EffectiveWidth_WideTerminal(t *testing.T) {
+	m := NewModel(nil)
+
+	// Create test projects
+	projects := []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/home/user/project-a", State: domain.StateActive},
+	}
+
+	// Send ProjectsLoadedMsg (before ready)
+	msg := ProjectsLoadedMsg{projects: projects}
+	newModel, _ := m.Update(msg)
+	m = newModel.(Model)
+
+	// WindowSizeMsg with wide terminal (>MaxContentWidth=120)
+	sizeMsg := tea.WindowSizeMsg{Width: 200, Height: 40}
+	newModel, _ = m.Update(sizeMsg)
+	m = newModel.(Model)
+
+	// resizeTickMsg processes pending with effectiveWidth
+	newModel, _ = m.Update(resizeTickMsg{})
+	m = newModel.(Model)
+
+	// projectList should have MaxContentWidth (120), not 200
+	if m.projectList.Width() != MaxContentWidth {
+		t.Errorf("expected projectList width %d (MaxContentWidth), got %d", MaxContentWidth, m.projectList.Width())
+	}
+}
+
+// TestModel_ResizeAfterReady_UpdatesComponents tests that resize updates
+// component widths after initial load (AC3).
+func TestModel_ResizeAfterReady_UpdatesComponents(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+
+	// Create projects and initialize components
+	projects := []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/home/user/project-a", State: domain.StateActive},
+	}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, 80, 38)
+
+	// Verify initial width
+	if m.projectList.Width() != 80 {
+		t.Errorf("expected initial width 80, got %d", m.projectList.Width())
+	}
+
+	// Resize to new dimensions
+	sizeMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
+	newModel, _ := m.Update(sizeMsg)
+	m = newModel.(Model)
+
+	// Process resize tick
+	newModel, _ = m.Update(resizeTickMsg{})
+	m = newModel.(Model)
+
+	// projectList should be updated to new width
+	if m.projectList.Width() != 100 {
+		t.Errorf("expected projectList width 100 after resize, got %d", m.projectList.Width())
+	}
+}
+
+// TestModel_ProjectsLoadedAfterReady_UsesEffectiveWidth tests that
+// ProjectsLoadedMsg after ready uses effectiveWidth (AC1, AC4).
+func TestModel_ProjectsLoadedAfterReady_UsesEffectiveWidth(t *testing.T) {
+	m := NewModel(nil)
+	// Make ready with wide terminal
+	m.hasPendingResize = true
+	m.pendingWidth = 150 // > MaxContentWidth (120)
+	m.pendingHeight = 40
+
+	// Process resize to become ready
+	newModel, _ := m.Update(resizeTickMsg{})
+	m = newModel.(Model)
+
+	// Verify ready and wide terminal
+	if !m.ready {
+		t.Fatal("model should be ready")
+	}
+	if m.width != 150 {
+		t.Fatalf("expected width 150, got %d", m.width)
+	}
+
+	// Now send ProjectsLoadedMsg (after ready)
+	projects := []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/home/user/project-a", State: domain.StateActive},
+	}
+	msg := ProjectsLoadedMsg{projects: projects}
+	newModel, _ = m.Update(msg)
+	m = newModel.(Model)
+
+	// projectList should use effectiveWidth (MaxContentWidth), not raw width
+	if m.projectList.Width() != MaxContentWidth {
+		t.Errorf("expected projectList width %d (MaxContentWidth), got %d", MaxContentWidth, m.projectList.Width())
+	}
+}
+
+// TestModel_ResizeWithZeroProjects_NoSetSize tests that resize with
+// uninitialized projectList (width=0) doesn't call SetSize.
+func TestModel_ResizeWithZeroProjects_NoSetSize(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	// projectList is zero-value (Width() returns 0)
+
+	// Resize
+	sizeMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
+	newModel, _ := m.Update(sizeMsg)
+	m = newModel.(Model)
+
+	// Process resize tick
+	newModel, _ = m.Update(resizeTickMsg{})
+	m = newModel.(Model)
+
+	// Should not panic and projectList width should remain 0
+	if m.projectList.Width() != 0 {
+		t.Error("uninitialized projectList should not have SetSize called")
+	}
+}
+
+// TestModel_ResizeTickProcessesPending_FileWatcher tests that file watcher is
+// started correctly when pending projects are processed (code review H3).
+func TestModel_ResizeTickProcessesPending_FileWatcher(t *testing.T) {
+	mock := newMockFileWatcher()
+
+	m := NewModel(nil)
+	m.SetFileWatcher(mock)
+
+	// Create test projects
+	projects := []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/home/user/project-a", State: domain.StateActive},
+		{ID: "b", Name: "project-b", Path: "/home/user/project-b", State: domain.StateActive},
+	}
+
+	// First: ProjectsLoadedMsg arrives (m.ready = false)
+	msg := ProjectsLoadedMsg{projects: projects}
+	newModel, _ := m.Update(msg)
+	m = newModel.(Model)
+
+	// Verify pending state and watcher not started yet
+	if m.pendingProjects == nil {
+		t.Fatal("pendingProjects should be set")
+	}
+	if mock.watchCalled {
+		t.Error("file watcher should not be called before ready")
+	}
+
+	// Second: WindowSizeMsg arrives
+	sizeMsg := tea.WindowSizeMsg{Width: 100, Height: 40}
+	newModel, _ = m.Update(sizeMsg)
+	m = newModel.(Model)
+
+	// Third: resizeTickMsg processes pending and starts watcher
+	newModel, cmd := m.Update(resizeTickMsg{})
+	m = newModel.(Model)
+
+	// Verify file watcher was started
+	if !mock.watchCalled {
+		t.Error("file watcher should be called after processing pending projects")
+	}
+	if len(mock.watchPaths) != 2 {
+		t.Errorf("expected 2 watch paths, got %d", len(mock.watchPaths))
+	}
+
+	// Verify event channel is stored
+	if m.eventCh == nil {
+		t.Error("eventCh should be set after successful Watch()")
+	}
+
+	// Verify cmd is returned (waitForNextFileEventCmd)
+	if cmd == nil {
+		t.Error("should return waitForNextFileEventCmd after processing pending with watcher")
+	}
+}
+
+// TestModel_ResizeTickProcessesPending_DetailPanelDimensions tests that detail panel
+// has correct dimensions after processing pending projects (code review M1).
+func TestModel_ResizeTickProcessesPending_DetailPanelDimensions(t *testing.T) {
+	m := NewModel(nil)
+
+	// Create test projects
+	projects := []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/home/user/project-a", State: domain.StateActive},
+	}
+
+	// First: ProjectsLoadedMsg arrives (m.ready = false)
+	msg := ProjectsLoadedMsg{projects: projects}
+	newModel, _ := m.Update(msg)
+	m = newModel.(Model)
+
+	// Second: WindowSizeMsg with wide terminal (>MaxContentWidth=120)
+	sizeMsg := tea.WindowSizeMsg{Width: 150, Height: 50}
+	newModel, _ = m.Update(sizeMsg)
+	m = newModel.(Model)
+
+	// Third: resizeTickMsg processes pending
+	newModel, _ = m.Update(resizeTickMsg{})
+	m = newModel.(Model)
+
+	// Verify detailPanel was created with correct effectiveWidth (capped at MaxContentWidth)
+	// Note: DetailPanelModel doesn't expose Width() directly, but we can verify
+	// that the projectList has the same width, proving both got effectiveWidth
+	if m.projectList.Width() != MaxContentWidth {
+		t.Errorf("expected projectList width %d (MaxContentWidth), got %d", MaxContentWidth, m.projectList.Width())
+	}
+
+	// Verify detail panel was initialized (has a project set)
+	if m.detailPanel.Project() == nil {
+		t.Error("detailPanel should have a project set after processing pending")
+	}
+
+	// Verify visibility matches model state (which should be open for height >= 35)
+	if !m.showDetailPanel {
+		t.Error("showDetailPanel should be true for height 50 (>= HeightThresholdTall)")
+	}
+	if !m.detailPanel.IsVisible() {
+		t.Error("detailPanel.IsVisible() should match m.showDetailPanel")
+	}
+}
+
+// TestModel_FullWidthAfterRace_Integration tests the full race condition
+// scenario end-to-end (AC1-AC4 integration).
+func TestModel_FullWidthAfterRace_Integration(t *testing.T) {
+	// This test simulates the real race condition:
+	// 1. TUI starts (Init called)
+	// 2. ProjectsLoadedMsg arrives BEFORE WindowSizeMsg
+	// 3. WindowSizeMsg arrives
+	// 4. resizeTickMsg processes pending
+	// 5. View renders with full width
+
+	m := NewModel(nil)
+	m.statusBar = components.NewStatusBarModel(0)
+
+	// Step 1: Projects load first (race condition)
+	projects := []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/home/user/project-a", State: domain.StateActive},
+	}
+	newModel, _ := m.Update(ProjectsLoadedMsg{projects: projects})
+	m = newModel.(Model)
+
+	// Verify in pending state
+	if m.pendingProjects == nil {
+		t.Fatal("should have pending projects")
+	}
+	if m.ready {
+		t.Fatal("should not be ready yet")
+	}
+
+	// Step 2: Window size arrives
+	newModel, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = newModel.(Model)
+
+	// Step 3: Resize tick processes everything
+	newModel, _ = m.Update(resizeTickMsg{})
+	m = newModel.(Model)
+
+	// Step 4: Verify correct state
+	if !m.ready {
+		t.Error("should be ready")
+	}
+	if m.pendingProjects != nil {
+		t.Error("pending should be cleared")
+	}
+	if len(m.projects) != 1 {
+		t.Errorf("expected 1 project, got %d", len(m.projects))
+	}
+	if m.projectList.Width() != 100 {
+		t.Errorf("projectList should have full width 100, got %d", m.projectList.Width())
+	}
+
+	// Step 5: View should render correctly (not panic or show empty)
+	view := m.View()
+	if !strings.Contains(view, "project-a") {
+		t.Error("View should display project after race condition resolved")
+	}
+}
