@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/stageformat"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/styles"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/timeformat"
@@ -162,9 +163,9 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 		sb.WriteString("  ")
 	}
 
-	// Favorite indicator (Story 3.8)
+	// Favorite indicator (Story 3.8, Story 8.9: emoji fallback)
 	if item.Project.IsFavorite {
-		sb.WriteString(styles.FavoriteStyle.Render("⭐"))
+		sb.WriteString(styles.FavoriteStyle.Render(emoji.Star()))
 	} else {
 		sb.WriteString("  ")
 	}
@@ -181,13 +182,13 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 	sb.WriteString(nameStr)
 	sb.WriteString(" ")
 
-	// Recency indicator with styling
+	// Recency indicator with styling (Story 8.9: emoji fallback)
 	indicator := timeformat.RecencyIndicator(item.Project.LastActivityAt)
 	switch indicator {
 	case "✨":
-		sb.WriteString(styles.RecentStyle.Render("✨"))
+		sb.WriteString(styles.RecentStyle.Render(emoji.Today()))
 	case "⚡":
-		sb.WriteString(styles.ActiveStyle.Render("⚡"))
+		sb.WriteString(styles.ActiveStyle.Render(emoji.ThisWeek()))
 	default:
 		sb.WriteString("  ")
 	}
@@ -222,6 +223,7 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 
 // waitingIndicator returns the waiting indicator string for a project.
 // Story 4.5: Uses callbacks to determine waiting state and duration.
+// Story 8.9: Uses emoji fallback for waiting indicator.
 // Format: "⏸️ WAITING Xh" where X is the compact duration.
 func (d ProjectItemDelegate) waitingIndicator(p *domain.Project) string {
 	if d.waitingChecker == nil || !d.waitingChecker(p) {
@@ -231,5 +233,5 @@ func (d ProjectItemDelegate) waitingIndicator(p *domain.Project) string {
 	if d.durationGetter != nil {
 		duration = d.durationGetter(p)
 	}
-	return fmt.Sprintf("⏸️ WAITING %s", timeformat.FormatWaitingDuration(duration, false))
+	return fmt.Sprintf("%s WAITING %s", emoji.Waiting(), timeformat.FormatWaitingDuration(duration, false))
 }

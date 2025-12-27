@@ -34,6 +34,10 @@ type Config struct {
 	// Default: horizontal. Story 8.6.
 	DetailLayout string
 
+	// UseEmoji controls emoji display (Story 8.9)
+	// nil = auto-detect from TERM, true = force emoji, false = force fallback
+	UseEmoji *bool
+
 	// Projects contains per-project configuration overrides
 	// Key is the directory name (v2 format uses directory_name as map key)
 	Projects map[string]ProjectConfig

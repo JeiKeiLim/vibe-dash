@@ -349,7 +349,7 @@ func TestRenderConfirmRemoveDialog_LongProjectName(t *testing.T) {
 func TestRenderNarrowWarning_ContainsWarning(t *testing.T) {
 	output := renderNarrowWarning(70)
 
-	if !strings.Contains(output, NarrowWarning) {
+	if !strings.Contains(output, NarrowWarning()) {
 		t.Error("expected narrow warning text in output")
 	}
 }
@@ -357,8 +357,8 @@ func TestRenderNarrowWarning_ContainsWarning(t *testing.T) {
 func TestRenderNarrowWarning_Centered(t *testing.T) {
 	output := renderNarrowWarning(80)
 
-	// Warning should be centered - check it's not left-aligned
-	if strings.HasPrefix(output, "⚠") {
+	// Warning should be centered - check it's not left-aligned (starts with space)
+	if !strings.HasPrefix(output, " ") {
 		t.Error("expected warning to be centered, not left-aligned")
 	}
 }
@@ -369,7 +369,7 @@ func TestRenderNarrowWarning_DifferentWidths(t *testing.T) {
 	for _, width := range widths {
 		output := renderNarrowWarning(width)
 
-		if !strings.Contains(output, NarrowWarning) {
+		if !strings.Contains(output, NarrowWarning()) {
 			t.Errorf("expected narrow warning text in output at width %d", width)
 		}
 		if len(output) == 0 {

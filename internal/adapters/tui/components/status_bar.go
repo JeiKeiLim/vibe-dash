@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/styles"
 )
 
@@ -152,14 +153,15 @@ func (s StatusBarModel) renderCondensed() string {
 		counts += " " + s.lastRefreshMsg
 	}
 
-	// Show abbreviated watcher warning if present (Story 4.6 AC3, Story 7.1: yellow styling)
+	// Show abbreviated watcher warning if present (Story 4.6 AC3, Story 7.1: yellow styling, Story 8.9: emoji fallback)
 	if s.watcherWarning != "" {
-		counts += " " + styles.WarningStyle.Render("⚠️")
+		counts += " " + styles.WarningStyle.Render(emoji.Warning())
 	}
 
 	// Story 7.2: Show abbreviated config warning if present (AC6)
+	// Story 8.9 code review M2: Use emoji.Warning() for consistency
 	if s.configWarning != "" {
-		counts += " " + styles.WarningStyle.Render("⚠ cfg")
+		counts += " " + styles.WarningStyle.Render(emoji.Warning()+" cfg")
 	}
 
 	return "│ " + counts + " │ [j/k][?][q] │"
@@ -186,8 +188,9 @@ func (s StatusBarModel) renderCounts() string {
 	// Epic 4 Hotfix H1: Always show waiting count so users know feature exists
 	// AC4: If waitingCount > 0, show with waitingStyle (bold red)
 	// H1: If waitingCount == 0, show with dim style
+	// Story 8.9: Use emoji fallback for waiting indicator
 	if s.waitingCount > 0 {
-		waitingText := styles.WaitingStyle.Render(fmt.Sprintf("⏸️ %d WAITING", s.waitingCount))
+		waitingText := styles.WaitingStyle.Render(fmt.Sprintf("%s %d WAITING", emoji.Waiting(), s.waitingCount))
 		parts = append(parts, waitingText)
 	} else {
 		waitingText := styles.DimStyle.Render("0 waiting")

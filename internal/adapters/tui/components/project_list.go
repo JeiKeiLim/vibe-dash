@@ -37,7 +37,7 @@ func NewProjectListModel(projects []*domain.Project, width, height int) ProjectL
 	l := list.New(items, delegate, width, height)
 	l.SetShowHelp(false)         // We have our own help (Story 3.5)
 	l.SetShowTitle(false)        // Title in our own header
-	l.SetShowStatusBar(true)     // Shows "1/5" pagination
+	l.SetShowStatusBar(false)    // Hide Bubbles pagination (Story 8.9)
 	l.SetFilteringEnabled(false) // For now, enable in post-MVP
 
 	// Configure keymap

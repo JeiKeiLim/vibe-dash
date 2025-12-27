@@ -5,7 +5,14 @@ import (
 	"testing"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
 )
+
+func init() {
+	// Story 8.9: Initialize emoji package for tests with emoji enabled
+	useEmoji := true
+	emoji.InitEmoji(&useEmoji)
+}
 
 // Task 1: StatusBar component tests
 
@@ -852,8 +859,9 @@ func TestStatusBarModel_ConfigWarning_CondensedMode(t *testing.T) {
 	view := sb.View()
 
 	// Should show abbreviated config warning in condensed mode
-	if !strings.Contains(view, "⚠ cfg") {
-		t.Errorf("condensed view should show abbreviated config warning '⚠ cfg', got: %s", view)
+	// Story 8.9 code review M2: Uses emoji.Warning() which returns ⚠️ when emoji enabled
+	if !strings.Contains(view, "cfg") {
+		t.Errorf("condensed view should show abbreviated config warning with 'cfg', got: %s", view)
 	}
 }
 

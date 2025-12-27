@@ -11,7 +11,14 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/components"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
 )
+
+func init() {
+	// Story 8.9: Initialize emoji package for tests with emoji enabled
+	useEmoji := true
+	emoji.InitEmoji(&useEmoji)
+}
 
 func TestNewModel(t *testing.T) {
 	m := NewModel(nil)

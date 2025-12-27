@@ -27,7 +27,7 @@ func TestModel_NarrowWidth_ShowsWarning(t *testing.T) {
 
 	view := m.View()
 
-	if !strings.Contains(view, NarrowWarning) {
+	if !strings.Contains(view, NarrowWarning()) {
 		t.Error("expected narrow warning to be shown for width 70")
 	}
 }
@@ -46,7 +46,7 @@ func TestModel_NarrowWidth_NotShownAt80(t *testing.T) {
 
 	view := m.View()
 
-	if strings.Contains(view, NarrowWarning) {
+	if strings.Contains(view, NarrowWarning()) {
 		t.Error("expected no narrow warning at width 80")
 	}
 }
@@ -203,7 +203,7 @@ func TestModel_NarrowWidth_BoundaryAt60(t *testing.T) {
 
 	view := m.View()
 
-	if !strings.Contains(view, NarrowWarning) {
+	if !strings.Contains(view, NarrowWarning()) {
 		t.Error("expected narrow warning at width 60 (boundary)")
 	}
 }
@@ -222,7 +222,7 @@ func TestModel_NarrowWidth_BoundaryAt79(t *testing.T) {
 
 	view := m.View()
 
-	if !strings.Contains(view, NarrowWarning) {
+	if !strings.Contains(view, NarrowWarning()) {
 		t.Error("expected narrow warning at width 79 (boundary)")
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/components"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/project"
 )
 
@@ -785,12 +786,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Update detail panel with (possibly moved) selection
 		m.detailPanel.SetProject(m.projectList.SelectedProject())
-		// Set feedback message
+		// Set feedback message (Story 8.9: emoji fallback, code review M3: use emoji.EmptyStar)
 		var feedback string
 		if msg.isFavorite {
-			feedback = "⭐ Favorited"
+			feedback = emoji.Star() + " Favorited"
 		} else {
-			feedback = "☆ Unfavorited"
+			feedback = emoji.EmptyStar() + " Unfavorited"
 		}
 		m.statusBar.SetRefreshComplete(feedback)
 		// Clear after 3 seconds
@@ -869,25 +870,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.waitForNextFileEventCmd()
 
 	case fileWatcherErrorMsg:
-		// Story 4.6: Handle file watcher error (AC3)
+		// Story 4.6: Handle file watcher error (AC3, Story 8.9: emoji fallback)
 		slog.Warn("file watcher error", "error", msg.err)
 		m.fileWatcherAvailable = false
-		m.statusBar.SetWatcherWarning("⚠️ File watching unavailable")
+		m.statusBar.SetWatcherWarning(emoji.Warning() + " File watching unavailable")
 		return m, nil
 
 	case watcherWarningMsg:
-		// Story 7.1: Handle partial file watcher failures (AC1, AC2)
+		// Story 7.1: Handle partial file watcher failures (AC1, AC2, Story 8.9: emoji fallback)
 		if len(msg.failedPaths) > 0 && len(msg.failedPaths) < msg.totalPaths {
 			// Partial failure - show first failed project name (AC1)
 			// Code review fix M1: Show count if multiple failures
-			warningText := fmt.Sprintf("⚠ File watching unavailable for: %s", filepath.Base(msg.failedPaths[0]))
+			warningText := fmt.Sprintf("%s File watching unavailable for: %s", emoji.Warning(), filepath.Base(msg.failedPaths[0]))
 			if len(msg.failedPaths) > 1 {
 				warningText += fmt.Sprintf(" (+%d more)", len(msg.failedPaths)-1)
 			}
 			m.statusBar.SetWatcherWarning(warningText)
 		} else if len(msg.failedPaths) == msg.totalPaths {
 			// Complete failure (AC2)
-			m.statusBar.SetWatcherWarning("⚠ File watching unavailable. Use [r] to refresh.")
+			m.statusBar.SetWatcherWarning(emoji.Warning() + " File watching unavailable. Use [r] to refresh.")
 			m.fileWatcherAvailable = false
 		}
 		return m, nil
@@ -911,14 +912,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case projectCorruptionMsg:
-		// Story 7.3: Handle project database corruption (AC7)
+		// Story 7.3: Handle project database corruption (AC7, Story 8.9: emoji fallback)
 		m.corruptedProjects = msg.projects
 		if len(msg.projects) > 0 {
 			var warning string
 			if len(msg.projects) == 1 {
-				warning = fmt.Sprintf("⚠ %s: corrupted (vibe reset %s)", msg.projects[0], msg.projects[0])
+				warning = fmt.Sprintf("%s %s: corrupted (vibe reset %s)", emoji.Warning(), msg.projects[0], msg.projects[0])
 			} else {
-				warning = fmt.Sprintf("⚠ %d projects corrupted (vibe reset --all)", len(msg.projects))
+				warning = fmt.Sprintf("%s %d projects corrupted (vibe reset --all)", emoji.Warning(), len(msg.projects))
 			}
 			m.statusBar.SetWatcherWarning(warning)
 		}
@@ -1505,12 +1506,12 @@ func (m *Model) startFileWatcherForProjects() tea.Cmd {
 	// Create watch context for cancellation
 	m.watchCtx, m.watchCancel = context.WithCancel(context.Background())
 
-	// Start watching
+	// Start watching (Story 8.9: emoji fallback)
 	eventCh, err := m.fileWatcher.Watch(m.watchCtx, paths)
 	if err != nil {
 		slog.Warn("failed to start file watcher", "error", err)
 		m.fileWatcherAvailable = false
-		m.statusBar.SetWatcherWarning("⚠️ File watching unavailable")
+		m.statusBar.SetWatcherWarning(emoji.Warning() + " File watching unavailable")
 		return nil
 	}
 

@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/project"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/styles"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/timeformat"
@@ -138,10 +139,10 @@ func (m DetailPanelModel) renderProject() string {
 	}
 	lines = append(lines, formatField("Notes", notes))
 
-	// Favorite status (Story 3.8)
+	// Favorite status (Story 3.8, Story 8.9: emoji fallback)
 	favorite := "No"
 	if p.IsFavorite {
-		favorite = "⭐ Yes"
+		favorite = emoji.Star() + " Yes"
 	}
 	lines = append(lines, formatField("Favorite", favorite))
 
@@ -153,13 +154,13 @@ func (m DetailPanelModel) renderProject() string {
 	lastActive := timeformat.FormatRelativeTime(p.LastActivityAt)
 	lines = append(lines, formatField("Last Active", lastActive))
 
-	// Waiting status (Story 4.5) - only shown when project is waiting
+	// Waiting status (Story 4.5, Story 8.9: emoji fallback) - only shown when project is waiting
 	if m.waitingChecker != nil && m.waitingChecker(p) {
 		duration := time.Duration(0)
 		if m.durationGetter != nil {
 			duration = m.durationGetter(p)
 		}
-		waitingText := fmt.Sprintf("⏸️ %s", timeformat.FormatWaitingDuration(duration, true))
+		waitingText := fmt.Sprintf("%s %s", emoji.Waiting(), timeformat.FormatWaitingDuration(duration, true))
 		styledWaiting := styles.WaitingStyle.Render(waitingText)
 		lines = append(lines, formatField("Waiting", styledWaiting))
 	}

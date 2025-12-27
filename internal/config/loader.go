@@ -111,6 +111,10 @@ func (l *ViperLoader) Save(ctx context.Context, config *ports.Config) error {
 	l.v.Set("settings.refresh_debounce_ms", config.RefreshDebounceMs)
 	l.v.Set("settings.agent_waiting_threshold_minutes", config.AgentWaitingThresholdMinutes)
 	l.v.Set("settings.detail_layout", config.DetailLayout) // Story 8.6
+	// Story 8.9: Only write use_emoji if explicitly set (nil = auto-detect default)
+	if config.UseEmoji != nil {
+		l.v.Set("settings.use_emoji", *config.UseEmoji)
+	}
 
 	// Projects - directory_name as key, do NOT write deprecated fields (Subtask 2.4)
 	projects := make(map[string]interface{})
@@ -158,6 +162,7 @@ settings:
   refresh_debounce_ms: %d
   agent_waiting_threshold_minutes: %d
   detail_layout: %s  # "vertical" (side-by-side) or "horizontal" (stacked)
+  # use_emoji: true  # true = force emoji, false = force fallback, omit = auto-detect
 
 # Projects map: directory_name → project info
 # Keys are subdirectory names under ~/.vibe-dash/
@@ -195,6 +200,11 @@ func (l *ViperLoader) mapViperToConfig() *ports.Config {
 	// Story 8.6: Read detail_layout setting
 	if l.v.IsSet("settings.detail_layout") {
 		cfg.DetailLayout = l.v.GetString("settings.detail_layout")
+	}
+	// Story 8.9: Read use_emoji setting (nil = auto-detect)
+	if l.v.IsSet("settings.use_emoji") {
+		useEmoji := l.v.GetBool("settings.use_emoji")
+		cfg.UseEmoji = &useEmoji
 	}
 
 	// Map projects if present

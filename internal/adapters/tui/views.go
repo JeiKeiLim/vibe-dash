@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
 )
 
 // Minimum terminal dimensions
@@ -16,8 +17,10 @@ const (
 	MinHeight = 20
 )
 
-// NarrowWarning is shown when terminal width is 60-79 (Story 3.10 AC2).
-const NarrowWarning = "⚠ Narrow terminal - some info hidden"
+// NarrowWarning returns the narrow terminal warning text (Story 3.10 AC2, Story 8.9: emoji fallback).
+func NarrowWarning() string {
+	return emoji.Warning() + " Narrow terminal - some info hidden"
+}
 
 // MaxContentWidth is the maximum width for content (centered in wider terminals) (Story 3.10 AC4).
 const MaxContentWidth = 120
@@ -81,6 +84,7 @@ func renderHelpOverlay(width, height int, cfg *ports.Config) string {
 	content := strings.Join([]string{
 		"",
 		"Navigation",
+		">        Selection indicator (focused)",
 		"j/\u2193     Move down",
 		"k/\u2191     Move up",
 		"",
@@ -245,6 +249,6 @@ func renderNarrowWarning(width int) string {
 		Foreground(lipgloss.Color("3")). // Yellow (ANSI 3)
 		Bold(true)
 
-	warning := warningStyle.Render(NarrowWarning)
+	warning := warningStyle.Render(NarrowWarning())
 	return lipgloss.PlaceHorizontal(width, lipgloss.Center, warning)
 }

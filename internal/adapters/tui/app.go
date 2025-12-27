@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
 )
 
 // Run starts the TUI application with the given context.
@@ -19,6 +20,13 @@ import (
 // The config parameter is used for help overlay display (Story 8.7) - nil-safe.
 // Note: Config passed as parameter to avoid cli→tui→cli import cycle.
 func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detector, waitingDetector ports.WaitingDetector, fileWatcher ports.FileWatcher, detailLayout string, config *ports.Config) error {
+	// Story 8.9: Initialize emoji fallback system BEFORE TUI renders
+	var useEmoji *bool
+	if config != nil {
+		useEmoji = config.UseEmoji
+	}
+	emoji.InitEmoji(useEmoji)
+
 	m := NewModel(repo)
 	if detector != nil {
 		m.SetDetectionService(detector)
