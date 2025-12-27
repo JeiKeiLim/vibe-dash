@@ -871,3 +871,61 @@ func TestNewConfig_MaxContentWidth_Default(t *testing.T) {
 		t.Errorf("MaxContentWidth = %d, want 120", config.MaxContentWidth)
 	}
 }
+
+// Story 8.11: StageRefreshIntervalSeconds validation tests
+func TestConfig_Validate_StageRefreshIntervalSeconds(t *testing.T) {
+	tests := []struct {
+		name     string
+		interval int
+		wantErr  bool
+	}{
+		{
+			name:     "zero is valid (disabled)",
+			interval: 0,
+			wantErr:  false,
+		},
+		{
+			name:     "default 30 is valid",
+			interval: 30,
+			wantErr:  false,
+		},
+		{
+			name:     "custom 60 is valid",
+			interval: 60,
+			wantErr:  false,
+		},
+		{
+			name:     "negative is invalid",
+			interval: -1,
+			wantErr:  true,
+		},
+		{
+			name:     "large negative is invalid",
+			interval: -30,
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := ports.NewConfig()
+			config.StageRefreshIntervalSeconds = tt.interval
+			err := config.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil && !errors.Is(err, domain.ErrConfigInvalid) {
+				t.Errorf("Validate() error should wrap domain.ErrConfigInvalid, got %v", err)
+			}
+		})
+	}
+}
+
+// Story 8.11: StageRefreshIntervalSeconds default test
+func TestNewConfig_StageRefreshIntervalSeconds_Default(t *testing.T) {
+	config := ports.NewConfig()
+
+	if config.StageRefreshIntervalSeconds != 30 {
+		t.Errorf("StageRefreshIntervalSeconds = %d, want 30", config.StageRefreshIntervalSeconds)
+	}
+}

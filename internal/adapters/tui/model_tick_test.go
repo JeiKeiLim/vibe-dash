@@ -7,6 +7,7 @@ import (
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/components"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
+	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 )
 
 // =============================================================================
@@ -420,6 +421,180 @@ func TestNoFileEvent_TickShowsWaiting(t *testing.T) {
 		t.Error("project should be waiting after threshold")
 	}
 }
+
+// =============================================================================
+// Story 8.11: Periodic Stage Re-Detection Tests
+// =============================================================================
+
+// TestStageRefreshTickCmd_ReturnsNil_WhenIntervalZero verifies disabled mode (AC3).
+func TestStageRefreshTickCmd_ReturnsNil_WhenIntervalZero(t *testing.T) {
+	m := NewModel(nil)
+	m.stageRefreshInterval = 0 // Disabled mode
+
+	cmd := m.stageRefreshTickCmd()
+
+	if cmd != nil {
+		t.Error("stageRefreshTickCmd() should return nil when interval is 0")
+	}
+}
+
+// TestStageRefreshTickCmd_ReturnsCmd_WhenIntervalPositive verifies enabled mode (AC1, AC2).
+func TestStageRefreshTickCmd_ReturnsCmd_WhenIntervalPositive(t *testing.T) {
+	tests := []struct {
+		name     string
+		interval int
+	}{
+		{"default 30s", 30},
+		{"custom 10s", 10},
+		{"custom 60s", 60},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel(nil)
+			m.stageRefreshInterval = tt.interval
+
+			cmd := m.stageRefreshTickCmd()
+
+			if cmd == nil {
+				t.Errorf("stageRefreshTickCmd() should return non-nil command when interval is %d", tt.interval)
+			}
+		})
+	}
+}
+
+// TestStageRefreshTickMsg_SkipsWhenDisabled verifies guard clause (AC3).
+func TestStageRefreshTickMsg_SkipsWhenDisabled(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(80)
+	m.stageRefreshInterval = 0 // Disabled
+	m.projects = []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/a", State: domain.StateActive},
+	}
+
+	// Should not trigger refresh when disabled
+	updated, cmd := m.Update(stageRefreshTickMsg(time.Now()))
+	model := updated.(Model)
+
+	if model.isRefreshing {
+		t.Error("should not trigger refresh when interval is 0")
+	}
+	// Should still reschedule (returns nil cmd since disabled)
+	if cmd != nil {
+		t.Error("should return nil cmd when disabled")
+	}
+}
+
+// TestStageRefreshTickMsg_SkipsWhenAlreadyRefreshing verifies guard clause (AC5).
+func TestStageRefreshTickMsg_SkipsWhenAlreadyRefreshing(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(80)
+	m.stageRefreshInterval = 30
+	m.isRefreshing = true // Already refreshing
+	m.projects = []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/a", State: domain.StateActive},
+	}
+
+	// Should skip refresh when already refreshing
+	updated, cmd := m.Update(stageRefreshTickMsg(time.Now()))
+	model := updated.(Model)
+
+	// isRefreshing should still be true (unchanged)
+	if !model.isRefreshing {
+		t.Error("isRefreshing should remain true")
+	}
+	// Should reschedule timer
+	if cmd == nil {
+		t.Error("should return next tick command")
+	}
+}
+
+// TestStageRefreshTickMsg_SkipsWhenNoProjects verifies guard clause (AC6).
+func TestStageRefreshTickMsg_SkipsWhenNoProjects(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(80)
+	m.stageRefreshInterval = 30
+	m.projects = nil // No projects
+
+	// Should skip refresh when no projects
+	updated, _ := m.Update(stageRefreshTickMsg(time.Now()))
+	model := updated.(Model)
+
+	if model.isRefreshing {
+		t.Error("should not trigger refresh when no projects")
+	}
+}
+
+// TestStageRefreshTickMsg_TriggersRefresh verifies detection is triggered (AC1, AC4).
+func TestStageRefreshTickMsg_TriggersRefresh(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(80)
+	m.stageRefreshInterval = 30
+	m.isRefreshing = false
+	m.projects = []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/a", State: domain.StateActive},
+	}
+
+	// Mock detection service not needed - we just verify isRefreshing gets set
+	// The actual refresh would fail without detectionService but that's ok for this test
+
+	updated, cmd := m.Update(stageRefreshTickMsg(time.Now()))
+	model := updated.(Model)
+
+	// Should trigger refresh (sets isRefreshing = true via startRefresh())
+	if !model.isRefreshing {
+		t.Error("should trigger refresh and set isRefreshing = true")
+	}
+
+	// Should return refresh command
+	if cmd == nil {
+		t.Error("should return refresh command")
+	}
+}
+
+// TestSetConfig_WiresStageRefreshInterval verifies config wiring (Story 8.11).
+func TestSetConfig_WiresStageRefreshInterval(t *testing.T) {
+	tests := []struct {
+		name     string
+		interval int
+	}{
+		{"default 30", 30},
+		{"disabled 0", 0},
+		{"custom 60", 60},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel(nil)
+
+			cfg := &ports.Config{
+				StageRefreshIntervalSeconds: tt.interval,
+				DetailLayout:                "horizontal",
+			}
+			m.SetConfig(cfg)
+
+			if m.stageRefreshInterval != tt.interval {
+				t.Errorf("stageRefreshInterval = %d, want %d", m.stageRefreshInterval, tt.interval)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Story 8.2 continued: Watcher+Tick Integration Tests (AC1, AC2)
+// =============================================================================
 
 // TestWatcherPlusTick_IntegrationCycle tests complete watcher+tick integration (AC1, AC2).
 func TestWatcherPlusTick_IntegrationCycle(t *testing.T) {

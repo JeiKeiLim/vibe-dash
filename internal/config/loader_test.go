@@ -1247,3 +1247,144 @@ projects: {}
 		t.Errorf("MaxContentWidth = %d, want 0 (unlimited)", cfg.MaxContentWidth)
 	}
 }
+
+// Story 8.11: Test stage_refresh_interval loading and saving
+func TestViperLoader_Load_StageRefreshInterval(t *testing.T) {
+	tests := []struct {
+		name     string
+		yamlVal  string
+		expected int
+	}{
+		{
+			name:     "default 30",
+			yamlVal:  "30",
+			expected: 30,
+		},
+		{
+			name:     "disabled 0",
+			yamlVal:  "0",
+			expected: 0,
+		},
+		{
+			name:     "custom 60",
+			yamlVal:  "60",
+			expected: 60,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+
+			validConfig := fmt.Sprintf(`storage_version: 2
+
+settings:
+  hibernation_days: 14
+  refresh_interval_seconds: 10
+  refresh_debounce_ms: 200
+  agent_waiting_threshold_minutes: 10
+  detail_layout: horizontal
+  stage_refresh_interval: %s
+
+projects: {}
+`, tt.yamlVal)
+
+			if err := os.WriteFile(configPath, []byte(validConfig), 0644); err != nil {
+				t.Fatalf("failed to write test file: %v", err)
+			}
+
+			loader := NewViperLoader(configPath)
+			cfg, err := loader.Load(context.Background())
+
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+
+			if cfg.StageRefreshIntervalSeconds != tt.expected {
+				t.Errorf("StageRefreshIntervalSeconds = %d, want %d", cfg.StageRefreshIntervalSeconds, tt.expected)
+			}
+		})
+	}
+}
+
+// Story 8.11: Test negative stage_refresh_interval is fixed to default
+func TestViperLoader_Load_InvalidStageRefreshInterval_Negative(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	invalidConfig := `storage_version: 2
+
+settings:
+  hibernation_days: 14
+  refresh_interval_seconds: 10
+  refresh_debounce_ms: 200
+  agent_waiting_threshold_minutes: 10
+  detail_layout: horizontal
+  stage_refresh_interval: -10
+
+projects: {}
+`
+	if err := os.WriteFile(configPath, []byte(invalidConfig), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	loader := NewViperLoader(configPath)
+	cfg, err := loader.Load(context.Background())
+
+	// Should NOT return error - graceful degradation
+	if err != nil {
+		t.Errorf("Load() should not return error on invalid stage_refresh_interval, got %v", err)
+	}
+
+	// Should use default value (30) for invalid stage_refresh_interval
+	if cfg.StageRefreshIntervalSeconds != 30 {
+		t.Errorf("StageRefreshIntervalSeconds = %d, want 30 (default after fix)", cfg.StageRefreshIntervalSeconds)
+	}
+}
+
+// Story 8.11: Test stage_refresh_interval round-trip (save and reload)
+func TestViperLoader_Save_StageRefreshInterval(t *testing.T) {
+	tests := []struct {
+		name     string
+		interval int
+	}{
+		{"default 30", 30},
+		{"disabled 0", 0},
+		{"custom 60", 60},
+		{"custom 10", 10},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configDir := filepath.Join(tmpDir, ".vibe-dash")
+			configPath := filepath.Join(configDir, "config.yaml")
+
+			if err := os.MkdirAll(configDir, 0755); err != nil {
+				t.Fatalf("failed to create config dir: %v", err)
+			}
+
+			loader := NewViperLoader(configPath)
+
+			cfg := ports.NewConfig()
+			cfg.StageRefreshIntervalSeconds = tt.interval
+
+			err := loader.Save(context.Background(), cfg)
+			if err != nil {
+				t.Fatalf("Save() error = %v", err)
+			}
+
+			// Reload and verify
+			loader2 := NewViperLoader(configPath)
+			cfg2, err := loader2.Load(context.Background())
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+
+			if cfg2.StageRefreshIntervalSeconds != tt.interval {
+				t.Errorf("StageRefreshIntervalSeconds = %d, want %d", cfg2.StageRefreshIntervalSeconds, tt.interval)
+			}
+		})
+	}
+}

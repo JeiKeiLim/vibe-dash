@@ -98,6 +98,9 @@ type Model struct {
 
 	// Story 8.10: Max content width from config (0 = unlimited)
 	maxContentWidth int
+
+	// Story 8.11: Periodic stage re-detection interval (0 = disabled)
+	stageRefreshInterval int
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -190,6 +193,9 @@ type clearRemoveFeedbackMsg struct{}
 // Originally 60 seconds for Story 4.2 AC4, reduced for 24/7 reliability.
 type tickMsg time.Time
 
+// stageRefreshTickMsg triggers periodic stage re-detection (Story 8.11).
+type stageRefreshTickMsg time.Time
+
 // fileEventMsg wraps file system events for Bubble Tea message passing (Story 4.6).
 type fileEventMsg struct {
 	Path      string
@@ -274,7 +280,7 @@ func (m Model) isHorizontalLayout() bool {
 	return m.detailLayout == "horizontal"
 }
 
-// SetConfig stores config for help overlay display and max content width (Story 8.7, 8.10).
+// SetConfig stores config for help overlay display and max content width (Story 8.7, 8.10, 8.11).
 // Config passed as parameter to avoid cli→tui→cli import cycle.
 // Nil-safe: stores defaults if cfg is nil.
 func (m *Model) SetConfig(cfg *ports.Config) {
@@ -282,7 +288,8 @@ func (m *Model) SetConfig(cfg *ports.Config) {
 		cfg = ports.NewConfig()
 	}
 	m.config = cfg
-	m.maxContentWidth = cfg.MaxContentWidth // Story 8.10
+	m.maxContentWidth = cfg.MaxContentWidth                  // Story 8.10
+	m.stageRefreshInterval = cfg.StageRefreshIntervalSeconds // Story 8.11
 }
 
 // isProjectWaiting wraps WaitingDetector.IsWaiting for component callbacks.
@@ -370,6 +377,16 @@ func (m Model) loadProjectsCmd() tea.Cmd {
 func tickCmd() tea.Cmd {
 	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
 		return tickMsg(t)
+	})
+}
+
+// stageRefreshTickCmd returns command for periodic stage detection (Story 8.11).
+func (m Model) stageRefreshTickCmd() tea.Cmd {
+	if m.stageRefreshInterval == 0 {
+		return nil
+	}
+	return tea.Tick(time.Duration(m.stageRefreshInterval)*time.Second, func(t time.Time) tea.Msg {
+		return stageRefreshTickMsg(t)
 	})
 }
 
@@ -531,8 +548,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusBar.SetCounts(active, hibernated, waiting)
 
 				// Story 4.6: Start file watcher (code review H1: use helper)
-				if watcherCmd := m.startFileWatcherForProjects(); watcherCmd != nil {
-					return m, watcherCmd
+				watcherCmd := m.startFileWatcherForProjects()
+
+				// Story 8.11: Start periodic stage refresh timer
+				stageCmd := m.stageRefreshTickCmd()
+
+				if watcherCmd != nil || stageCmd != nil {
+					return m, tea.Batch(watcherCmd, stageCmd)
 				}
 			}
 
@@ -639,8 +661,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.SetCounts(active, hibernated, waiting)
 
 			// Story 4.6: Start file watcher (code review H1: use helper)
-			if watcherCmd := m.startFileWatcherForProjects(); watcherCmd != nil {
-				return m, watcherCmd
+			watcherCmd := m.startFileWatcherForProjects()
+
+			// Story 8.11: Start periodic stage refresh timer
+			stageCmd := m.stageRefreshTickCmd()
+
+			if watcherCmd != nil || stageCmd != nil {
+				return m, tea.Batch(watcherCmd, stageCmd)
 			}
 		}
 		return m, nil
@@ -652,7 +679,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.refreshError = msg.err.Error()
 			m.statusBar.SetRefreshComplete("✗ Refresh failed")
-			return m, nil
+			// Story 8.11 AC5: Reset stage refresh timer even on error
+			return m, m.stageRefreshTickCmd()
 		}
 		m.refreshError = ""
 		// Story 7.4 AC5: Show failure count if any
@@ -694,6 +722,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							return clearRefreshMsgMsg{}
 						}),
 						m.waitForNextFileEventCmd(),
+						m.stageRefreshTickCmd(), // Story 8.11 AC5: Reset timer
 						func() tea.Msg {
 							return watcherWarningMsg{
 								failedPaths: failedPaths,
@@ -709,6 +738,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return clearRefreshMsgMsg{}
 					}),
 					m.waitForNextFileEventCmd(),
+					m.stageRefreshTickCmd(), // Story 8.11 AC5: Reset timer
 				)
 			}
 			// Recovery failed - keep watcher as unavailable
@@ -721,6 +751,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
 				return clearRefreshMsgMsg{}
 			}),
+			m.stageRefreshTickCmd(), // Story 8.11 AC5: Reset timer
 		)
 
 	case clearRefreshMsgMsg:
@@ -872,6 +903,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		return m, tickCmd()
+
+	case stageRefreshTickMsg:
+		// Story 8.11: Periodic stage re-detection
+		// Skip if disabled, already refreshing, or no projects
+		if m.stageRefreshInterval == 0 || m.isRefreshing || len(m.projects) == 0 {
+			return m, m.stageRefreshTickCmd()
+		}
+		// Reuse existing startRefresh() which calls refreshProjectsCmd
+		return m.startRefresh()
 
 	case fileEventMsg:
 		// Story 4.6: Handle file system event

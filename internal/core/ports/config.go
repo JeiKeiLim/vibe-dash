@@ -42,6 +42,10 @@ type Config struct {
 	// Default: 120. Set to 0 for unlimited (full terminal width).
 	MaxContentWidth int
 
+	// StageRefreshIntervalSeconds is the interval for periodic stage re-detection (Story 8.11)
+	// Default: 30. Set to 0 to disable periodic stage detection.
+	StageRefreshIntervalSeconds int
+
 	// Projects contains per-project configuration overrides
 	// Key is the directory name (v2 format uses directory_name as map key)
 	Projects map[string]ProjectConfig
@@ -88,6 +92,7 @@ func NewConfig() *Config {
 		AgentWaitingThresholdMinutes: 10,
 		DetailLayout:                 "horizontal",
 		MaxContentWidth:              120, // Story 8.10: default cap for readability
+		StageRefreshIntervalSeconds:  30,  // Story 8.11: default 30s for stage re-detection
 		Projects:                     make(map[string]ProjectConfig),
 	}
 }
@@ -208,6 +213,11 @@ func (c *Config) Validate() error {
 	// Validate max_content_width (Story 8.10)
 	if c.MaxContentWidth < 0 {
 		return fmt.Errorf("%w: max_content_width must be >= 0, got %d", domain.ErrConfigInvalid, c.MaxContentWidth)
+	}
+
+	// Validate stage_refresh_interval (Story 8.11)
+	if c.StageRefreshIntervalSeconds < 0 {
+		return fmt.Errorf("%w: stage_refresh_interval must be >= 0, got %d", domain.ErrConfigInvalid, c.StageRefreshIntervalSeconds)
 	}
 
 	// Validate per-project overrides
