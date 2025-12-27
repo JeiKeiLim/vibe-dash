@@ -377,3 +377,64 @@ func TestRenderNarrowWarning_DifferentWidths(t *testing.T) {
 		}
 	}
 }
+
+// ============================================================================
+// Story 8.10: Max Content Width Display Tests
+// ============================================================================
+
+func TestFormatMaxWidth_Unlimited(t *testing.T) {
+	result := formatMaxWidth(0)
+	if result != "Max Width:   unlimited" {
+		t.Errorf("formatMaxWidth(0) = %q, want 'Max Width:   unlimited'", result)
+	}
+}
+
+func TestFormatMaxWidth_WithValue(t *testing.T) {
+	tests := []struct {
+		input    int
+		expected string
+	}{
+		{120, "Max Width:   120"},
+		{80, "Max Width:   80"},
+		{200, "Max Width:   200"},
+	}
+
+	for _, tt := range tests {
+		result := formatMaxWidth(tt.input)
+		if result != tt.expected {
+			t.Errorf("formatMaxWidth(%d) = %q, want %q", tt.input, result, tt.expected)
+		}
+	}
+}
+
+func TestRenderHelpOverlay_ShowsMaxWidth(t *testing.T) {
+	cfg := &ports.Config{
+		AgentWaitingThresholdMinutes: 10,
+		RefreshIntervalSeconds:       10,
+		RefreshDebounceMs:            200,
+		DetailLayout:                 "horizontal",
+		HibernationDays:              14,
+		MaxContentWidth:              120,
+	}
+	result := renderHelpOverlay(100, 50, cfg)
+
+	if !strings.Contains(result, "Max Width:   120") {
+		t.Error("Expected help overlay to contain 'Max Width:   120'")
+	}
+}
+
+func TestRenderHelpOverlay_ShowsMaxWidth_Unlimited(t *testing.T) {
+	cfg := &ports.Config{
+		AgentWaitingThresholdMinutes: 10,
+		RefreshIntervalSeconds:       10,
+		RefreshDebounceMs:            200,
+		DetailLayout:                 "horizontal",
+		HibernationDays:              14,
+		MaxContentWidth:              0, // Unlimited
+	}
+	result := renderHelpOverlay(100, 50, cfg)
+
+	if !strings.Contains(result, "Max Width:   unlimited") {
+		t.Error("Expected help overlay to contain 'Max Width:   unlimited'")
+	}
+}

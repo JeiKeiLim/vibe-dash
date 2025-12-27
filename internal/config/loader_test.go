@@ -1176,3 +1176,74 @@ projects:
 		t.Errorf("DirectoryName = %s, want 'correct-key' (key takes precedence)", p.DirectoryName)
 	}
 }
+
+// Story 8.10: Test negative max_content_width validation
+func TestViperLoader_Load_InvalidMaxContentWidth_Negative(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Write config with negative max_content_width
+	invalidConfig := `storage_version: 2
+
+settings:
+  hibernation_days: 14
+  refresh_interval_seconds: 10
+  refresh_debounce_ms: 200
+  agent_waiting_threshold_minutes: 10
+  detail_layout: horizontal
+  max_content_width: -50
+
+projects: {}
+`
+	if err := os.WriteFile(configPath, []byte(invalidConfig), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	loader := NewViperLoader(configPath)
+	cfg, err := loader.Load(context.Background())
+
+	// Should NOT return error - graceful degradation
+	if err != nil {
+		t.Errorf("Load() should not return error on invalid max_content_width, got %v", err)
+	}
+
+	// Should use default value (120) for invalid max_content_width
+	if cfg.MaxContentWidth != 120 {
+		t.Errorf("MaxContentWidth = %d, want 120 (default after fix)", cfg.MaxContentWidth)
+	}
+}
+
+// Story 8.10: Test zero max_content_width is valid (unlimited mode)
+func TestViperLoader_Load_MaxContentWidth_Zero_IsValid(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Write config with max_content_width: 0 (unlimited)
+	validConfig := `storage_version: 2
+
+settings:
+  hibernation_days: 14
+  refresh_interval_seconds: 10
+  refresh_debounce_ms: 200
+  agent_waiting_threshold_minutes: 10
+  detail_layout: horizontal
+  max_content_width: 0
+
+projects: {}
+`
+	if err := os.WriteFile(configPath, []byte(validConfig), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	loader := NewViperLoader(configPath)
+	cfg, err := loader.Load(context.Background())
+
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Zero should be preserved (unlimited mode)
+	if cfg.MaxContentWidth != 0 {
+		t.Errorf("MaxContentWidth = %d, want 0 (unlimited)", cfg.MaxContentWidth)
+	}
+}

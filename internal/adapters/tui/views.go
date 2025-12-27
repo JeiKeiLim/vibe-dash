@@ -22,9 +22,6 @@ func NarrowWarning() string {
 	return emoji.Warning() + " Narrow terminal - some info hidden"
 }
 
-// MaxContentWidth is the maximum width for content (centered in wider terminals) (Story 3.10 AC4).
-const MaxContentWidth = 120
-
 // HeightThresholdTall is the terminal height at which detail panel opens by default (Story 3.10 AC6/AC7).
 const HeightThresholdTall = 35
 
@@ -111,6 +108,7 @@ func renderHelpOverlay(width, height int, cfg *ports.Config) string {
 		fmt.Sprintf("Debounce:    %d ms", cfg.RefreshDebounceMs),
 		fmt.Sprintf("Layout:      %s", cfg.DetailLayout),
 		fmt.Sprintf("Hibernation: %d days", cfg.HibernationDays),
+		formatMaxWidth(cfg.MaxContentWidth),
 		"",
 		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
 		hintStyle.Render("Config: ~/.vibe-dash/config.yaml"),
@@ -240,6 +238,15 @@ func renderConfirmRemoveDialog(projectName string, width, height int) string {
 
 	// Center in terminal
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
+}
+
+// formatMaxWidth formats the max_content_width setting for display.
+// Story 8.10: Shows "unlimited" for 0, otherwise shows the value.
+func formatMaxWidth(maxWidth int) string {
+	if maxWidth == 0 {
+		return "Max Width:   unlimited"
+	}
+	return fmt.Sprintf("Max Width:   %d", maxWidth)
 }
 
 // renderNarrowWarning renders the narrow terminal warning bar (Story 3.10 AC2).

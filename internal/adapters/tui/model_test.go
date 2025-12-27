@@ -1960,9 +1960,11 @@ func TestModel_ResizeTickProcessesPending(t *testing.T) {
 }
 
 // TestModel_EffectiveWidth_WideTerminal tests that effectiveWidth is capped
-// at MaxContentWidth on wide terminals (AC1, AC4).
+// at maxContentWidth on wide terminals (AC1, AC4).
+// Story 8.10: Uses default maxContentWidth (120) from config.
 func TestModel_EffectiveWidth_WideTerminal(t *testing.T) {
 	m := NewModel(nil)
+	defaultMaxWidth := ports.NewConfig().MaxContentWidth // 120
 
 	// Create test projects
 	projects := []*domain.Project{
@@ -1974,7 +1976,7 @@ func TestModel_EffectiveWidth_WideTerminal(t *testing.T) {
 	newModel, _ := m.Update(msg)
 	m = newModel.(Model)
 
-	// WindowSizeMsg with wide terminal (>MaxContentWidth=120)
+	// WindowSizeMsg with wide terminal (>maxContentWidth=120)
 	sizeMsg := tea.WindowSizeMsg{Width: 200, Height: 40}
 	newModel, _ = m.Update(sizeMsg)
 	m = newModel.(Model)
@@ -1983,9 +1985,9 @@ func TestModel_EffectiveWidth_WideTerminal(t *testing.T) {
 	newModel, _ = m.Update(resizeTickMsg{})
 	m = newModel.(Model)
 
-	// projectList should have MaxContentWidth (120), not 200
-	if m.projectList.Width() != MaxContentWidth {
-		t.Errorf("expected projectList width %d (MaxContentWidth), got %d", MaxContentWidth, m.projectList.Width())
+	// projectList should have maxContentWidth (120), not 200
+	if m.projectList.Width() != defaultMaxWidth {
+		t.Errorf("expected projectList width %d (maxContentWidth), got %d", defaultMaxWidth, m.projectList.Width())
 	}
 }
 
@@ -2026,11 +2028,13 @@ func TestModel_ResizeAfterReady_UpdatesComponents(t *testing.T) {
 
 // TestModel_ProjectsLoadedAfterReady_UsesEffectiveWidth tests that
 // ProjectsLoadedMsg after ready uses effectiveWidth (AC1, AC4).
+// Story 8.10: Uses default maxContentWidth (120) from config.
 func TestModel_ProjectsLoadedAfterReady_UsesEffectiveWidth(t *testing.T) {
 	m := NewModel(nil)
+	defaultMaxWidth := ports.NewConfig().MaxContentWidth // 120
 	// Make ready with wide terminal
 	m.hasPendingResize = true
-	m.pendingWidth = 150 // > MaxContentWidth (120)
+	m.pendingWidth = 150 // > maxContentWidth (120)
 	m.pendingHeight = 40
 
 	// Process resize to become ready
@@ -2053,9 +2057,9 @@ func TestModel_ProjectsLoadedAfterReady_UsesEffectiveWidth(t *testing.T) {
 	newModel, _ = m.Update(msg)
 	m = newModel.(Model)
 
-	// projectList should use effectiveWidth (MaxContentWidth), not raw width
-	if m.projectList.Width() != MaxContentWidth {
-		t.Errorf("expected projectList width %d (MaxContentWidth), got %d", MaxContentWidth, m.projectList.Width())
+	// projectList should use effectiveWidth (maxContentWidth), not raw width
+	if m.projectList.Width() != defaultMaxWidth {
+		t.Errorf("expected projectList width %d (maxContentWidth), got %d", defaultMaxWidth, m.projectList.Width())
 	}
 }
 
@@ -2140,8 +2144,10 @@ func TestModel_ResizeTickProcessesPending_FileWatcher(t *testing.T) {
 
 // TestModel_ResizeTickProcessesPending_DetailPanelDimensions tests that detail panel
 // has correct dimensions after processing pending projects (code review M1).
+// Story 8.10: Uses default maxContentWidth (120) from config.
 func TestModel_ResizeTickProcessesPending_DetailPanelDimensions(t *testing.T) {
 	m := NewModel(nil)
+	defaultMaxWidth := ports.NewConfig().MaxContentWidth // 120
 
 	// Create test projects
 	projects := []*domain.Project{
@@ -2153,7 +2159,7 @@ func TestModel_ResizeTickProcessesPending_DetailPanelDimensions(t *testing.T) {
 	newModel, _ := m.Update(msg)
 	m = newModel.(Model)
 
-	// Second: WindowSizeMsg with wide terminal (>MaxContentWidth=120)
+	// Second: WindowSizeMsg with wide terminal (>maxContentWidth=120)
 	sizeMsg := tea.WindowSizeMsg{Width: 150, Height: 50}
 	newModel, _ = m.Update(sizeMsg)
 	m = newModel.(Model)
@@ -2162,11 +2168,11 @@ func TestModel_ResizeTickProcessesPending_DetailPanelDimensions(t *testing.T) {
 	newModel, _ = m.Update(resizeTickMsg{})
 	m = newModel.(Model)
 
-	// Verify detailPanel was created with correct effectiveWidth (capped at MaxContentWidth)
+	// Verify detailPanel was created with correct effectiveWidth (capped at maxContentWidth)
 	// Note: DetailPanelModel doesn't expose Width() directly, but we can verify
 	// that the projectList has the same width, proving both got effectiveWidth
-	if m.projectList.Width() != MaxContentWidth {
-		t.Errorf("expected projectList width %d (MaxContentWidth), got %d", MaxContentWidth, m.projectList.Width())
+	if m.projectList.Width() != defaultMaxWidth {
+		t.Errorf("expected projectList width %d (maxContentWidth), got %d", defaultMaxWidth, m.projectList.Width())
 	}
 
 	// Verify detail panel was initialized (has a project set)

@@ -115,6 +115,7 @@ func (l *ViperLoader) Save(ctx context.Context, config *ports.Config) error {
 	if config.UseEmoji != nil {
 		l.v.Set("settings.use_emoji", *config.UseEmoji)
 	}
+	l.v.Set("settings.max_content_width", config.MaxContentWidth) // Story 8.10
 
 	// Projects - directory_name as key, do NOT write deprecated fields (Subtask 2.4)
 	projects := make(map[string]interface{})
@@ -163,11 +164,12 @@ settings:
   agent_waiting_threshold_minutes: %d
   detail_layout: %s  # "vertical" (side-by-side) or "horizontal" (stacked)
   # use_emoji: true  # true = force emoji, false = force fallback, omit = auto-detect
+  # max_content_width: %d  # 0 = unlimited, >0 = cap content width (default: 120)
 
 # Projects map: directory_name → project info
 # Keys are subdirectory names under ~/.vibe-dash/
 projects: {}
-`, cfg.HibernationDays, cfg.RefreshIntervalSeconds, cfg.RefreshDebounceMs, cfg.AgentWaitingThresholdMinutes, cfg.DetailLayout)
+`, cfg.HibernationDays, cfg.RefreshIntervalSeconds, cfg.RefreshDebounceMs, cfg.AgentWaitingThresholdMinutes, cfg.DetailLayout, cfg.MaxContentWidth)
 
 	return os.WriteFile(l.configPath, []byte(content), 0644)
 }
@@ -205,6 +207,10 @@ func (l *ViperLoader) mapViperToConfig() *ports.Config {
 	if l.v.IsSet("settings.use_emoji") {
 		useEmoji := l.v.GetBool("settings.use_emoji")
 		cfg.UseEmoji = &useEmoji
+	}
+	// Story 8.10: Read max_content_width setting
+	if l.v.IsSet("settings.max_content_width") {
+		cfg.MaxContentWidth = l.v.GetInt("settings.max_content_width")
 	}
 
 	// Map projects if present
@@ -319,6 +325,15 @@ func (l *ViperLoader) fixInvalidValues(cfg *ports.Config) *ports.Config {
 			"invalid_value", cfg.DetailLayout,
 			"default_value", defaults.DetailLayout)
 		cfg.DetailLayout = defaults.DetailLayout
+	}
+
+	// Fix invalid max_content_width (Story 8.10)
+	if cfg.MaxContentWidth < 0 {
+		slog.Warn("invalid max_content_width, using default",
+			"path", l.configPath,
+			"invalid_value", cfg.MaxContentWidth,
+			"default_value", defaults.MaxContentWidth)
+		cfg.MaxContentWidth = defaults.MaxContentWidth
 	}
 
 	return cfg

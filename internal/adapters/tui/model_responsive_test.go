@@ -356,22 +356,31 @@ func TestModel_ShortTerminal_NoDetailHint(t *testing.T) {
 }
 
 // Code review fix: Test helper functions
+// Story 8.10: isWideWidth is now a method on Model using config-based maxContentWidth
 func TestIsWideWidth(t *testing.T) {
 	tests := []struct {
-		width    int
-		expected bool
+		width           int
+		maxContentWidth int
+		expected        bool
 	}{
-		{100, false}, // Standard width
-		{120, false}, // At max boundary
-		{121, true},  // Just over max
-		{150, true},  // Wide
-		{200, true},  // Very wide
+		{100, 120, false}, // Standard width, default max
+		{120, 120, false}, // At max boundary
+		{121, 120, true},  // Just over max
+		{150, 120, true},  // Wide
+		{200, 120, true},  // Very wide
+		{200, 0, false},   // Unlimited (0) - always returns false
+		{100, 80, true},   // Custom max (80), width > max
+		{80, 80, false},   // Custom max (80), width = max
 	}
 
 	for _, tt := range tests {
-		result := isWideWidth(tt.width)
+		m := NewModel(nil)
+		m.width = tt.width
+		m.maxContentWidth = tt.maxContentWidth
+		result := m.isWideWidth()
 		if result != tt.expected {
-			t.Errorf("isWideWidth(%d) = %v, want %v", tt.width, result, tt.expected)
+			t.Errorf("isWideWidth() with width=%d, maxContentWidth=%d = %v, want %v",
+				tt.width, tt.maxContentWidth, result, tt.expected)
 		}
 	}
 }
@@ -392,6 +401,41 @@ func TestStatusBarHeight(t *testing.T) {
 		result := statusBarHeight(tt.height)
 		if result != tt.expected {
 			t.Errorf("statusBarHeight(%d) = %v, want %v", tt.height, result, tt.expected)
+		}
+	}
+}
+
+// Story 8.10: Test max_content_width=0 (unlimited/full-width mode)
+func TestModel_FullWidthMode_MaxContentWidthZero(t *testing.T) {
+	repo := &favoriteMockRepository{}
+	repo.projects = []*domain.Project{{ID: "1", Path: "/test", Name: "test-project"}}
+
+	m := NewModel(repo)
+	m.maxContentWidth = 0 // Unlimited mode
+	m.width = 200         // Very wide terminal
+	m.height = 40
+	m.ready = true
+	m.projects = repo.projects
+	m.projectList = components.NewProjectListModel(repo.projects, 200, 38)
+	m.statusBar = components.NewStatusBarModel(200)
+
+	// isWideWidth should return false for unlimited mode
+	if m.isWideWidth() {
+		t.Error("isWideWidth() should return false when maxContentWidth=0 (unlimited)")
+	}
+
+	// Render should use full width (no centering)
+	view := m.View()
+
+	// View should not be centered (no lipgloss.Place padding)
+	// This is a basic check - the content should start at the left edge
+	lines := strings.Split(view, "\n")
+	if len(lines) > 0 {
+		firstLine := lines[0]
+		// In unlimited mode, first character should not be spaces from centering
+		// (unless it's part of the content itself)
+		if len(firstLine) > 0 && strings.HasPrefix(firstLine, "                    ") {
+			t.Error("in unlimited mode, content should not be centered with padding")
 		}
 	}
 }

@@ -813,3 +813,61 @@ func TestConfig_RemoveProject(t *testing.T) {
 
 // Compile-time interface compliance check (Subtask 3.6)
 var _ ports.ProjectPathLookup = (*ports.Config)(nil)
+
+// Story 8.10: MaxContentWidth validation tests
+func TestConfig_Validate_MaxContentWidth(t *testing.T) {
+	tests := []struct {
+		name            string
+		maxContentWidth int
+		wantErr         bool
+	}{
+		{
+			name:            "zero is valid (unlimited)",
+			maxContentWidth: 0,
+			wantErr:         false,
+		},
+		{
+			name:            "positive is valid",
+			maxContentWidth: 120,
+			wantErr:         false,
+		},
+		{
+			name:            "large positive is valid",
+			maxContentWidth: 300,
+			wantErr:         false,
+		},
+		{
+			name:            "negative is invalid",
+			maxContentWidth: -1,
+			wantErr:         true,
+		},
+		{
+			name:            "large negative is invalid",
+			maxContentWidth: -100,
+			wantErr:         true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := ports.NewConfig()
+			config.MaxContentWidth = tt.maxContentWidth
+			err := config.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil && !errors.Is(err, domain.ErrConfigInvalid) {
+				t.Errorf("Validate() error should wrap domain.ErrConfigInvalid, got %v", err)
+			}
+		})
+	}
+}
+
+// Story 8.10: MaxContentWidth default test
+func TestNewConfig_MaxContentWidth_Default(t *testing.T) {
+	config := ports.NewConfig()
+
+	if config.MaxContentWidth != 120 {
+		t.Errorf("MaxContentWidth = %d, want 120", config.MaxContentWidth)
+	}
+}

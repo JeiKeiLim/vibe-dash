@@ -568,25 +568,38 @@ func TestProjectItemDelegate_RendersStageInfo_Unknown(t *testing.T) {
 }
 
 func TestProjectItemDelegate_StageColumnWidth_Responsive(t *testing.T) {
+	// Story 8.10: stageColumnWidth now uses percentage-based calculation
+	// Calculate expected widths based on the new formula
 	tests := []struct {
-		name        string
-		width       int
-		expectWidth int
+		name           string
+		width          int
+		expectMinWidth int  // Minimum expected width
+		expectMaxWidth int  // Maximum expected width
+		expectHidden   bool // Should be hidden (width < 80)
 	}{
-		{"full width 100", 100, colStageFull},
-		{"full width 120", 120, colStageFull},
-		{"short width 90", 90, colStageShort},
-		{"short width 80", 80, colStageShort},
-		{"hidden width 79", 79, 0},
-		{"hidden width 50", 50, 0},
+		{"full width 100", 100, colStageMin, colStageMax, false},   // 40% of (100-20) = 32
+		{"full width 120", 120, colStageMin, colStageMax, false},   // 40% of (120-20) = 40
+		{"wide width 200", 200, colStageMin, colStageMax, false},   // 40% of (200-20) = 72
+		{"ultra wide 300", 300, colStageMin, colStageMax, false},   // capped at colStageMax (80)
+		{"short width 90", 90, colStageMin, colStageMax, false},    // 40% of (90-20) = 28
+		{"boundary width 80", 80, colStageMin, colStageMax, false}, // 40% of (80-20) = 24
+		{"hidden width 79", 79, 0, 0, true},
+		{"hidden width 50", 50, 0, 0, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			delegate := NewProjectItemDelegate(tt.width)
 			gotWidth := delegate.stageColumnWidth()
-			if gotWidth != tt.expectWidth {
-				t.Errorf("stageColumnWidth() = %d, want %d", gotWidth, tt.expectWidth)
+			if tt.expectHidden {
+				if gotWidth != 0 {
+					t.Errorf("stageColumnWidth() = %d, want 0 (hidden)", gotWidth)
+				}
+			} else {
+				if gotWidth < tt.expectMinWidth || gotWidth > tt.expectMaxWidth {
+					t.Errorf("stageColumnWidth() = %d, want between %d and %d",
+						gotWidth, tt.expectMinWidth, tt.expectMaxWidth)
+				}
 			}
 		})
 	}
@@ -639,5 +652,44 @@ func TestProjectItemDelegate_StageHiddenAtNarrowWidth(t *testing.T) {
 	// Should NOT contain stage info at narrow width
 	if strings.Contains(output, "E8 S8.3") {
 		t.Errorf("Render() should NOT contain stage info at narrow width, got: %q", output)
+	}
+}
+
+// Story 8.10: Test waitingColumnWidth respects min/max constraints
+func TestProjectItemDelegate_WaitingColumnWidth_Responsive(t *testing.T) {
+	tests := []struct {
+		name           string
+		width          int
+		expectMinWidth int // Minimum expected width
+		expectMaxWidth int // Maximum expected width
+	}{
+		{"normal width 80", 80, colWaitingMin, colWaitingMax},     // 20% of (80-20)=12, capped to min 19
+		{"wide width 120", 120, colWaitingMin, colWaitingMax},     // 20% of (120-20)=20
+		{"ultra wide 200", 200, colWaitingMin, colWaitingMax},     // 20% of (200-20)=36, capped to max 25
+		{"ultra wide 300", 300, colWaitingMax, colWaitingMax},     // Capped at colWaitingMax (25)
+		{"narrow width 60", 60, colWaitingMin, colWaitingMin + 5}, // 20% of 40=8, capped to min 19
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			delegate := NewProjectItemDelegate(tt.width)
+			gotWidth := delegate.waitingColumnWidth()
+
+			if gotWidth < tt.expectMinWidth || gotWidth > tt.expectMaxWidth {
+				t.Errorf("waitingColumnWidth() = %d, want between %d and %d",
+					gotWidth, tt.expectMinWidth, tt.expectMaxWidth)
+			}
+		})
+	}
+}
+
+// Story 8.10: Verify colWaitingMax cap is applied at ultra-wide widths
+func TestProjectItemDelegate_WaitingColumnWidth_MaxCap(t *testing.T) {
+	// At width 300, available = 280, 20% = 56 -> should be capped at 25
+	delegate := NewProjectItemDelegate(300)
+	gotWidth := delegate.waitingColumnWidth()
+
+	if gotWidth != colWaitingMax {
+		t.Errorf("waitingColumnWidth() at ultra-wide = %d, want max %d", gotWidth, colWaitingMax)
 	}
 }

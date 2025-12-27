@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-27
-updated_by: Dev Agent - Story 8.9 done (code review fixes applied)
+updated_by: SM - Story 8.10 validated (code review passed, test coverage improved)
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -228,7 +228,7 @@ development_status:
   8-9-visual-polish-bundle: done
   # Added via correct-course workflow 2025-12-26
   # Triggered by: User feedback during Story 8.4 code review
-  8-10-full-width-layout-column-rebalancing: backlog
+  8-10-full-width-layout-column-rebalancing: done
   8-11-periodic-stage-redetection: backlog
   # Added from Story 8.6 manual testing feedback 2025-12-26
   # Issues: height priority, anchor points, margin between components

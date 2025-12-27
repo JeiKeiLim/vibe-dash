@@ -18,19 +18,33 @@ import (
 
 // Column widths for project row layout
 const (
-	colSelection = 2  // "> " or "  "
-	colFavorite  = 2  // styled "⭐" or "  " (Story 3.8)
-	colNameMin   = 15 // Minimum name width
-	colIndicator = 3  // "✨ " or "⚡ " or "   "
-	colStage     = 16 // "E8 S8.3 review" needs 14, allow 16 for padding (Story 8.3)
-	colWaiting   = 14 // "⏸️ WAITING Xh" or empty
-	colTime      = 8  // "2w ago" max
+	colSelection = 2 // "> " or "  "
+	colFavorite  = 2 // styled "⭐" or "  " (Story 3.8)
+	colIndicator = 3 // "✨ " or "⚡ " or "   "
+	colTime      = 8 // "2w ago" max
+
+	// Fixed spacing between columns
+	colSpacing = 5 // 1 (after name) + 1 (after indicator) + 1 (after stage) + 1 (after waiting) + 1 (before time)
+
+	// Column width percentages (of available width after fixed columns) - Story 8.10
+	colNamePct   = 25 // ~25% for project name
+	colStagePct  = 40 // ~40% for stage info (needs space for "E8 S8.3 review")
+	colStatusPct = 20 // ~20% for waiting status (fit "WAITING 2h 30m")
+	// Remaining ~15% for activity time (fixed at 8 chars)
+
+	// Column minimum widths
+	colNameMin    = 10 // Minimum name width
+	colStageMin   = 10 // Minimum stage width
+	colWaitingMin = 19 // Minimum waiting width (fits "[W] WAITING 23h 59m")
+
+	// Column maximum widths - prevent absurd stretching on ultra-wide (Story 8.10 AC6)
+	colNameMax    = 40 // Project name max
+	colStageMax   = 80 // Stage info max (E8 S8.10 + full status = ~40, double for safety)
+	colWaitingMax = 25 // Waiting status max ("[W] WAITING 23h 59m" = 19 chars)
 
 	// Width breakpoints for responsive stage display (Story 8.3)
 	widthBreakpointFull  = 100 // >= 100: Full stage info "E8 S8.3 review"
 	widthBreakpointShort = 80  // 80-99: Shortened "E8 S8.3"
-	colStageShort        = 10  // Column width for shortened stage
-	colStageFull         = 16  // Column width for full stage
 )
 
 // WaitingChecker checks if a project is waiting.
@@ -112,14 +126,27 @@ func (d ProjectItemDelegate) Render(w io.Writer, m list.Model, index int, listIt
 
 // stageColumnWidth returns the stage column width based on terminal width.
 // Story 8.3: Responsive breakpoints for stage display.
+// Story 8.10: Uses percentage-based calculation with max cap.
 func (d ProjectItemDelegate) stageColumnWidth() int {
-	if d.width >= widthBreakpointFull {
-		return colStageFull // Full stage info: "E8 S8.3 review"
+	if d.width < widthBreakpointShort {
+		return 0 // Hidden at narrow widths
 	}
-	if d.width >= widthBreakpointShort {
-		return colStageShort // Shortened: "E8 S8.3"
+
+	// Calculate available width after fixed columns
+	availableWidth := d.availableWidth()
+
+	// Calculate stage width from percentage
+	stageWidth := int(float64(availableWidth) * float64(colStagePct) / 100.0)
+
+	// Apply min/max constraints
+	if stageWidth < colStageMin {
+		stageWidth = colStageMin
 	}
-	return 0 // Hidden at narrow widths
+	if stageWidth > colStageMax {
+		stageWidth = colStageMax
+	}
+
+	return stageWidth
 }
 
 // showStageColumn returns true if stage column should be shown.
@@ -128,28 +155,57 @@ func (d ProjectItemDelegate) showStageColumn() bool {
 	return d.width >= widthBreakpointShort
 }
 
-// calculateNameWidth calculates the dynamic name column width based on terminal width.
-func (d ProjectItemDelegate) calculateNameWidth() int {
-	// Calculate available space for name
-	// width - selection - favorite - indicator - stage - waiting - time - spacing (Story 3.8: added favorite)
-	// Spacing breakdown: 5 = 1 (after name) + 1 (after indicator) + 1 (after stage) + 1 (after waiting) + 1 (before time)
-	// Story 8.3: Stage column size is responsive
-	stageWidth := d.stageColumnWidth()
-	nameWidth := d.width - colSelection - colFavorite - colIndicator - stageWidth - colWaiting - colTime - 5
-
-	// Story 8.3: If stage is hidden, reclaim that space
-	if !d.showStageColumn() {
-		nameWidth += 1 // Reclaim the space after stage column
+// availableWidth returns the width available for dynamic columns (name, stage, waiting).
+// Story 8.10: Subtracts fixed columns (selection, favorite, indicator, time, spacing).
+func (d ProjectItemDelegate) availableWidth() int {
+	// Fixed columns: selection(2) + favorite(2) + indicator(3) + time(8) + spacing(5) = 20
+	fixedWidth := colSelection + colFavorite + colIndicator + colTime + colSpacing
+	available := d.width - fixedWidth
+	if available < 0 {
+		return 0
 	}
+	return available
+}
 
+// calculateNameWidth calculates the dynamic name column width based on terminal width.
+// Story 8.10: Uses percentage-based calculation with min/max constraints.
+// Name truncates first to preserve stage info readability (AC2).
+func (d ProjectItemDelegate) calculateNameWidth() int {
+	// Calculate available width after fixed columns
+	availableWidth := d.availableWidth()
+
+	// Calculate name width from percentage
+	nameWidth := int(float64(availableWidth) * float64(colNamePct) / 100.0)
+
+	// Apply min/max constraints (Story 8.10 AC6)
 	if nameWidth < colNameMin {
 		nameWidth = colNameMin
 	}
-	if nameWidth < 1 {
-		nameWidth = 1 // Absolute minimum to prevent negative widths
+	if nameWidth > colNameMax {
+		nameWidth = colNameMax
 	}
 
 	return nameWidth
+}
+
+// waitingColumnWidth calculates the waiting column width.
+// Story 8.10: Uses percentage-based calculation with min/max constraints.
+func (d ProjectItemDelegate) waitingColumnWidth() int {
+	// Calculate available width after fixed columns
+	availableWidth := d.availableWidth()
+
+	// Calculate waiting width from percentage
+	waitingWidth := int(float64(availableWidth) * float64(colStatusPct) / 100.0)
+
+	// Apply min/max constraints (Story 8.10 AC6)
+	if waitingWidth < colWaitingMin {
+		waitingWidth = colWaitingMin
+	}
+	if waitingWidth > colWaitingMax {
+		waitingWidth = colWaitingMax
+	}
+
+	return waitingWidth
 }
 
 // renderRow renders a single project row with all columns.
@@ -203,13 +259,14 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 		sb.WriteString(" ")
 	}
 
-	// WAITING indicator (Story 4.5)
+	// WAITING indicator (Story 4.5, Story 8.10: dynamic width)
+	waitingWidth := d.waitingColumnWidth()
 	waiting := d.waitingIndicator(item.Project)
 	if waiting != "" {
-		waitingStr := fmt.Sprintf("%-*s", colWaiting, waiting)
+		waitingStr := fmt.Sprintf("%-*s", waitingWidth, waiting)
 		sb.WriteString(styles.WaitingStyle.Render(waitingStr))
 	} else {
-		sb.WriteString(fmt.Sprintf("%-*s", colWaiting, ""))
+		sb.WriteString(fmt.Sprintf("%-*s", waitingWidth, ""))
 	}
 	sb.WriteString(" ")
 

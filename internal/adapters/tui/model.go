@@ -95,6 +95,9 @@ type Model struct {
 
 	// Story 8.7: Config for help overlay display
 	config *ports.Config
+
+	// Story 8.10: Max content width from config (0 = unlimited)
+	maxContentWidth int
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -224,6 +227,7 @@ type projectCorruptionMsg struct {
 // NewModel creates a new Model with default values.
 // The repository parameter is used for project persistence operations.
 func NewModel(repo ports.ProjectRepository) Model {
+	defaults := ports.NewConfig()
 	return Model{
 		ready:           false,
 		showHelp:        false,
@@ -232,6 +236,7 @@ func NewModel(repo ports.ProjectRepository) Model {
 		repository:      repo,
 		statusBar:       components.NewStatusBarModel(0), // Width set in resizeTickMsg
 		detailLayout:    "horizontal",                    // Story 8.6: Default layout mode
+		maxContentWidth: defaults.MaxContentWidth,        // Story 8.10: Default from config
 	}
 }
 
@@ -269,7 +274,7 @@ func (m Model) isHorizontalLayout() bool {
 	return m.detailLayout == "horizontal"
 }
 
-// SetConfig stores config for help overlay display (Story 8.7).
+// SetConfig stores config for help overlay display and max content width (Story 8.7, 8.10).
 // Config passed as parameter to avoid cli→tui→cli import cycle.
 // Nil-safe: stores defaults if cfg is nil.
 func (m *Model) SetConfig(cfg *ports.Config) {
@@ -277,6 +282,7 @@ func (m *Model) SetConfig(cfg *ports.Config) {
 		cfg = ports.NewConfig()
 	}
 	m.config = cfg
+	m.maxContentWidth = cfg.MaxContentWidth // Story 8.10
 }
 
 // isProjectWaiting wraps WaitingDetector.IsWaiting for component callbacks.
@@ -311,10 +317,14 @@ func isNarrowWidth(width int) bool {
 	return width >= MinWidth && width < 80
 }
 
-// isWideWidth returns true if terminal width exceeds MaxContentWidth (>120).
-// Used for Story 3.10 AC4 content capping and centering.
-func isWideWidth(width int) bool {
-	return width > MaxContentWidth
+// isWideWidth returns true if terminal width exceeds config max_content_width.
+// Story 3.10 AC4: Content capping and centering.
+// Story 8.10: Uses config-based maxContentWidth (0 = unlimited, always returns false).
+func (m Model) isWideWidth() bool {
+	if m.maxContentWidth == 0 {
+		return false // Unlimited width mode
+	}
+	return m.width > m.maxContentWidth
 }
 
 // statusBarHeight returns the status bar height based on terminal height.
@@ -487,10 +497,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// FIRST: Set condensed mode (affects status bar height) - Story 3.10 AC5
 			m.statusBar.SetCondensed(m.height < MinHeight)
 
-			// Calculate effective width for components (cap at MaxContentWidth - Story 3.10 AC4)
+			// Calculate effective width for components (cap at maxContentWidth - Story 3.10 AC4, 8.10)
 			effectiveWidth := m.width
-			if isWideWidth(m.width) {
-				effectiveWidth = MaxContentWidth
+			if m.isWideWidth() {
+				effectiveWidth = m.maxContentWidth
 			}
 
 			// Update status bar width with effective width (Story 3.4, 3.10)
@@ -605,10 +615,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.projects = msg.projects
 		if len(m.projects) > 0 {
-			// Story 8.4: Use effectiveWidth instead of raw m.width to cap at MaxContentWidth
+			// Story 8.4, 8.10: Use effectiveWidth instead of raw m.width to cap at maxContentWidth
 			effectiveWidth := m.width
-			if isWideWidth(m.width) {
-				effectiveWidth = MaxContentWidth
+			if m.isWideWidth() {
+				effectiveWidth = m.maxContentWidth
 			}
 			contentHeight := m.height - statusBarHeight(m.height)
 			m.projectList = components.NewProjectListModel(m.projects, effectiveWidth, contentHeight)
@@ -1348,11 +1358,11 @@ func (m Model) View() string {
 
 // renderDashboard renders the main dashboard with project list, optional detail panel, and status bar.
 func (m Model) renderDashboard() string {
-	// Calculate effective width (cap at MaxContentWidth for wide terminals - Story 3.10 AC4)
-	// Note: isNarrowWidth (60-79) and isWideWidth (>120) are mutually exclusive
+	// Calculate effective width (cap at maxContentWidth for wide terminals - Story 3.10 AC4, 8.10)
+	// Note: isNarrowWidth (60-79) and isWideWidth (>maxContentWidth) are mutually exclusive
 	effectiveWidth := m.width
-	if isWideWidth(m.width) {
-		effectiveWidth = MaxContentWidth
+	if m.isWideWidth() {
+		effectiveWidth = m.maxContentWidth
 	}
 
 	// Reserve lines for status bar using helper (Story 3.10 AC5)
@@ -1384,8 +1394,8 @@ func (m Model) renderDashboard() string {
 	// Join content
 	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
-	// Center content if terminal is wider than MaxContentWidth (Story 3.10 AC4)
-	if isWideWidth(m.width) {
+	// Center content if terminal is wider than maxContentWidth (Story 3.10 AC4, 8.10)
+	if m.isWideWidth() {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Top, content)
 	}
 

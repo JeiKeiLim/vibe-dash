@@ -38,6 +38,10 @@ type Config struct {
 	// nil = auto-detect from TERM, true = force emoji, false = force fallback
 	UseEmoji *bool
 
+	// MaxContentWidth caps TUI content width for readability on wide monitors (Story 8.10)
+	// Default: 120. Set to 0 for unlimited (full terminal width).
+	MaxContentWidth int
+
 	// Projects contains per-project configuration overrides
 	// Key is the directory name (v2 format uses directory_name as map key)
 	Projects map[string]ProjectConfig
@@ -83,6 +87,7 @@ func NewConfig() *Config {
 		RefreshDebounceMs:            200,
 		AgentWaitingThresholdMinutes: 10,
 		DetailLayout:                 "horizontal",
+		MaxContentWidth:              120, // Story 8.10: default cap for readability
 		Projects:                     make(map[string]ProjectConfig),
 	}
 }
@@ -198,6 +203,11 @@ func (c *Config) Validate() error {
 	// Validate detail_layout (Story 8.6)
 	if c.DetailLayout != "vertical" && c.DetailLayout != "horizontal" {
 		return fmt.Errorf("%w: detail_layout must be 'vertical' or 'horizontal', got %q", domain.ErrConfigInvalid, c.DetailLayout)
+	}
+
+	// Validate max_content_width (Story 8.10)
+	if c.MaxContentWidth < 0 {
+		return fmt.Errorf("%w: max_content_width must be >= 0, got %d", domain.ErrConfigInvalid, c.MaxContentWidth)
 	}
 
 	// Validate per-project overrides
