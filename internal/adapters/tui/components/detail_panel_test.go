@@ -20,7 +20,6 @@ func TestDetailPanel_View_BasicFields(t *testing.T) {
 		DisplayName:        "My Test Project",
 		DetectedMethod:     "speckit",
 		CurrentStage:       domain.StagePlan,
-		Confidence:         domain.ConfidenceCertain,
 		DetectionReasoning: "plan.md exists, no tasks.md",
 		Notes:              "Some notes here",
 		CreatedAt:          createdAt,
@@ -42,7 +41,6 @@ func TestDetailPanel_View_BasicFields(t *testing.T) {
 		{"path field", "/home/user/projects/test-project"},
 		{"method field", "speckit"},
 		{"stage field", "Plan"},
-		{"confidence field", "Certain"},
 		{"detection field", "plan.md exists, no tasks.md"},
 		{"notes field", "Some notes here"},
 		{"added date", "2025-12-01"},
@@ -55,6 +53,13 @@ func TestDetailPanel_View_BasicFields(t *testing.T) {
 			}
 		})
 	}
+
+	// Story 8.8: Verify Confidence field is NOT shown in TUI
+	t.Run("confidence field removed", func(t *testing.T) {
+		if strings.Contains(view, "Confidence:") {
+			t.Errorf("view should NOT contain 'Confidence:' field (removed in Story 8.8), got:\n%s", view)
+		}
+	})
 }
 
 func TestDetailPanel_View_EmptyNotes(t *testing.T) {
@@ -64,7 +69,6 @@ func TestDetailPanel_View_EmptyNotes(t *testing.T) {
 		Path:           "/home/user/test",
 		DetectedMethod: "speckit",
 		CurrentStage:   domain.StagePlan,
-		Confidence:     domain.ConfidenceCertain,
 		Notes:          "", // Empty notes
 		CreatedAt:      time.Now(),
 		LastActivityAt: time.Now(),
@@ -78,31 +82,6 @@ func TestDetailPanel_View_EmptyNotes(t *testing.T) {
 
 	if !strings.Contains(view, "(none)") {
 		t.Errorf("view should show '(none)' for empty notes, got:\n%s", view)
-	}
-}
-
-func TestDetailPanel_View_UncertainConfidence(t *testing.T) {
-	project := &domain.Project{
-		ID:                 "abc123",
-		Name:               "test-project",
-		Path:               "/home/user/test",
-		DetectedMethod:     "speckit",
-		CurrentStage:       domain.StagePlan,
-		Confidence:         domain.ConfidenceUncertain,
-		DetectionReasoning: "Unable to determine stage",
-		CreatedAt:          time.Now(),
-		LastActivityAt:     time.Now(),
-	}
-
-	panel := NewDetailPanelModel(60, 20)
-	panel.SetProject(project)
-	panel.SetVisible(true)
-
-	view := panel.View()
-
-	// Should contain "Uncertain" (styled or not)
-	if !strings.Contains(view, "Uncertain") {
-		t.Errorf("view should show 'Uncertain' for uncertain confidence, got:\n%s", view)
 	}
 }
 
@@ -162,7 +141,6 @@ func TestDetailPanel_View_EmptyDetectionReasoning(t *testing.T) {
 		Path:               "/home/user/test",
 		DetectedMethod:     "speckit",
 		CurrentStage:       domain.StagePlan,
-		Confidence:         domain.ConfidenceCertain,
 		DetectionReasoning: "", // Empty reasoning
 		CreatedAt:          time.Now(),
 		LastActivityAt:     time.Now(),
@@ -199,30 +177,6 @@ func TestDetailPanel_View_NotVisible(t *testing.T) {
 	}
 }
 
-func TestDetailPanel_View_LikelyConfidence(t *testing.T) {
-	project := &domain.Project{
-		ID:                 "abc123",
-		Name:               "test-project",
-		Path:               "/home/user/test",
-		DetectedMethod:     "speckit",
-		CurrentStage:       domain.StagePlan,
-		Confidence:         domain.ConfidenceLikely,
-		DetectionReasoning: "Some indicators present",
-		CreatedAt:          time.Now(),
-		LastActivityAt:     time.Now(),
-	}
-
-	panel := NewDetailPanelModel(60, 20)
-	panel.SetProject(project)
-	panel.SetVisible(true)
-
-	view := panel.View()
-
-	if !strings.Contains(view, "Likely") {
-		t.Errorf("view should show 'Likely' for likely confidence, got:\n%s", view)
-	}
-}
-
 // ============================================================================
 // Story 4.5: Waiting Field Tests
 // ============================================================================
@@ -234,7 +188,6 @@ func TestDetailPanel_View_WaitingField_Shown(t *testing.T) {
 		Path:           "/home/user/test",
 		DetectedMethod: "speckit",
 		CurrentStage:   domain.StageImplement,
-		Confidence:     domain.ConfidenceCertain,
 		CreatedAt:      time.Now(),
 		LastActivityAt: time.Now().Add(-2*time.Hour - 15*time.Minute),
 	}
@@ -267,7 +220,6 @@ func TestDetailPanel_View_WaitingField_Hidden(t *testing.T) {
 		Path:           "/home/user/test",
 		DetectedMethod: "speckit",
 		CurrentStage:   domain.StageImplement,
-		Confidence:     domain.ConfidenceCertain,
 		CreatedAt:      time.Now(),
 		LastActivityAt: time.Now(),
 	}
@@ -296,7 +248,6 @@ func TestDetailPanel_View_WaitingField_NilCallbacks(t *testing.T) {
 		Path:           "/home/user/test",
 		DetectedMethod: "speckit",
 		CurrentStage:   domain.StageImplement,
-		Confidence:     domain.ConfidenceCertain,
 		CreatedAt:      time.Now(),
 		LastActivityAt: time.Now().Add(-2 * time.Hour),
 	}

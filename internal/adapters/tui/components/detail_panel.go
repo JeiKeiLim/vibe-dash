@@ -124,9 +124,6 @@ func (m DetailPanelModel) renderProject() string {
 	}
 	lines = append(lines, formatField("Stage", stage))
 
-	// Confidence (with style for uncertain)
-	lines = append(lines, formatField("Confidence", renderConfidence(p.Confidence)))
-
 	// Detection reasoning
 	reasoning := p.DetectionReasoning
 	if reasoning == "" {
@@ -185,19 +182,4 @@ func formatField(label, value string) string {
 		Width(labelWidth).
 		Render(label + ":")
 	return paddedLabel + " " + value
-}
-
-// renderConfidence returns the confidence level with appropriate styling.
-func renderConfidence(conf domain.Confidence) string {
-	switch conf {
-	case domain.ConfidenceCertain:
-		return "Certain"
-	case domain.ConfidenceLikely:
-		return "Likely"
-	case domain.ConfidenceUncertain:
-		// Apply shared UncertainStyle
-		return styles.UncertainStyle.Render("Uncertain")
-	default:
-		return fmt.Sprintf("Unknown (%d)", conf)
-	}
 }
