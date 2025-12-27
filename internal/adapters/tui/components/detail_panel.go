@@ -24,6 +24,7 @@ type DetailPanelModel struct {
 	visible        bool
 	waitingChecker WaitingChecker        // nil = no waiting display (Story 4.5)
 	durationGetter WaitingDurationGetter // nil = no duration display (Story 4.5)
+	isHorizontal   bool                  // Story 8.12: Use horizontal border style when true
 }
 
 // NewDetailPanelModel creates a new DetailPanelModel with the given dimensions.
@@ -63,6 +64,12 @@ func (m *DetailPanelModel) SetSize(width, height int) {
 // SetVisible shows or hides the panel.
 func (m *DetailPanelModel) SetVisible(visible bool) {
 	m.visible = visible
+}
+
+// SetHorizontalMode sets horizontal layout mode for border styling (Story 8.12).
+// When true, uses HorizontalBorderStyle (no top border) to save vertical space.
+func (m *DetailPanelModel) SetHorizontalMode(horizontal bool) {
+	m.isHorizontal = horizontal
 }
 
 // IsVisible returns whether the panel is visible.
@@ -168,8 +175,14 @@ func (m DetailPanelModel) renderProject() string {
 	// Join lines
 	content := strings.Join(lines, "\n")
 
-	// Apply shared BorderStyle with dimensions
-	panelBorder := styles.BorderStyle.
+	// Story 8.12: Use HorizontalBorderStyle when in horizontal mode (saves 1 vertical line)
+	borderStyle := styles.BorderStyle
+	if m.isHorizontal {
+		borderStyle = styles.HorizontalBorderStyle
+	}
+
+	// Apply border style with dimensions
+	panelBorder := borderStyle.
 		Width(m.width-2).
 		Height(m.height-2).
 		Padding(0, 1)

@@ -547,6 +547,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
 				m.statusBar.SetCounts(active, hibernated, waiting)
 
+				// Code review fix M3: Set height hint for pendingProjects block (before early return)
+				if m.isHorizontalLayout() && m.showDetailPanel && contentHeight < HorizontalDetailThreshold {
+					m.statusBar.SetHeightHint("[d] Detail hidden - insufficient height")
+				} else {
+					m.statusBar.SetHeightHint("")
+				}
+
 				// Story 4.6: Start file watcher (code review H1: use helper)
 				watcherCmd := m.startFileWatcherForProjects()
 
@@ -562,6 +569,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.projectList.Width() > 0 {
 				m.projectList.SetSize(effectiveWidth, contentHeight)
 				m.detailPanel.SetSize(effectiveWidth, contentHeight)
+			}
+
+			// Story 8.12: Set height hint when detail is auto-hidden in horizontal mode (AC1)
+			if m.isHorizontalLayout() && m.showDetailPanel && contentHeight < HorizontalDetailThreshold {
+				m.statusBar.SetHeightHint("[d] Detail hidden - insufficient height")
+			} else {
+				m.statusBar.SetHeightHint("")
 			}
 		}
 		return m, nil
@@ -1483,21 +1497,45 @@ func (m Model) renderMainContent(height int) string {
 
 // renderHorizontalSplit renders project list above detail panel (top/bottom).
 // Story 8.6: Used when config detail_layout=horizontal.
+// Story 8.12: Implements height-priority algorithm - list prioritized over detail.
 func (m Model) renderHorizontalSplit(height int) string {
-	// Calculate heights: 60% list, 40% detail
-	listHeight := int(float64(height) * 0.6)
-	detailHeight := height - listHeight
+	// Story 8.12: Height-priority algorithm
+	// Priority: project list always visible, detail panel collapsible
+	var listHeight, detailHeight int
+	showDetail := true
+
+	if height < HorizontalDetailThreshold {
+		// Insufficient height - hide detail, give all to list
+		showDetail = false
+		listHeight = height
+	} else if height < HorizontalComfortableThreshold {
+		// Tight fit - minimum detail, rest to list
+		detailHeight = MinDetailHeightHorizontal
+		listHeight = height - detailHeight
+	} else {
+		// Comfortable - use 60/40 split
+		listHeight = int(float64(height) * 0.6)
+		detailHeight = height - listHeight
+	}
 
 	// Create copies with updated sizes - full width for horizontal layout
 	projectList := m.projectList
 	projectList.SetSize(m.width, listHeight)
 
+	// Story 8.12 AC3: Enforce fixed heights with lipgloss.Height() for anchor stability
+	listContainer := lipgloss.NewStyle().Height(listHeight)
+	listView := listContainer.Render(projectList.View())
+
+	if !showDetail {
+		return listView
+	}
+
 	detailPanel := m.detailPanel
+	detailPanel.SetHorizontalMode(true) // Story 8.12: Use horizontal border style (AC4)
 	detailPanel.SetSize(m.width, detailHeight)
 
-	// Render stacked vertically
-	listView := projectList.View()
-	detailView := detailPanel.View()
+	detailContainer := lipgloss.NewStyle().Height(detailHeight)
+	detailView := detailContainer.Render(detailPanel.View())
 
 	return lipgloss.JoinVertical(lipgloss.Left, listView, detailView)
 }

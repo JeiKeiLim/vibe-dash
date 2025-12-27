@@ -25,6 +25,18 @@ func NarrowWarning() string {
 // HeightThresholdTall is the terminal height at which detail panel opens by default (Story 3.10 AC6/AC7).
 const HeightThresholdTall = 35
 
+// Story 8.12: Horizontal layout height thresholds
+const (
+	// MinListHeightHorizontal is minimum lines for project list in horizontal mode
+	MinListHeightHorizontal = 10
+	// MinDetailHeightHorizontal is minimum lines for detail panel in horizontal mode
+	MinDetailHeightHorizontal = 6
+	// HorizontalDetailThreshold is the height at which both list and detail fit
+	HorizontalDetailThreshold = MinListHeightHorizontal + MinDetailHeightHorizontal // 16
+	// HorizontalComfortableThreshold is height at which full 60/40 split is used (code review L1)
+	HorizontalComfortableThreshold = 30
+)
+
 // renderEmptyView renders the welcome screen when no projects are present.
 func renderEmptyView(width, height int) string {
 	// Build the content

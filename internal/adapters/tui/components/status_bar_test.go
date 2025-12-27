@@ -1015,3 +1015,73 @@ func TestStatusBarModel_LoadingCleared(t *testing.T) {
 		t.Errorf("expected normal counts after loading cleared, got: %s", view)
 	}
 }
+
+// =============================================================================
+// Story 8.12: Height Hint Tests
+// =============================================================================
+
+// TestStatusBarModel_SetHeightHint tests SetHeightHint method (AC1).
+func TestStatusBarModel_SetHeightHint(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+
+	// Initially no hint
+	view := sb.View()
+	if strings.Contains(view, "Detail hidden") {
+		t.Error("expected no height hint initially")
+	}
+
+	// Set hint
+	sb.SetHeightHint("[d] Detail hidden - insufficient height")
+	view = sb.View()
+	if !strings.Contains(view, "Detail hidden") {
+		t.Errorf("expected height hint to appear, got: %s", view)
+	}
+}
+
+// TestStatusBarModel_HeightHint_CondensedMode tests height hint in condensed mode.
+func TestStatusBarModel_HeightHint_CondensedMode(t *testing.T) {
+	sb := NewStatusBarModel(80)
+	sb.SetCounts(5, 3, 0)
+	sb.SetCondensed(true)
+	sb.SetHeightHint("[d] Detail hidden - insufficient height")
+
+	view := sb.View()
+
+	// Should show abbreviated hint "[d] hidden" in condensed mode
+	if !strings.Contains(view, "[d] hidden") {
+		t.Errorf("condensed view should show abbreviated height hint '[d] hidden', got: %s", view)
+	}
+}
+
+// TestStatusBarModel_HeightHint_ClearHint tests clearing height hint.
+func TestStatusBarModel_HeightHint_ClearHint(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetHeightHint("[d] Detail hidden - insufficient height")
+
+	// Clear hint
+	sb.SetHeightHint("")
+	view := sb.View()
+	if strings.Contains(view, "Detail hidden") {
+		t.Error("expected height hint to be cleared")
+	}
+}
+
+// TestStatusBarModel_HeightHint_WithOtherWarnings tests height hint with other warnings.
+func TestStatusBarModel_HeightHint_WithOtherWarnings(t *testing.T) {
+	sb := NewStatusBarModel(100)
+	sb.SetCounts(5, 2, 0)
+	sb.SetWatcherWarning("⚠ File watching unavailable")
+	sb.SetHeightHint("[d] Detail hidden - insufficient height")
+
+	view := sb.View()
+
+	// Both should appear
+	if !strings.Contains(view, "File watching unavailable") {
+		t.Error("expected watcher warning to appear")
+	}
+	if !strings.Contains(view, "Detail hidden") {
+		t.Error("expected height hint to appear")
+	}
+}

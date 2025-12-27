@@ -2439,3 +2439,147 @@ func TestModel_RenderHorizontalSplit_Dimensions(t *testing.T) {
 		t.Error("renderHorizontalSplit should include project list content")
 	}
 }
+
+// Story 8.12: Horizontal layout height priority tests
+
+func TestRenderHorizontalSplit_HeightPriority_BelowThreshold(t *testing.T) {
+	// Given: height < HorizontalDetailThreshold (16)
+	m := NewModel(nil)
+	m.width = 100
+	m.height = 50
+	m.ready = true
+
+	projects := []*domain.Project{
+		{ID: "abc123", Name: "test-project", Path: "/test"},
+	}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, m.width, m.height)
+	m.showDetailPanel = true
+	m.detailLayout = "horizontal"
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.detailPanel.SetVisible(true)
+	m.detailPanel.SetProject(m.projectList.SelectedProject())
+
+	// When: render with height = 15 (below threshold)
+	result := m.renderHorizontalSplit(15)
+
+	// Then: detail hidden, only project list visible
+	// Detail panel uses BorderStyle which includes the project name in DETAILS
+	// Since detail is hidden, we should NOT see "DETAILS:" in output
+	// But we SHOULD see the project list content
+	if result == "" {
+		t.Error("renderHorizontalSplit should produce non-empty result even below threshold")
+	}
+	// Project list should still be visible
+	if !strings.Contains(result, "test-project") {
+		t.Error("renderHorizontalSplit should include project list content when detail is hidden")
+	}
+	// Code review fix M2: Verify detail IS actually hidden (negative assertion)
+	if strings.Contains(result, "DETAILS:") {
+		t.Error("renderHorizontalSplit should NOT show detail panel when height < threshold")
+	}
+}
+
+func TestRenderHorizontalSplit_HeightPriority_AtThreshold(t *testing.T) {
+	// Given: height == HorizontalDetailThreshold (16)
+	m := NewModel(nil)
+	m.width = 100
+	m.height = 50
+	m.ready = true
+
+	projects := []*domain.Project{
+		{ID: "abc124", Name: "threshold-project", Path: "/threshold"},
+	}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, m.width, m.height)
+	m.showDetailPanel = true
+	m.detailLayout = "horizontal"
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.detailPanel.SetVisible(true)
+	m.detailPanel.SetProject(m.projectList.SelectedProject())
+
+	// When: render with height = 16 (at threshold)
+	result := m.renderHorizontalSplit(16)
+
+	// Then: both visible, minimal split (10 list, 6 detail)
+	if result == "" {
+		t.Error("renderHorizontalSplit should produce non-empty result at threshold")
+	}
+	// Both components should be visible
+	if !strings.Contains(result, "threshold-project") {
+		t.Error("renderHorizontalSplit should include project list content at threshold")
+	}
+}
+
+func TestRenderHorizontalSplit_HeightPriority_Comfortable(t *testing.T) {
+	// Given: height >= 30 (comfortable)
+	m := NewModel(nil)
+	m.width = 100
+	m.height = 50
+	m.ready = true
+
+	projects := []*domain.Project{
+		{ID: "abc125", Name: "comfortable-project", Path: "/comfortable"},
+	}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, m.width, m.height)
+	m.showDetailPanel = true
+	m.detailLayout = "horizontal"
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.detailPanel.SetVisible(true)
+	m.detailPanel.SetProject(m.projectList.SelectedProject())
+
+	// When: render with height = 50 (comfortable)
+	result := m.renderHorizontalSplit(50)
+
+	// Then: use 60/40 split (30 list, 20 detail)
+	if result == "" {
+		t.Error("renderHorizontalSplit should produce non-empty result with comfortable height")
+	}
+	// Both components should be visible
+	if !strings.Contains(result, "comfortable-project") {
+		t.Error("renderHorizontalSplit should include project list content at comfortable height")
+	}
+}
+
+func TestRenderHorizontalSplit_AnchorStability(t *testing.T) {
+	// Given: multiple projects with different detail lengths
+	m := NewModel(nil)
+	m.width = 100
+	m.height = 50
+	m.ready = true
+
+	projects := []*domain.Project{
+		{ID: "abc126", Name: "short-notes", Path: "/short", Notes: "Brief"},
+		{ID: "abc127", Name: "long-notes", Path: "/long", Notes: "This is a very long note that takes up more space in the detail panel and may cause layout shifts if anchor points are not stable"},
+	}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, m.width, m.height)
+	m.showDetailPanel = true
+	m.detailLayout = "horizontal"
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.detailPanel.SetVisible(true)
+	m.detailPanel.SetProject(projects[0])
+
+	// Render with first project (short notes)
+	result1 := m.renderHorizontalSplit(50)
+
+	// Switch to second project (long notes)
+	m.detailPanel.SetProject(projects[1])
+	result2 := m.renderHorizontalSplit(50)
+
+	// Both should produce valid output
+	if result1 == "" || result2 == "" {
+		t.Error("renderHorizontalSplit should produce output for all projects")
+	}
+
+	// Height of rendered content should be consistent (anchor stability)
+	// Count newlines in both results
+	lines1 := strings.Count(result1, "\n")
+	lines2 := strings.Count(result2, "\n")
+
+	// With lipgloss.Height() enforcement, both should have the same number of lines
+	if lines1 != lines2 {
+		t.Errorf("Anchor stability: different line counts (%d vs %d) - list may shift on navigation", lines1, lines2)
+	}
+}

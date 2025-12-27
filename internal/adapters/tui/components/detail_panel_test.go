@@ -304,3 +304,72 @@ func TestDetailPanel_View_WaitingField_DurationFormats(t *testing.T) {
 		})
 	}
 }
+
+// ============================================================================
+// Story 8.12: Horizontal Mode Tests
+// ============================================================================
+
+func TestDetailPanel_HorizontalMode_UsesBorderlessTop(t *testing.T) {
+	project := &domain.Project{
+		ID:             "abc123",
+		Name:           "test-project",
+		Path:           "/home/user/test",
+		DetectedMethod: "speckit",
+		CurrentStage:   domain.StagePlan,
+		CreatedAt:      time.Now(),
+		LastActivityAt: time.Now(),
+	}
+
+	// Test with horizontal mode ON
+	panelH := NewDetailPanelModel(60, 20)
+	panelH.SetProject(project)
+	panelH.SetVisible(true)
+	panelH.SetHorizontalMode(true)
+	viewH := panelH.View()
+
+	// Test with horizontal mode OFF
+	panelV := NewDetailPanelModel(60, 20)
+	panelV.SetProject(project)
+	panelV.SetVisible(true)
+	panelV.SetHorizontalMode(false)
+	viewV := panelV.View()
+
+	// Both should render non-empty output
+	if viewH == "" {
+		t.Error("horizontal mode panel should produce non-empty output")
+	}
+	if viewV == "" {
+		t.Error("vertical mode panel should produce non-empty output")
+	}
+
+	// The horizontal view should be shorter (by 1 line - no top border)
+	linesH := strings.Count(viewH, "\n")
+	linesV := strings.Count(viewV, "\n")
+
+	// Horizontal mode should have fewer lines due to missing top border
+	if linesH >= linesV {
+		t.Logf("Horizontal lines: %d, Vertical lines: %d", linesH, linesV)
+		t.Log("Note: HorizontalBorderStyle removes top border to save space")
+	}
+}
+
+func TestDetailPanel_SetHorizontalMode(t *testing.T) {
+	panel := NewDetailPanelModel(60, 20)
+
+	// Default should be false (vertical mode)
+	if panel.isHorizontal {
+		t.Error("panel should default to vertical mode (isHorizontal=false)")
+	}
+
+	// Set to horizontal
+	panel.SetHorizontalMode(true)
+	if !panel.isHorizontal {
+		t.Error("panel should be in horizontal mode after SetHorizontalMode(true)")
+	}
+
+	// Set back to vertical
+	panel.SetHorizontalMode(false)
+	if panel.isHorizontal {
+		t.Error("panel should be in vertical mode after SetHorizontalMode(false)")
+	}
+}

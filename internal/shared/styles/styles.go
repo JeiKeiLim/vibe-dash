@@ -97,3 +97,13 @@ var DimStyle = lipgloss.NewStyle().
 var BorderStyle = lipgloss.NewStyle().
 	Border(lipgloss.NormalBorder()).
 	BorderForeground(lipgloss.Color("8"))
+
+// HorizontalBorderStyle removes top border for horizontal layout stacking (Story 8.12).
+// Saves 1 vertical line when detail panel is below project list.
+var HorizontalBorderStyle = lipgloss.NewStyle().
+	Border(lipgloss.NormalBorder()).
+	BorderForeground(lipgloss.Color("8")).
+	BorderTop(false).
+	BorderLeft(true).
+	BorderRight(true).
+	BorderBottom(true)

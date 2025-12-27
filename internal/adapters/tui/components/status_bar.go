@@ -51,6 +51,9 @@ type StatusBarModel struct {
 
 	// Loading state (Story 7.4)
 	isLoading bool // True when loading projects
+
+	// Height hint (Story 8.12)
+	heightHint string // "[d] Detail hidden - insufficient height"
 }
 
 // NewStatusBarModel creates a new StatusBarModel with the given width.
@@ -112,6 +115,12 @@ func (s *StatusBarModel) SetConfigWarning(warning string) {
 	s.configWarning = warning
 }
 
+// SetHeightHint sets the height hint message (Story 8.12).
+// Pass empty string to clear the hint.
+func (s *StatusBarModel) SetHeightHint(hint string) {
+	s.heightHint = hint
+}
+
 // View renders the status bar to a string.
 // Returns two lines: counts line and shortcuts line (AC1).
 // Returns single line when condensed mode is active (Story 3.10 AC5).
@@ -164,6 +173,11 @@ func (s StatusBarModel) renderCondensed() string {
 		counts += " " + styles.WarningStyle.Render(emoji.Warning()+" cfg")
 	}
 
+	// Story 8.12: Show abbreviated height hint if present
+	if s.heightHint != "" {
+		counts += " " + styles.HintStyle.Render("[d] hidden")
+	}
+
 	return "│ " + counts + " │ [j/k][?][q] │"
 }
 
@@ -210,6 +224,11 @@ func (s StatusBarModel) renderCounts() string {
 	// Story 7.2: Show config warning if present (AC6)
 	if s.configWarning != "" {
 		parts = append(parts, styles.WarningStyle.Render(s.configWarning))
+	}
+
+	// Story 8.12: Show height hint if present (AC1)
+	if s.heightHint != "" {
+		parts = append(parts, styles.HintStyle.Render(s.heightHint))
 	}
 
 	return "│ " + strings.Join(parts, " │ ") + " │"
