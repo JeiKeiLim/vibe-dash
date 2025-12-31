@@ -1473,7 +1473,7 @@ func (m Model) renderMainContent(height int) string {
 	if m.height >= MinHeight && m.height < HeightThresholdTall && !m.showDetailPanel {
 		// Create copy with reduced height to account for hint line
 		projectList := m.projectList
-		projectList.SetSize(m.projectList.Width(), height-1)
+		projectList.SetSize(m.width, height-1) // Use receiver's capped width
 		listView := projectList.View()
 
 		hint := DimStyle.Render("Press [d] for details")
@@ -1482,7 +1482,9 @@ func (m Model) renderMainContent(height int) string {
 
 	// Full-width project list when detail panel is hidden
 	if !m.showDetailPanel {
-		return m.projectList.View()
+		projectList := m.projectList
+		projectList.SetSize(m.width, height) // Use receiver's capped width
+		return projectList.View()
 	}
 
 	// Story 8.6: Check layout mode
@@ -1515,7 +1517,9 @@ func (m Model) renderMainContent(height int) string {
 func (m Model) renderHorizontalSplit(height int) string {
 	// Height priority: if too short, hide detail and show only list
 	if height < HorizontalDetailThreshold {
-		return m.projectList.View()
+		projectList := m.projectList
+		projectList.SetSize(m.width, height) // Use receiver's capped width
+		return projectList.View()
 	}
 
 	// Render detail panel first to get actual height (use regular border with all 4 sides)
@@ -1530,9 +1534,9 @@ func (m Model) renderHorizontalSplit(height int) string {
 	detailLines := strings.Count(detailView, "\n") + 1
 	listHeight := height - detailLines - 1 // -1 for newline between
 
-	// List with remaining height
+	// List with remaining height - use m.width (receiver's capped width), not cached width
 	projectList := m.projectList
-	projectList.SetSize(m.projectList.Width(), listHeight)
+	projectList.SetSize(m.width, listHeight)
 	listView := projectList.View()
 
 	return listView + "\n" + detailView

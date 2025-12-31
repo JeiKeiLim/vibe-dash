@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-31
-updated_by: SM - Added Stories 8.13 (P0 fsnotify leak) and 8.14 (P3 width consistency)
+updated_by: Dev Agent - Story 8.14 code review complete, all fixes applied
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -241,7 +241,8 @@ development_status:
   8-13-fsnotify-file-handle-leak-fix: done
   # Added 2025-12-31: Cosmetic fix for visual consistency
   # Root cause: effectiveWidth not passed consistently to render methods
-  8-14-detail-panel-width-consistency: ready-for-dev
+  # DONE: 2025-12-31 - Code review passed, 3M/2L fixes applied
+  8-14-detail-panel-width-consistency: done
   epic-8-retrospective: optional
 
   # Epic 9: Scalable File Watching Architecture - DEFERRED TO POST-MVP
