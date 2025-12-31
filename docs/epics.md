@@ -2945,8 +2945,8 @@ And user's previous content restored
 
 ## Summary
 
-**Total Epics:** 7
-**Total Stories:** 53
+**Total Epics:** 9 (including 4.5, excluding deferred Epic 5)
+**Total Stories:** 64
 
 | Epic | Stories | FRs Covered |
 |------|---------|-------------|
@@ -2954,11 +2954,537 @@ And user's previous content restored
 | 2 - Project Management | 10 | FR1-14, FR39-45, FR48, FR53 |
 | 3 - Dashboard | 10 | FR15-24, FR26, FR30-31, FR54-55, FR58, FR65 |
 | 4 - Agent Waiting | 6 | FR27, FR34-38, FR46-47 |
-| 5 - State & Hibernation | 6 | FR25, FR28-33, FR57 |
+| 4.5 - BMAD Detection | 3 | FR13-14 |
+| 5 - State & Hibernation | 6 | FR25, FR28-33, FR57 (DEFERRED) |
 | 6 - Scripting | 7 | FR49-52, FR56, FR59-61 |
 | 7 - Error Handling | 7 | FR62-66 |
+| 8 - UX Polish | 14 | UX improvements |
+| 9 - Scalable Watching | 8 | FR27, FR34-38 (architecture) |
 
 **FR Coverage:** 66/66 (100%)
 
 **Ready for Phase 4:** Sprint Planning and Development Implementation
+
+---
+
+## Epic 9: Scalable File Watching Architecture
+
+**Goal:** Re-architect file watching to scale to 20+ projects with deep directory structures without exhausting OS file descriptors.
+
+**User Value:** "I can track 20+ projects simultaneously, each with thousands of files, and the dashboard remains responsive - agent waiting detection and project status updates work reliably at scale."
+
+**Background & Problem Statement:**
+
+The current fsnotify-based approach (Stories 4.1, 8.1) has fundamental scalability limitations:
+
+| Current State | Impact |
+|---------------|--------|
+| fsnotify uses kqueue on macOS | 1 file descriptor per watched directory |
+| Story 8.1 watches up to 500 dirs/project | 10 projects × 500 dirs = 5000 FDs |
+| macOS default ulimit is 256 | System-wide file descriptor exhaustion |
+| Re-enumeration on every Watch() call | High CPU during periodic refresh |
+
+**Symptoms observed:**
+- "too many open files" errors after extended runtime
+- Dashboard shows "file watching unavailable"
+- System-wide impact (tmux, other processes affected)
+- Welcome screen displayed despite projects existing
+
+**What File Watching Enables:**
+1. **Agent Waiting Detection** (FR34-38): Detects when AI agent is idle by monitoring file activity
+2. **Project Status Detection**: Triggers re-detection when methodology artifacts change
+3. **Real-time Dashboard Updates** (FR27): Live activity timestamps
+
+**Technical Context:**
+- Platform-specific optimal approaches needed
+- macOS: FSEvents API can watch entire tree with single stream
+- Linux: inotify with higher limits, or fanotify for recursive
+- Fallback: Polling-based detection for universal compatibility
+
+**FRs Impacted:** FR27, FR34-38 (agent waiting), project status detection
+
+---
+
+### Story 9.1: File Watching Architecture Research
+
+**As a** developer,
+**I want** a comprehensive analysis of file watching strategies,
+**So that** we choose the optimal approach for multi-platform, multi-project scale.
+
+**Acceptance Criteria:**
+
+```gherkin
+Given the current fsnotify limitations
+When research is conducted
+Then document includes:
+
+Platform Analysis:
+| Platform | Current | Optimal | FD Usage |
+|----------|---------|---------|----------|
+| macOS | kqueue (fsnotify) | FSEvents | 1 per tree |
+| Linux | inotify (fsnotify) | inotify/fanotify | 1 per dir, higher limits |
+| Windows | ReadDirectoryChangesW | Same | Recursive by default |
+
+Go Library Evaluation:
+- fsnotify: Current, kqueue on macOS, inotify on Linux
+- rjeczalik/notify: Uses FSEvents on macOS, more efficient
+- fsevents (macOS only): Direct FSEvents bindings
+- Custom polling: Universal fallback
+
+Resource Analysis:
+- FD usage per 10/20/50 projects
+- CPU usage: event-based vs polling at 1s/5s/30s intervals
+- Memory usage per approach
+- Latency from file change to detection
+
+Decision Criteria:
+- Must detect file changes in <10 seconds
+- Must support 20+ projects with 1000+ files each
+- Must not exhaust system resources
+- Must work on macOS and Linux (Windows nice-to-have)
+```
+
+**Technical Notes:**
+- Output: `docs/architecture/file-watching-research.md`
+- Include benchmark methodology
+- Reference: `github.com/rjeczalik/notify` documentation
+
+**Prerequisites:** None (research story)
+
+---
+
+### Story 9.2: Scalable Watching Strategy Design
+
+**As a** architect,
+**I want** a detailed design for scalable file watching,
+**So that** implementation has clear direction.
+
+**Acceptance Criteria:**
+
+```gherkin
+Given research from Story 9.1
+When architecture design is complete
+Then design document includes:
+
+Strategy Decision:
+- Primary approach for each platform
+- Fallback approach when primary fails
+- Hybrid options (e.g., FSEvents + polling)
+
+Interface Design:
+- Abstract FileWatcher interface (already exists)
+- Platform-specific implementations
+- Factory pattern for platform detection
+
+Configuration:
+- max_watch_directories: global limit
+- watching_strategy: "auto" | "fsevents" | "polling" | "hybrid"
+- polling_interval_seconds: for polling/hybrid modes
+- watch_depth: how deep to recurse (current: 10)
+
+Graceful Degradation:
+- When FD limit approached → switch to polling
+- When polling fails → disable real-time, manual refresh only
+- Warning UI patterns for degraded modes
+
+Migration Path:
+- Backwards compatibility with current config
+- Feature flag for gradual rollout
+- Rollback mechanism
+
+Architecture Diagram:
+┌─────────────────────────────────────────────┐
+│                FileWatcher Port             │
+├─────────────────────────────────────────────┤
+│ Watch(ctx, paths) → <-chan FileEvent        │
+│ Close() error                               │
+│ GetFailedPaths() []string                   │
+└─────────────────────────────────────────────┘
+         │
+         ├── FSEventsWatcher (macOS)
+         │     └── Single stream per project tree
+         │
+         ├── InotifyWatcher (Linux)
+         │     └── Optimized directory enumeration
+         │
+         ├── PollingWatcher (fallback)
+         │     └── Periodic file stat comparison
+         │
+         └── HybridWatcher
+               └── Events + periodic validation
+```
+
+**Technical Notes:**
+- Output: `docs/architecture/file-watching-design.md`
+- Include decision matrix for strategy selection
+- Define metrics for monitoring
+
+**Prerequisites:** Story 9.1
+
+---
+
+### Story 9.3: Platform-Optimized Watcher Implementation
+
+**As a** developer,
+**I want** platform-specific file watcher implementations,
+**So that** each platform uses its most efficient mechanism.
+
+**Acceptance Criteria:**
+
+```gherkin
+Given design from Story 9.2
+When implementations are complete
+Then:
+
+macOS (FSEventsWatcher):
+- Uses FSEvents API via appropriate Go bindings
+- Single event stream per project root
+- Recursive watching without per-directory FDs
+- Coalesces rapid events (built-in)
+- Handles symlinks correctly
+
+Linux (OptimizedInotifyWatcher):
+- Uses inotify but with smarter enumeration
+- Watches project root + key directories only
+- Relies on inotify recursive events where available
+- Falls back to polling for deep structures
+
+Fallback (PollingWatcher):
+- Configurable interval (default: 5 seconds)
+- Uses file modification time comparison
+- Caches previous state efficiently
+- Minimal CPU when idle
+- Works universally
+
+Factory:
+func NewPlatformWatcher(config WatcherConfig) ports.FileWatcher {
+    switch runtime.GOOS {
+    case "darwin":
+        return NewFSEventsWatcher(config)
+    case "linux":
+        return NewOptimizedInotifyWatcher(config)
+    default:
+        return NewPollingWatcher(config)
+    }
+}
+
+All implementations:
+- Implement existing ports.FileWatcher interface
+- Emit same FileEvent format
+- Thread-safe
+- Graceful shutdown
+- Resource cleanup on Close()
+```
+
+**Technical Notes:**
+- May require build tags for platform-specific code
+- FSEvents: consider `github.com/fsnotify/fsevents` or `github.com/rjeczalik/notify`
+- Polling: efficient file tree walking with caching
+
+**Prerequisites:** Story 9.2
+
+---
+
+### Story 9.4: Intelligent Watch Scope Reduction
+
+**As a** system,
+**I want** to watch only essential directories,
+**So that** resource usage is minimized while detection still works.
+
+**Acceptance Criteria:**
+
+```gherkin
+Given a project with deep directory structure
+When determining what to watch
+Then prioritize:
+
+Essential (always watched):
+- Project root (for top-level changes)
+- .bmad/ (methodology artifacts - recursive)
+- .speckit/ or specs/ (methodology artifacts - recursive)
+- src/ (if exists, common code location)
+- Configuration files (go.mod, package.json, etc.)
+
+Optional (watched if under limit):
+- Other top-level directories
+- Depth-limited subdirectories
+
+Never watched:
+- node_modules/, vendor/, target/, __pycache__
+- .git/, .svn/, .hg/
+- Hidden directories (except .bmad, .speckit)
+
+Smart depth:
+- Full depth for small projects (<100 dirs)
+- Limited depth for large projects
+- Dynamic adjustment based on available FDs
+
+Configuration:
+```yaml
+settings:
+  file_watching:
+    max_directories_per_project: 100  # Reduced from 500
+    priority_directories:
+      - ".bmad"
+      - ".speckit"
+      - "specs"
+      - "src"
+    watch_depth: 5  # Reduced from 10
+```
+```
+
+**Technical Notes:**
+- Detect essential directories at project add time
+- Store watched paths for faster re-watch
+- Log when directories are skipped due to limits
+
+**Prerequisites:** Story 9.3
+
+---
+
+### Story 9.5: Watcher Resource Monitoring
+
+**As a** system,
+**I want** to monitor file watcher resource usage,
+**So that** problems are detected before system impact.
+
+**Acceptance Criteria:**
+
+```gherkin
+Given file watching is active
+When monitoring resource usage
+Then track:
+
+Metrics:
+- Total directories being watched
+- File descriptors in use (where available)
+- Events received per second
+- Time since last event per project
+
+Thresholds:
+- Warning at 80% of estimated safe limit
+- Critical at 95% of limit
+- Auto-degrade to polling at critical
+
+UI Integration:
+- Status bar warning: "⚠ High watch usage (450/500 dirs)"
+- Detail panel shows watching status per project
+- Debug mode shows full metrics
+
+Logging:
+- slog.Warn when approaching limits
+- slog.Info for watching strategy changes
+- Metrics logged every 5 minutes in debug mode
+
+Recovery:
+- Automatic switch to polling when limits hit
+- Attempt to recover to events after 5 minutes
+- User can force strategy via config
+```
+
+**Technical Notes:**
+- Use `lsof` or `/proc/self/fd` for FD counting
+- Store metrics in memory (not persisted)
+- Expose via debug endpoint if CLI has server mode
+
+**Prerequisites:** Story 9.3
+
+---
+
+### Story 9.6: Watcher Migration & Configuration
+
+**As a** user,
+**I want** to configure file watching strategy,
+**So that** I can tune for my environment.
+
+**Acceptance Criteria:**
+
+```gherkin
+Given the new watcher implementations
+When configuring file watching
+Then config.yaml supports:
+
+```yaml
+settings:
+  file_watching:
+    # Strategy: auto, fsevents, inotify, polling, hybrid
+    strategy: auto
+
+    # Polling interval (for polling/hybrid strategies)
+    polling_interval_seconds: 5
+
+    # Maximum directories to watch per project
+    max_directories_per_project: 100
+
+    # Maximum depth for recursive watching
+    watch_depth: 5
+
+    # Disable file watching entirely (manual refresh only)
+    disabled: false
+```
+
+When strategy is "auto"
+Then platform-optimal strategy is selected:
+- macOS: FSEvents
+- Linux: Optimized inotify
+- Other: Polling
+
+When strategy is explicitly set
+Then that strategy is used regardless of platform
+
+When --watch-strategy=polling CLI flag used
+Then polling is used for this session only
+
+Migration:
+- Existing configs continue to work
+- New defaults are applied for missing settings
+- Deprecation warning for old settings (if any)
+```
+
+**Technical Notes:**
+- Viper bindings for new config keys
+- CLI flag override support
+- Validate strategy is valid for platform
+
+**Prerequisites:** Story 9.3
+
+---
+
+### Story 9.7: Scale Testing & Validation
+
+**As a** developer,
+**I want** comprehensive scale testing,
+**So that** the new architecture is validated.
+
+**Acceptance Criteria:**
+
+```gherkin
+Given new watcher implementations
+When scale testing
+Then verify:
+
+Test Scenarios:
+| Scenario | Projects | Dirs/Project | Total Dirs | Expected |
+|----------|----------|--------------|------------|----------|
+| Small | 5 | 50 | 250 | All event-based |
+| Medium | 20 | 100 | 2000 | Event-based, no warnings |
+| Large | 50 | 200 | 10000 | Graceful degradation |
+| Stress | 100 | 500 | 50000 | Polling fallback |
+
+Metrics to Capture:
+- File descriptor usage over 1 hour
+- CPU usage (idle, during activity burst)
+- Memory usage
+- Event latency (file change → detection)
+- Detection accuracy (no missed changes)
+
+Test Implementation:
+- Automated test script for scale scenarios
+- Docker-based for reproducibility
+- CI integration for regression
+
+Acceptance:
+- Medium scenario: No resource warnings
+- Large scenario: Graceful degradation, no crashes
+- All scenarios: No missed file changes
+- All scenarios: <10 second detection latency
+```
+
+**Technical Notes:**
+- Use synthetic file generation for testing
+- Monitor with `time`, `pprof`, system metrics
+- Document results in test report
+
+**Prerequisites:** Stories 9.3, 9.4, 9.5
+
+---
+
+### Story 9.8: Documentation & Troubleshooting Guide
+
+**As a** user,
+**I want** clear documentation on file watching,
+**So that** I can troubleshoot issues and tune performance.
+
+**Acceptance Criteria:**
+
+```gherkin
+Given new file watching architecture
+When documentation is complete
+Then includes:
+
+User Guide:
+- What file watching does
+- How to configure for your environment
+- Common issues and solutions
+
+Troubleshooting:
+| Symptom | Cause | Solution |
+|---------|-------|----------|
+| "too many open files" | FD exhaustion | Reduce max_dirs, use polling |
+| High CPU usage | Polling too aggressive | Increase polling_interval |
+| Missed changes | Polling too slow | Decrease interval or use events |
+| "file watching unavailable" | Platform issue | Check logs, try polling |
+
+Performance Tuning:
+- Small setups (<10 projects): default settings
+- Medium setups (10-30 projects): reduce dirs, increase interval
+- Large setups (30+ projects): polling strategy, longer intervals
+
+Architecture Documentation:
+- Platform-specific implementation details
+- Resource usage characteristics
+- Extension points for new platforms
+```
+
+**Technical Notes:**
+- Add to existing docs/project-context.md or separate file
+- Include in --help output for relevant commands
+- Link from error messages
+
+**Prerequisites:** Story 9.7
+
+---
+
+**Epic 9 Complete**
+
+**Stories Created:** 8
+**FR Impact:** FR27 (file change detection), FR34-38 (agent waiting)
+**Technical Context:** Platform-specific file watching, resource management
+**Risk Mitigation:** Graceful degradation prevents system-wide impact
+
+---
+
+## Epic 9 Dependency Graph
+
+```
+Epic 9 (Scalable Watching)
+    │
+    ├── Story 9.1 (Research)
+    │       │
+    │       ▼
+    ├── Story 9.2 (Design)
+    │       │
+    │       ▼
+    ├── Story 9.3 (Implementation)
+    │       │
+    │       ├────────────────────────┐
+    │       │                        │
+    │       ▼                        ▼
+    ├── Story 9.4 (Scope)     Story 9.5 (Monitoring)
+    │       │                        │
+    │       └────────────────────────┘
+    │                   │
+    │                   ▼
+    ├── Story 9.6 (Migration & Config)
+    │                   │
+    │                   ▼
+    ├── Story 9.7 (Scale Testing)
+    │                   │
+    │                   ▼
+    └── Story 9.8 (Documentation)
+```
+
+**Estimated Effort:** Medium-Large (significant research + platform-specific implementation)
+**Priority:** High (blocks reliable 20+ project support)
+**Can Run In Parallel With:** None (foundational infrastructure change)
 

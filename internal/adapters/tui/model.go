@@ -1589,6 +1589,13 @@ func (m *Model) startFileWatcherForProjects() tea.Cmd {
 		paths[i] = p.Path
 	}
 
+	// Story 8.13: Cancel old context BEFORE calling Watch()
+	// This ensures the old waitForNextFileEventCmd exits cleanly via context.Done()
+	// instead of receiving channel close and triggering a false error warning.
+	if m.watchCancel != nil {
+		m.watchCancel()
+	}
+
 	// Create watch context for cancellation
 	m.watchCtx, m.watchCancel = context.WithCancel(context.Background())
 

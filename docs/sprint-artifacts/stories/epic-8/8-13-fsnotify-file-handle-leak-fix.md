@@ -298,8 +298,9 @@ N/A - Implementation was straightforward per story spec
 
 | File | Change |
 |------|--------|
-| `internal/adapters/filesystem/watcher.go` | Added cleanup block at line 105-122, enhanced eventLoop comments |
+| `internal/adapters/filesystem/watcher.go` | Added cleanup block with explicit Remove() before Close() |
 | `internal/adapters/filesystem/watcher_test.go` | Added 3 regression tests (Story 8.13 section) |
+| `internal/adapters/tui/model.go` | Cancel old context before calling Watch() |
 
 ## Change Log
 
@@ -320,3 +321,8 @@ N/A - Implementation was straightforward per story spec
   - **M1 FIXED:** Added explicit channel closure verification in `TestFsnotifyWatcher_Watch_ClosePreviousWatcher`
   - **M2 FIXED:** Added CRITICAL comment explaining goroutine reference capture in `eventLoop()`
   - **M3 FIXED:** Added `TestFsnotifyWatcher_Watch_RepeatedCalls_NoLeak` stress test (100 iterations)
+- 2025-12-31: Critical fix discovered during testing:
+  - **ROOT CAUSE:** On macOS kqueue, fsnotify.Close() does NOT close individual watch FDs
+  - **FIX 1:** Explicitly call Remove() on all watched paths before Close()
+  - **FIX 2:** Cancel old context in model.go before calling Watch() to prevent false "watcher unavailable" warning
+  - **VERIFIED:** FDs no longer double on refresh (tested: 1583 → 1583 stable)

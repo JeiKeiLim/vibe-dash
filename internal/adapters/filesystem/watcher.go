@@ -106,7 +106,12 @@ func (w *FsnotifyWatcher) Watch(ctx context.Context, paths []string) (<-chan por
 	// When Watch() is called multiple times (e.g., recovery path), the old
 	// watcher must be closed to release file handles. The old eventLoop
 	// goroutine exits when watcher.Events channel closes.
+	//
+	// CRITICAL: On macOS kqueue, fsnotify opens a file descriptor for EACH
+	// watched path. Close() closes the kqueue FD but does NOT close individual
+	// watch FDs. We must explicitly Remove() all watches before Close().
 	if w.watcher != nil {
+		slog.Debug("closing previous watcher to prevent FD leak")
 		// Stop pending debounce timer to prevent callback races
 		if w.timer != nil {
 			w.timer.Stop()
@@ -114,9 +119,18 @@ func (w *FsnotifyWatcher) Watch(ctx context.Context, paths []string) (<-chan por
 		}
 		// Clear pending events - they're from old watcher context
 		w.pending = make(map[string]ports.FileEvent)
+
+		// Story 8.13 FIX: Explicitly remove all watches before Close()
+		// This releases the individual file descriptors on kqueue/macOS
+		watchList := w.watcher.WatchList()
+		slog.Debug("removing watches before close", "count", len(watchList))
+		for _, path := range watchList {
+			_ = w.watcher.Remove(path) // Ignore errors - path may already be gone
+		}
+
 		// Close old watcher - log error but don't fail (we're replacing it)
 		if err := w.watcher.Close(); err != nil {
-			slog.Debug("closing previous watcher", "error", err)
+			slog.Debug("error closing previous watcher", "error", err)
 		}
 		w.watcher = nil
 	}

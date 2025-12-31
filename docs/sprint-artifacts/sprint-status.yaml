@@ -243,3 +243,19 @@ development_status:
   # Root cause: effectiveWidth not passed consistently to render methods
   8-14-detail-panel-width-consistency: ready-for-dev
   epic-8-retrospective: optional
+
+  # Epic 9: Scalable File Watching Architecture - DEFERRED TO POST-MVP
+  # Created 2025-12-31: Address scalability for 20+ projects
+  # NOTE: Story 8.13 fixed the FD leak (explicit Remove() before Close())
+  # The current architecture is now stable for moderate project counts.
+  # Epic 9 remains valuable for future scale optimization (FSEvents on macOS)
+  epic-9: post-mvp
+  9-1-file-watching-architecture-research: post-mvp
+  9-2-scalable-watching-strategy-design: post-mvp
+  9-3-platform-optimized-watcher-implementation: post-mvp
+  9-4-intelligent-watch-scope-reduction: post-mvp
+  9-5-watcher-resource-monitoring: post-mvp
+  9-6-watcher-migration-configuration: post-mvp
+  9-7-scale-testing-validation: post-mvp
+  9-8-documentation-troubleshooting-guide: post-mvp
+  epic-9-retrospective: post-mvp
