@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2025-12-31
-updated_by: Dev Agent - Story 8.14 code review complete, all fixes applied
+updated_by: SM Agent - Epic 8 retrospective complete, epic renumbering applied
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -121,20 +121,6 @@ development_status:
   4-6-4-verification-dogfooding: done
   epic-4-6-retrospective: done
 
-  # Epic 5: Project State & Hibernation
-  # DEFERRED TO POST-MVP (2025-12-22)
-  # Rationale: Hibernation is a power-user feature. MVP is functional.
-  # Dashboard has space for this info, but core polish takes priority.
-  # Decision: Focus on Epic 6, 7, then new Epic 8 (UX Polish)
-  epic-5: deferred-post-mvp
-  5-1-project-state-model: deferred-post-mvp
-  5-2-auto-hibernation: deferred-post-mvp
-  5-3-auto-activation-on-activity: deferred-post-mvp
-  5-4-hibernated-projects-view: deferred-post-mvp
-  5-5-manual-state-control: deferred-post-mvp
-  5-6-hibernation-threshold-configuration: deferred-post-mvp
-  epic-5-retrospective: deferred-post-mvp
-
   # Epic 6: Scripting & Automation
   # 2025-12-25: COMPLETE - All 7 stories done, retrospective completed
   epic-6: done
@@ -216,7 +202,8 @@ development_status:
   # Created from systematic UX elicitation session (2025-12-22)
   # Focus: Improve dashboard glanceability, fix core UX gaps
   # Key insight: Dashboard is observation-only tool, optimize for glanceability
-  epic-8: in-progress
+  # 2025-12-31: MVP COMPLETE - All 14 stories done, retrospective completed
+  epic-8: done
   8-1-recursive-file-watching: done
   8-2-auto-refresh-reliability: done
   8-3-stage-info-in-project-list: done
@@ -243,20 +230,53 @@ development_status:
   # Root cause: effectiveWidth not passed consistently to render methods
   # DONE: 2025-12-31 - Code review passed, 3M/2L fixes applied
   8-14-detail-panel-width-consistency: done
-  epic-8-retrospective: optional
+  epic-8-retrospective: done
 
-  # Epic 9: Scalable File Watching Architecture - DEFERRED TO POST-MVP
+  # ═══════════════════════════════════════════════════════════
+  # MVP COMPLETE - Epic 8 marks the end of MVP development
+  # ═══════════════════════════════════════════════════════════
+
+  # Epic 9: TUI Behavioral Testing Infrastructure - PRE-POST-MVP GATE
+  # Created 2025-12-31 from Epic 8 retrospective
+  # Purpose: Automated testing for visual/behavioral bugs (like 8-12, 8-13)
+  # Rationale: Story 8-12 required ~20 iterations due to lack of TUI testing tools
+  # Must complete BEFORE any post-MVP feature work
+  epic-9: backlog
+  9-1-tui-testing-tools-research: backlog
+  9-2-terminal-size-simulation-framework: backlog
+  9-3-anchor-point-stability-tests: backlog
+  9-4-layout-consistency-tests: backlog
+  9-5-long-running-session-tests: backlog
+  9-6-ci-pipeline-integration: backlog
+  epic-9-retrospective: optional
+
+  # Epic 10: Scalable File Watching Architecture - POST-MVP
+  # (Was Epic 9, renumbered 2025-12-31)
   # Created 2025-12-31: Address scalability for 20+ projects
   # NOTE: Story 8.13 fixed the FD leak (explicit Remove() before Close())
   # The current architecture is now stable for moderate project counts.
-  # Epic 9 remains valuable for future scale optimization (FSEvents on macOS)
-  epic-9: post-mvp
-  9-1-file-watching-architecture-research: post-mvp
-  9-2-scalable-watching-strategy-design: post-mvp
-  9-3-platform-optimized-watcher-implementation: post-mvp
-  9-4-intelligent-watch-scope-reduction: post-mvp
-  9-5-watcher-resource-monitoring: post-mvp
-  9-6-watcher-migration-configuration: post-mvp
-  9-7-scale-testing-validation: post-mvp
-  9-8-documentation-troubleshooting-guide: post-mvp
-  epic-9-retrospective: post-mvp
+  # Epic 10 remains valuable for future scale optimization (FSEvents on macOS)
+  epic-10: backlog
+  10-1-file-watching-architecture-research: backlog
+  10-2-scalable-watching-strategy-design: backlog
+  10-3-platform-optimized-watcher-implementation: backlog
+  10-4-intelligent-watch-scope-reduction: backlog
+  10-5-watcher-resource-monitoring: backlog
+  10-6-watcher-migration-configuration: backlog
+  10-7-scale-testing-validation: backlog
+  10-8-documentation-troubleshooting-guide: backlog
+  epic-10-retrospective: optional
+
+  # Epic 11: Project State & Hibernation - POST-MVP
+  # (Was Epic 5, renumbered 2025-12-31)
+  # DEFERRED TO POST-MVP (2025-12-22)
+  # Rationale: Hibernation is a power-user feature. MVP is functional.
+  # Dashboard has space for this info, but core polish took priority.
+  epic-11: backlog
+  11-1-project-state-model: backlog
+  11-2-auto-hibernation: backlog
+  11-3-auto-activation-on-activity: backlog
+  11-4-hibernated-projects-view: backlog
+  11-5-manual-state-control: backlog
+  11-6-hibernation-threshold-configuration: backlog
+  epic-11-retrospective: optional
