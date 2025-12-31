@@ -14,19 +14,23 @@ So that **the layout doesn't shift unexpectedly and distract me from the dashboa
 
 When toggling the detail panel (pressing 'd'), the overall content area width shifts. The detail view content appears wider than the project list, causing a visual "jump" in the layout.
 
-**Root Cause Identified:**
+**Root Cause Identified (Updated after user testing):**
 
-The width used for the detail panel doesn't consistently respect the `maxContentWidth` constraint:
+Two separate issues contributed to the visual shift:
 
-1. Project list uses cached width `m.projectList.Width()` at lines 1476, 1518, 1535, which differs from effective width
-2. `renderMainContent()` at line 1485 returns `m.projectList.View()` without calling `SetSize()` first
-3. `renderDashboard()` creates `renderModel` with capped width, but child methods don't use it consistently
+1. **Issue A (Partial):** Render methods used cached `m.projectList.Width()` instead of `m.width`
+   - Fixed by using `m.width` consistently in renderMainContent/renderHorizontalSplit
 
-**Key Insight:** `renderDashboard()` already creates `renderModel` with `renderModel.width = effectiveWidth`. The fix is to ensure child render methods use `m.width` (which IS the capped width when called on renderModel) instead of accessing cached component widths.
+2. **Issue B (Real Root Cause):** Project list rows NOT padded to full width
+   - Detail panel has a border that forces exact `m.width` characters
+   - Project list rows render only as much content as needed (e.g., 95 chars)
+   - When combined and centered by `lipgloss.Place()`, the different widths caused shift
+   - **Fix:** Pad each row to `d.width` using `lipgloss.NewStyle().Width(d.width).Render(row)`
 
 **TL;DR Fix Summary:**
 - Change 3 instances of `m.projectList.Width()` to `m.width`: Lines 1476, 1518, 1535
 - Add 1 SetSize call before `.View()`: Line 1485
+- **Critical:** Pad project list rows to full width in `delegate.go:renderRow()`
 
 ## Acceptance Criteria
 
@@ -393,7 +397,8 @@ Claude Opus 4.5 (claude-opus-4-5-20251101)
 | File | Change Type |
 |------|-------------|
 | `internal/adapters/tui/model.go` | Modified - 4 width fixes |
-| `internal/adapters/tui/model_responsive_test.go` | Modified - 3 new tests |
+| `internal/adapters/tui/model_responsive_test.go` | Modified - 4 new tests |
+| `internal/adapters/tui/components/delegate.go` | Modified - row width padding (real fix) |
 | `docs/sprint-artifacts/stories/epic-8/8-14-detail-panel-width-consistency.md` | Modified - status + tasks |
 
 ## Change Log
@@ -427,3 +432,9 @@ Claude Opus 4.5 (claude-opus-4-5-20251101)
   - **L2 FIXED:** Updated Dev Notes line numbers to match current implementation
   - All tests pass, lint clean
   - Story status: `done`
+- 2025-12-31: User testing found real root cause - row width padding
+  - User observed: "project list goes to left a bit when detail panel is toggled ON"
+  - Investigation: Detail panel has border (forces exact width), project list rows did NOT fill full width
+  - When combined and centered by lipgloss.Place(), different widths caused visual shift
+  - **Fix:** Added `lipgloss.NewStyle().Width(d.width).Render(row)` in delegate.go:renderRow()
+  - User confirmed: "everything looks nice!" after fix

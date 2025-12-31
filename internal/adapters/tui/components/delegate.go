@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
@@ -209,6 +210,7 @@ func (d ProjectItemDelegate) waitingColumnWidth() int {
 }
 
 // renderRow renders a single project row with all columns.
+// Story 8.14: Row is padded to full width to ensure consistent alignment with bordered detail panel.
 func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWidth int) string {
 	var sb strings.Builder
 
@@ -275,7 +277,11 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 	timeStr := fmt.Sprintf("%*s", colTime, lastActive)
 	sb.WriteString(styles.DimStyle.Render(timeStr))
 
-	return sb.String()
+	// Story 8.14: Pad row to full width to ensure consistent alignment
+	// with bordered detail panel. Without this, rows are shorter than the
+	// detail panel border, causing visual shift when toggling detail panel.
+	row := sb.String()
+	return lipgloss.NewStyle().Width(d.width).Render(row)
 }
 
 // waitingIndicator returns the waiting indicator string for a project.
