@@ -9,6 +9,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Force deterministic output for TUI behavioral tests (Story 9.2 AC4)
+      NO_COLOR: 1
+      FORCE_COLOR: 0
+      TERM: dumb
     steps:
       - uses: actions/checkout@v4
 

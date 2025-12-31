@@ -1,0 +1,3 @@
+# Golden files for TUI behavioral tests
+# Preserve line endings exactly as stored (no CRLF conversion)
+*.golden -text

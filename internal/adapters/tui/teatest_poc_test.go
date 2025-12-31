@@ -25,11 +25,8 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 )
 
-// Unused imports for documentation purposes - referenced in comments:
-// "github.com/charmbracelet/lipgloss" - for lipgloss.SetColorProfile()
-// "github.com/muesli/termenv"        - for termenv.Ascii
-
-// NOTE: Color profile is set per-test, not globally, to avoid affecting other tests.
+// NOTE: Color profile is set per-test in NewTeatestModel (see teatest_helpers_test.go:249),
+// not globally, to avoid affecting other tests.
 // In CI, use environment variables NO_COLOR=1 or FORCE_COLOR=0.
 //
 // For teatest, we call lipgloss.SetColorProfile(termenv.Ascii) in each test
@@ -41,14 +38,10 @@ import (
 
 // TestTeatest_BasicModelInitialization verifies teatest can initialize our Model
 // and capture initial output. This is the simplest possible teatest integration.
+// Refactored in Story 9.2 to use NewTeatestModel helper.
 func TestTeatest_BasicModelInitialization(t *testing.T) {
-	// Create a minimal model WITH a mock repository to avoid Init() panic
-	repo := &teatestMockRepository{projects: []*domain.Project{}}
-	m := NewModel(repo)
-
-	// Create test model with teatest
-	// WithInitialTermSize simulates an 80x24 terminal
-	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(80, 24))
+	// Use helper with default settings (80x24, empty projects)
+	tm := NewTeatestModel(t)
 
 	// Send quit command to end the program
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -86,22 +79,24 @@ func TestTeatest_BasicModelInitialization(t *testing.T) {
 // NOTE: Continuous output capture is complex with teatest's streaming model.
 // For navigation tests, the recommended pattern is to use FinalOutput or
 // golden file comparison rather than intermediate captures.
+// Refactored in Story 9.2 to use NewTeatestModel helper.
 func TestTeatest_Navigation(t *testing.T) {
-	// Create model with mock projects
-	repo := &teatestMockRepository{
-		projects: []*domain.Project{
-			{ID: "1", Name: "project-alpha", Path: "/test/alpha"},
-			{ID: "2", Name: "project-beta", Path: "/test/beta"},
-			{ID: "3", Name: "project-gamma", Path: "/test/gamma"},
-		},
+	// Create model with mock projects using helper
+	projects := []*domain.Project{
+		{ID: "1", Name: "project-alpha", Path: "/test/alpha"},
+		{ID: "2", Name: "project-beta", Path: "/test/beta"},
+		{ID: "3", Name: "project-gamma", Path: "/test/gamma"},
 	}
+	// Note: The helper creates basic model, but we need to initialize components
+	// for this test. Using manual setup for now since PoC tests navigation specifically.
+	repo := &teatestMockRepository{projects: projects}
 	m := NewModel(repo)
 	m.projects = repo.projects
 	m.projectList = components.NewProjectListModel(repo.projects, 80, 22)
 	m.statusBar = components.NewStatusBarModel(80)
 
-	// Create test model
-	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(80, 24))
+	// Create test model with standard size preset
+	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(TermWidthStandard, TermHeightStandard))
 
 	// Wait for ready state (after WindowSizeMsg is processed)
 	teatest.WaitFor(t, tm.Output(),
@@ -192,12 +187,10 @@ func TestTeatest_DetectsIntentionalRegression(t *testing.T) {
 
 // TestTeatest_FinalModelState demonstrates accessing internal model state
 // after test execution. This is useful for verifying state transitions.
+// Refactored in Story 9.2 to use NewTeatestModel helper.
 func TestTeatest_FinalModelState(t *testing.T) {
-	// Create model WITH mock repository to avoid Init() panic
-	repo := &teatestMockRepository{projects: []*domain.Project{}}
-	m := NewModel(repo)
-
-	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(80, 24))
+	// Use helper with default settings
+	tm := NewTeatestModel(t)
 
 	// Give the model time to process WindowSizeMsg
 	time.Sleep(200 * time.Millisecond)
@@ -235,14 +228,11 @@ func TestTeatest_FinalModelState(t *testing.T) {
 
 // TestTeatest_OutputDeterminism verifies that running the same test
 // produces identical output (critical for golden file testing).
+// Refactored in Story 9.2 to use NewTeatestModel helper.
 func TestTeatest_OutputDeterminism(t *testing.T) {
 	runTest := func() []byte {
-		// Create model WITH mock repository to avoid Init() panic
-		repo := &teatestMockRepository{projects: []*domain.Project{}}
-		m := NewModel(repo)
-		m.statusBar = components.NewStatusBarModel(80)
-
-		tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(80, 24))
+		// Use helper with default settings
+		tm := NewTeatestModel(t)
 
 		// Wait for ready state
 		teatest.WaitFor(t, tm.Output(),
@@ -342,18 +332,5 @@ func (r *teatestMockRepository) ResetAll(_ context.Context) (int, error) {
 	return 0, nil
 }
 
-// max returns the larger of two integers.
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-// min returns the smaller of two integers.
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
+// Note: Go 1.21+ provides built-in max() and min() functions.
+// The helper functions previously here have been removed.
