@@ -24,8 +24,8 @@
 # - Dev moves story to 'review', dev reviews, then Dev moves to 'done'
 
 generated: 2025-12-12
-updated: 2025-12-27
-updated_by: Dev - Story 8.12 code review complete, all fixes applied, marked done
+updated: 2025-12-31
+updated_by: SM - Added Stories 8.13 (P0 fsnotify leak) and 8.14 (P3 width consistency)
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -234,4 +234,12 @@ development_status:
   # Issues: height priority, anchor points, margin between components
   # 2025-12-27: Code review complete, all fixes applied
   8-12-horizontal-layout-height-handling: done
+  # Added 2025-12-31: Critical regression fix from Epic 8 testing
+  # Root cause: watcher.go Watch() doesn't close previous watcher before creating new
+  # Trigger: Story 8.11 periodic refresh calls Watch() multiple times
+  # DONE: 2025-12-31 - Code review passed, 3 fixes applied (M1, M2, M3)
+  8-13-fsnotify-file-handle-leak-fix: done
+  # Added 2025-12-31: Cosmetic fix for visual consistency
+  # Root cause: effectiveWidth not passed consistently to render methods
+  8-14-detail-panel-width-consistency: ready-for-dev
   epic-8-retrospective: optional

@@ -102,6 +102,25 @@ func (w *FsnotifyWatcher) Watch(ctx context.Context, paths []string) (<-chan por
 		return nil, fmt.Errorf("%w: watcher is closed", domain.ErrPathNotAccessible)
 	}
 
+	// Story 8.13: Close previous watcher to prevent file handle leak
+	// When Watch() is called multiple times (e.g., recovery path), the old
+	// watcher must be closed to release file handles. The old eventLoop
+	// goroutine exits when watcher.Events channel closes.
+	if w.watcher != nil {
+		// Stop pending debounce timer to prevent callback races
+		if w.timer != nil {
+			w.timer.Stop()
+			w.timer = nil
+		}
+		// Clear pending events - they're from old watcher context
+		w.pending = make(map[string]ports.FileEvent)
+		// Close old watcher - log error but don't fail (we're replacing it)
+		if err := w.watcher.Close(); err != nil {
+			slog.Debug("closing previous watcher", "error", err)
+		}
+		w.watcher = nil
+	}
+
 	// Create fsnotify watcher
 	fsWatcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -268,10 +287,19 @@ func (w *FsnotifyWatcher) RemovePath(path string) error {
 
 // eventLoop processes fsnotify events and applies debouncing.
 // It runs until context is cancelled or watcher is closed.
+//
+// CRITICAL: This goroutine captures fsWatcher reference at startup.
+// When Watch() is called again (Story 8.13), the OLD watcher is closed,
+// causing this goroutine's fsWatcher.Events channel to close, triggering
+// clean exit via the `case event, ok := <-fsWatcher.Events:` path.
+// The NEW eventLoop runs with its own captured fsWatcher reference.
 func (w *FsnotifyWatcher) eventLoop(ctx context.Context, out chan<- ports.FileEvent) {
 	defer close(out)
 
-	// Capture watcher reference - it may be set to nil during Close()
+	// Capture watcher reference - it may be set to nil during Close() or Watch().
+	// This captured reference ensures this goroutine continues processing events
+	// from ITS watcher until that watcher is closed, independent of subsequent
+	// Watch() calls that create new watchers.
 	w.mu.Lock()
 	fsWatcher := w.watcher
 	w.mu.Unlock()

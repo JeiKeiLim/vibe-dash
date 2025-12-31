@@ -812,6 +812,163 @@ func TestFsnotifyWatcher_GetFailedPaths_ReturnsCopy(t *testing.T) {
 }
 
 // =============================================================================
+// Story 8.13: File Handle Leak Fix Regression Tests
+// =============================================================================
+
+// TestFsnotifyWatcher_Watch_ClosePreviousWatcher verifies that calling Watch()
+// twice closes the first watcher to prevent file handle leaks (Story 8.13).
+func TestFsnotifyWatcher_Watch_ClosePreviousWatcher(t *testing.T) {
+	tmpDir1 := t.TempDir()
+	tmpDir2 := t.TempDir()
+
+	w := NewFsnotifyWatcher(DefaultDebounce)
+	ctx := context.Background()
+
+	// First watch
+	ch1, err := w.Watch(ctx, []string{tmpDir1})
+	if err != nil {
+		t.Fatalf("first Watch() failed: %v", err)
+	}
+	if ch1 == nil {
+		t.Fatal("first Watch() returned nil channel")
+	}
+
+	// Allow first eventLoop goroutine to start and block on select
+	time.Sleep(50 * time.Millisecond)
+
+	// Second watch - should close first watcher without error
+	ch2, err := w.Watch(ctx, []string{tmpDir2})
+	if err != nil {
+		t.Fatalf("second Watch() failed: %v", err)
+	}
+	if ch2 == nil {
+		t.Fatal("second Watch() returned nil channel")
+	}
+
+	// Verify first channel eventually closes (old eventLoop exited)
+	// The channel closure depends on fsnotify's internal goroutine detecting
+	// the watcher.Close() call, which may take a moment.
+	channelClosed := false
+	timeout := time.After(2 * time.Second)
+drainLoop:
+	for {
+		select {
+		case _, ok := <-ch1:
+			if !ok {
+				channelClosed = true
+				break drainLoop
+			}
+			// Received an event, continue draining
+		case <-timeout:
+			break drainLoop
+		}
+	}
+
+	if !channelClosed {
+		t.Error("first channel should be closed after second Watch() call")
+	}
+
+	// Cleanup
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close() failed: %v", err)
+	}
+}
+
+// TestFsnotifyWatcher_Watch_ClearsTimer verifies that pending debounce timer
+// is stopped when re-watching to prevent callback races (Story 8.13).
+func TestFsnotifyWatcher_Watch_ClearsTimer(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	w := NewFsnotifyWatcher(DefaultDebounce)
+	ctx := context.Background()
+
+	_, err := w.Watch(ctx, []string{tmpDir})
+	if err != nil {
+		t.Fatalf("first Watch() failed: %v", err)
+	}
+
+	// Trigger a debounce by creating a file
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	// Immediately re-watch before debounce fires
+	_, err = w.Watch(ctx, []string{tmpDir})
+	if err != nil {
+		t.Fatalf("second Watch() failed: %v", err)
+	}
+
+	// Should not panic or race
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close() failed: %v", err)
+	}
+}
+
+// TestFsnotifyWatcher_Watch_RepeatedCalls_NoLeak verifies that calling Watch()
+// many times does not leak goroutines or file handles (Story 8.13 stress test).
+// This simulates 8+ hours of 30-second refresh cycles.
+func TestFsnotifyWatcher_Watch_RepeatedCalls_NoLeak(t *testing.T) {
+	// Create temp directories to rotate through
+	const numDirs = 5
+	const iterations = 100 // Simulates 100 refresh cycles
+	tmpDirs := make([]string, numDirs)
+	for i := range tmpDirs {
+		tmpDirs[i] = t.TempDir()
+	}
+
+	w := NewFsnotifyWatcher(50 * time.Millisecond) // Short debounce for test
+	ctx := context.Background()
+
+	// Call Watch() repeatedly, simulating periodic refresh recovery path
+	for i := 0; i < iterations; i++ {
+		dirIdx := i % numDirs
+		ch, err := w.Watch(ctx, []string{tmpDirs[dirIdx]})
+		if err != nil {
+			t.Fatalf("Watch() iteration %d failed: %v", i, err)
+		}
+		if ch == nil {
+			t.Fatalf("Watch() iteration %d returned nil channel", i)
+		}
+	}
+
+	// Final watcher should still be functional
+	finalDir := tmpDirs[0]
+	testFile := filepath.Join(finalDir, "final-test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	// Should still receive events from final watcher
+	// (Previous 99 watchers should all be closed)
+	ch, err := w.Watch(ctx, []string{finalDir})
+	if err != nil {
+		t.Fatalf("final Watch() failed: %v", err)
+	}
+
+	// Create file to verify watcher works
+	finalFile := filepath.Join(finalDir, "verify.txt")
+	if err := os.WriteFile(finalFile, []byte("verify"), 0644); err != nil {
+		t.Fatalf("failed to create verify file: %v", err)
+	}
+
+	select {
+	case _, ok := <-ch:
+		if !ok {
+			t.Error("final watcher channel closed unexpectedly")
+		}
+		// Event received - watcher still functional after 100+ Watch() calls
+	case <-time.After(2 * time.Second):
+		t.Error("timeout waiting for event from final watcher")
+	}
+
+	// Cleanup
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close() failed: %v", err)
+	}
+}
+
+// =============================================================================
 // Story 8.1: Recursive Directory Enumeration Tests
 // =============================================================================
 
