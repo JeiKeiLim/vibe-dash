@@ -148,12 +148,25 @@ func (m ProjectListModel) Width() int {
 	return m.width
 }
 
+// Height returns the current height of the project list.
+// Story 8.12: Used for save/restore during horizontal layout render.
+func (m ProjectListModel) Height() int {
+	return m.height
+}
+
 // SelectByIndex selects the item at the given index.
 // Story 8.5: Used for selection preservation after list re-sort.
 func (m *ProjectListModel) SelectByIndex(idx int) {
 	if idx >= 0 && idx < len(m.projects) {
 		m.list.Select(idx)
 	}
+}
+
+// ResetViewport resets the list viewport to first page.
+// Call after SetSize with height changes to ensure valid scroll position.
+// Story 8.12: Fixes horizontal layout invisible list bug.
+func (m *ProjectListModel) ResetViewport() {
+	m.list.ResetSelected()
 }
 
 // Projects returns the internal sorted projects slice.

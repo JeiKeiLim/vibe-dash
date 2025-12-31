@@ -72,6 +72,18 @@ func (m *DetailPanelModel) SetHorizontalMode(horizontal bool) {
 	m.isHorizontal = horizontal
 }
 
+// Width returns the current width of the detail panel.
+// Story 8.12: Used for save/restore during horizontal layout render.
+func (m DetailPanelModel) Width() int {
+	return m.width
+}
+
+// Height returns the current height of the detail panel.
+// Story 8.12: Used for save/restore during horizontal layout render.
+func (m DetailPanelModel) Height() int {
+	return m.height
+}
+
 // IsVisible returns whether the panel is visible.
 func (m DetailPanelModel) IsVisible() bool {
 	return m.visible

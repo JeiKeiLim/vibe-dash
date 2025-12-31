@@ -657,7 +657,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				effectiveWidth = m.maxContentWidth
 			}
 			contentHeight := m.height - statusBarHeight(m.height)
+
+			// Hotfix: Preserve selection index across refresh
+			prevIndex := m.projectList.Index()
+
 			m.projectList = components.NewProjectListModel(m.projects, effectiveWidth, contentHeight)
+
+			// Restore selection (clamp to valid range)
+			if prevIndex >= 0 && prevIndex < len(m.projects) {
+				m.projectList.SelectByIndex(prevIndex)
+			}
 
 			// Story 4.5: Wire waiting callbacks to project list delegate
 			m.projectList.SetDelegateWaitingCallbacks(m.isProjectWaiting, m.getWaitingDuration)
@@ -1427,7 +1436,7 @@ func (m Model) renderDashboard() string {
 		contentHeight-- // Reserve 1 more line for warning
 	}
 
-	// Create a temporary model copy with effective width for rendering
+	// Create a copy with effective width for rendering
 	renderModel := m
 	renderModel.width = effectiveWidth
 
@@ -1462,8 +1471,13 @@ func (m Model) renderMainContent(height int) string {
 	// IMPORTANT: Use m.height (terminal height) not height parameter (contentHeight)
 	// because AC6 defines behavior based on user-visible terminal size
 	if m.height >= MinHeight && m.height < HeightThresholdTall && !m.showDetailPanel {
+		// Create copy with reduced height to account for hint line
+		projectList := m.projectList
+		projectList.SetSize(m.projectList.Width(), height-1)
+		listView := projectList.View()
+
 		hint := DimStyle.Render("Press [d] for details")
-		return m.projectList.View() + "\n" + hint
+		return listView + "\n" + hint
 	}
 
 	// Full-width project list when detail panel is hidden
@@ -1499,45 +1513,29 @@ func (m Model) renderMainContent(height int) string {
 // Story 8.6: Used when config detail_layout=horizontal.
 // Story 8.12: Implements height-priority algorithm - list prioritized over detail.
 func (m Model) renderHorizontalSplit(height int) string {
-	// Story 8.12: Height-priority algorithm
-	// Priority: project list always visible, detail panel collapsible
-	var listHeight, detailHeight int
-	showDetail := true
-
+	// Height priority: if too short, hide detail and show only list
 	if height < HorizontalDetailThreshold {
-		// Insufficient height - hide detail, give all to list
-		showDetail = false
-		listHeight = height
-	} else if height < HorizontalComfortableThreshold {
-		// Tight fit - minimum detail, rest to list
-		detailHeight = MinDetailHeightHorizontal
-		listHeight = height - detailHeight
-	} else {
-		// Comfortable - use 60/40 split
-		listHeight = int(float64(height) * 0.6)
-		detailHeight = height - listHeight
+		return m.projectList.View()
 	}
 
-	// Create copies with updated sizes - full width for horizontal layout
-	projectList := m.projectList
-	projectList.SetSize(m.width, listHeight)
-
-	// Story 8.12 AC3: Enforce fixed heights with lipgloss.Height() for anchor stability
-	listContainer := lipgloss.NewStyle().Height(listHeight)
-	listView := listContainer.Render(projectList.View())
-
-	if !showDetail {
-		return listView
-	}
-
+	// Render detail panel first to get actual height (use regular border with all 4 sides)
 	detailPanel := m.detailPanel
-	detailPanel.SetHorizontalMode(true) // Story 8.12: Use horizontal border style (AC4)
-	detailPanel.SetSize(m.width, detailHeight)
+	detailPanel.SetVisible(true)
+	detailPanel.SetProject(m.projectList.SelectedProject())
+	detailPanel.SetHorizontalMode(false) // Use regular border (includes top)
+	detailPanel.SetSize(m.width, 0)      // height doesn't matter, it renders full content
+	detailView := detailPanel.View()
 
-	detailContainer := lipgloss.NewStyle().Height(detailHeight)
-	detailView := detailContainer.Render(detailPanel.View())
+	// Count actual detail lines
+	detailLines := strings.Count(detailView, "\n") + 1
+	listHeight := height - detailLines - 1 // -1 for newline between
 
-	return lipgloss.JoinVertical(lipgloss.Left, listView, detailView)
+	// List with remaining height
+	projectList := m.projectList
+	projectList.SetSize(m.projectList.Width(), listHeight)
+	listView := projectList.View()
+
+	return listView + "\n" + detailView
 }
 
 // handleFileEvent processes a file system event and updates project state (Story 4.6).
