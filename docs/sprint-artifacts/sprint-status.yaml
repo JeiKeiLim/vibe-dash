@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2026-01-01
-updated_by: Dev Agent (Amelia) - Story 9-6 code review passed, marked done
+updated_by: SM Agent (Bob) - Epic 9 retrospective completed, Epic 9.5 created
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -240,15 +240,38 @@ development_status:
   # Created 2025-12-31 from Epic 8 retrospective
   # Purpose: Automated testing for visual/behavioral bugs (like 8-12, 8-13)
   # Rationale: Story 8-12 required ~20 iterations due to lack of TUI testing tools
-  # Must complete BEFORE any post-MVP feature work
-  epic-9: in-progress
+  # 2026-01-01: COMPLETE - All 6 stories done, retrospective completed
+  epic-9: done
   9-1-tui-testing-tools-research: done
   9-2-terminal-size-simulation-framework: done
   9-3-anchor-point-stability-tests: done
   9-4-layout-consistency-tests: done
   9-5-long-running-session-tests: done
   9-6-ci-pipeline-integration: done
-  epic-9-retrospective: optional
+  epic-9-retrospective: done
+
+  # Epic 9.5: Stability & BMAD Update - PRE-POST-MVP
+  # Created 2026-01-01 from Epic 9 retrospective
+  # Purpose: Fix file watcher instability, update BMAD detector for _bmad directory
+  # Issues discovered:
+  #   - File watcher rapid retry/blinking behavior
+  #   - "File watching unavailable" warning appearing
+  #   - BMAD Method changed directory from .bmad to _bmad
+  #   - Pre-existing test failures need cleanup
+  #   - P1/P2 process improvements carried forward 4 times
+  #   - Stage detection shows "Unknown" when next epic is in backlog
+  epic-9-5: backlog
+  9-5-1-file-watcher-stability-investigation: backlog
+  9-5-2-file-watcher-error-handling: backlog
+  9-5-3-bmad-directory-structure-update: backlog
+  9-5-4-pre-existing-test-failures-cleanup: backlog
+  9-5-5-pipeline-summary-output: backlog
+  9-5-6-user-visible-changes-section: backlog
+  # 9-5-7: Stage detection doesn't recognize backlog epics as next stage
+  # Problem: When all epics done + next epic in backlog, shows "Unknown" instead of next epic
+  # Example: Epic 9 done, Epic 9.5 in backlog → should show "Epic 9.5 / Story 9.5-1"
+  9-5-7-stage-detection-backlog-epic: backlog
+  epic-9-5-retrospective: optional
 
   # Epic 10: Scalable File Watching Architecture - POST-MVP
   # (Was Epic 9, renumbered 2025-12-31)
