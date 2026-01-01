@@ -492,7 +492,66 @@ func TestLongRunningSession_NoLeaks(t *testing.T) {
 
 ---
 
+## Local Development Setup
+
+To ensure your local environment produces deterministic output matching CI:
+
+### Required Environment Variables
+
+Set these in your shell profile (`~/.bashrc`, `~/.zshrc`) or before running tests:
+
+```bash
+export NO_COLOR=1
+export FORCE_COLOR=0
+export TERM=dumb
+```
+
+### Quick Test Commands
+
+```bash
+# Run unit tests only (fast, no integration)
+make test
+
+# Run all tests including integration/behavioral
+make test-all
+
+# Run TUI behavioral tests only (debugging)
+make test-behavioral
+
+# Update golden files after intentional changes
+go test -tags=integration -run 'TestLayout_' ./internal/adapters/tui/... -update
+```
+
+### Troubleshooting Non-Deterministic Output
+
+If golden file tests fail locally but you haven't changed any code:
+
+1. **Check environment variables**: Ensure NO_COLOR, FORCE_COLOR, TERM are set correctly
+2. **Verify color profile**: Tests call `lipgloss.SetColorProfile(termenv.Ascii)` in setup
+3. **Check terminal emulator**: Some terminals override TERM settings
+4. **Compare byte-by-byte**: Use `hexdump -C file.golden | head` to spot invisible differences
+
+### CI vs Local Consistency
+
+The CI workflow (`.github/workflows/ci.yml`) sets the same environment variables globally:
+
+```yaml
+env:
+  NO_COLOR: 1
+  FORCE_COLOR: 0
+  TERM: dumb
+```
+
+Your local tests should match CI output when these variables are set correctly.
+
+---
+
 ## Change Log
+
+- 2026-01-01: Story 9.6 CI integration - added Local Development Setup section
+  - Environment variables documentation
+  - Quick test commands reference
+  - Troubleshooting guide for non-deterministic output
 
 - 2025-12-31: Initial research document created
   - Teatest PoC completed with 5/5 passing tests

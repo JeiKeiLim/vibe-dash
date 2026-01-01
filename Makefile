@@ -1,4 +1,4 @@
-.PHONY: build test test-all lint fmt check-fmt run clean install test-accuracy
+.PHONY: build test test-all test-behavioral lint fmt check-fmt run clean install test-accuracy
 
 # Version information for ldflags
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -17,6 +17,12 @@ test:
 
 test-all:
 	go test -tags=integration -timeout=10m ./...
+
+# Behavioral tests only (for debugging TUI issues locally)
+# Runs anchor, layout, and resource tests with verbose output
+# Useful for isolating TUI-specific failures without running full suite
+test-behavioral:
+	go test -tags=integration -timeout=10m -v ./internal/adapters/tui/... -run 'TestAnchor_|TestLayout_|TestResource_'
 
 lint:
 	$(shell go env GOPATH)/bin/golangci-lint run
