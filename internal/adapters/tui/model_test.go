@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -2581,5 +2582,145 @@ func TestRenderHorizontalSplit_AnchorStability(t *testing.T) {
 	// With lipgloss.Height() enforcement, both should have the same number of lines
 	if lines1 != lines2 {
 		t.Errorf("Anchor stability: different line counts (%d vs %d) - list may shift on navigation", lines1, lines2)
+	}
+}
+
+// =============================================================================
+// Story 9.5-2: File Watcher Grace Period Tests
+// =============================================================================
+
+// TestFileWatcherErrorMsg_GracePeriod tests the grace period logic for
+// ignoring transient errors during watcher restart (AC3, AC4, AC6).
+func TestFileWatcherErrorMsg_GracePeriod(t *testing.T) {
+	tests := []struct {
+		name                 string
+		lastRestart          time.Duration // negative = in the past
+		setLastRestart       bool          // false = leave as zero value
+		wantAvailable        bool
+		wantStatusBarWarning bool
+	}{
+		{
+			name:                 "within grace period (100ms)",
+			lastRestart:          -100 * time.Millisecond,
+			setLastRestart:       true,
+			wantAvailable:        true,
+			wantStatusBarWarning: false,
+		},
+		{
+			name:                 "after grace period (600ms)",
+			lastRestart:          -600 * time.Millisecond,
+			setLastRestart:       true,
+			wantAvailable:        false,
+			wantStatusBarWarning: true,
+		},
+		{
+			name:                 "boundary ignored (499ms)",
+			lastRestart:          -499 * time.Millisecond,
+			setLastRestart:       true,
+			wantAvailable:        true,
+			wantStatusBarWarning: false,
+		},
+		{
+			name:                 "boundary handled (501ms)",
+			lastRestart:          -501 * time.Millisecond,
+			setLastRestart:       true,
+			wantAvailable:        false,
+			wantStatusBarWarning: true,
+		},
+		{
+			name:                 "zero value (app startup)",
+			lastRestart:          0,
+			setLastRestart:       false, // leave as zero value
+			wantAvailable:        false,
+			wantStatusBarWarning: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel(nil)
+			m.ready = true
+			m.width = 80
+			m.height = 40
+			m.fileWatcherAvailable = true
+			m.statusBar = components.NewStatusBarModel(80)
+
+			if tt.setLastRestart {
+				m.lastWatcherRestart = time.Now().Add(tt.lastRestart)
+			}
+			// else: leave as zero value
+
+			msg := fileWatcherErrorMsg{err: fmt.Errorf("channel closed")}
+			result, _ := m.Update(msg)
+			updated := result.(Model)
+
+			if updated.fileWatcherAvailable != tt.wantAvailable {
+				t.Errorf("fileWatcherAvailable = %v, want %v", updated.fileWatcherAvailable, tt.wantAvailable)
+			}
+
+			hasWarning := strings.Contains(updated.statusBar.View(), "unavailable")
+			if hasWarning != tt.wantStatusBarWarning {
+				t.Errorf("status bar warning = %v, want %v", hasWarning, tt.wantStatusBarWarning)
+			}
+		})
+	}
+}
+
+// TestFileWatcherErrorMsg_GracePeriod_StatusBarNotUpdated verifies that
+// status bar is NOT updated during grace period (AC3 detail).
+func TestFileWatcherErrorMsg_GracePeriod_StatusBarNotUpdated(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.fileWatcherAvailable = true
+	m.statusBar = components.NewStatusBarModel(80)
+
+	// Set a recent restart (within grace period)
+	m.lastWatcherRestart = time.Now().Add(-100 * time.Millisecond)
+
+	msg := fileWatcherErrorMsg{err: fmt.Errorf("channel closed")}
+	result, _ := m.Update(msg)
+	updated := result.(Model)
+
+	// Verify status bar contains no "unavailable" text
+	view := updated.statusBar.View()
+	if strings.Contains(view, "unavailable") {
+		t.Errorf("status bar should NOT show warning during grace period, got: %s", view)
+	}
+	if strings.Contains(view, "File watching") {
+		t.Errorf("status bar should NOT mention file watching during grace period, got: %s", view)
+	}
+}
+
+// TestStartFileWatcher_SetsLastWatcherRestart verifies that
+// startFileWatcherForProjects sets lastWatcherRestart before Watch() (AC2).
+func TestStartFileWatcher_SetsLastWatcherRestart(t *testing.T) {
+	mock := newMockFileWatcher()
+
+	m := NewModel(nil)
+	m.SetFileWatcher(mock)
+	m.projects = []*domain.Project{
+		{ID: "a", Name: "project-a", Path: "/home/user/project-a", State: domain.StateActive},
+	}
+
+	// Verify lastWatcherRestart is zero before
+	if !m.lastWatcherRestart.IsZero() {
+		t.Fatal("lastWatcherRestart should be zero initially")
+	}
+
+	beforeCall := time.Now()
+	_ = m.startFileWatcherForProjects()
+	afterCall := time.Now()
+
+	// Verify lastWatcherRestart was set
+	if m.lastWatcherRestart.IsZero() {
+		t.Error("lastWatcherRestart should be set after startFileWatcherForProjects")
+	}
+
+	// Verify timestamp is within expected range
+	if m.lastWatcherRestart.Before(beforeCall) || m.lastWatcherRestart.After(afterCall) {
+		t.Errorf("lastWatcherRestart = %v, want between %v and %v",
+			m.lastWatcherRestart, beforeCall, afterCall)
 	}
 }

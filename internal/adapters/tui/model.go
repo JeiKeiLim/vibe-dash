@@ -101,6 +101,9 @@ type Model struct {
 
 	// Story 8.11: Periodic stage re-detection interval (0 = disabled)
 	stageRefreshInterval int
+
+	// Story 9.5-2: Grace period for restart race condition
+	lastWatcherRestart time.Time
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -943,7 +946,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.waitForNextFileEventCmd()
 
 	case fileWatcherErrorMsg:
-		// Story 4.6: Handle file watcher error (AC3, Story 8.9: emoji fallback)
+		// Story 9.5-2: Ignore transient errors within 500ms of watcher restart
+		// Zero-value check: !m.lastWatcherRestart.IsZero() ensures app-startup errors are handled
+		if !m.lastWatcherRestart.IsZero() && time.Since(m.lastWatcherRestart) < 500*time.Millisecond {
+			slog.Debug("ignoring transient watcher error", "error", msg.err, "elapsed_ms", time.Since(m.lastWatcherRestart).Milliseconds())
+			return m, nil
+		}
+
+		// Story 4.6: Handle genuine file watcher error (AC3, Story 8.9: emoji fallback)
 		slog.Warn("file watcher error", "error", msg.err)
 		m.fileWatcherAvailable = false
 		m.statusBar.SetWatcherWarning(emoji.Warning() + " File watching unavailable")
@@ -1602,6 +1612,9 @@ func (m *Model) startFileWatcherForProjects() tea.Cmd {
 
 	// Create watch context for cancellation
 	m.watchCtx, m.watchCancel = context.WithCancel(context.Background())
+
+	// Story 9.5-2: Record timestamp BEFORE Watch() for grace period check
+	m.lastWatcherRestart = time.Now()
 
 	// Start watching (Story 8.9: emoji fallback)
 	eventCh, err := m.fileWatcher.Watch(m.watchCtx, paths)
