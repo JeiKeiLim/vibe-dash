@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2026-01-01
-updated_by: Dev Agent (Amelia) - Story 9-4 code review complete, marked done
+updated_by: Dev Agent (Amelia) - Story 9-5 code review complete, marked done
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -246,7 +246,7 @@ development_status:
   9-2-terminal-size-simulation-framework: done
   9-3-anchor-point-stability-tests: done
   9-4-layout-consistency-tests: done
-  9-5-long-running-session-tests: backlog
+  9-5-long-running-session-tests: done
   9-6-ci-pipeline-integration: backlog
   epic-9-retrospective: optional
 
