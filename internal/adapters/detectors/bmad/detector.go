@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
@@ -18,11 +19,16 @@ import (
 var _ ports.MethodDetector = (*BMADDetector)(nil)
 
 // markerDirs are the directories that indicate a BMAD v6 project.
-// BMAD v6 uses .bmad/ folder (v4 used .bmad-core/ which is not supported here).
-var markerDirs = []string{".bmad"}
+// Priority order (first match wins):
+//   - .bmad: Original v6 hidden folder
+//   - _bmad: New v6 visible folder (LLM-friendly, Alpha.22+)
+//   - _bmad-output: Output artifacts folder (indicates BMAD project)
+var markerDirs = []string{".bmad", "_bmad", "_bmad-output"}
 
-// configPath is the relative path to the BMAD config file within the .bmad folder.
-const configPath = "bmm/config.yaml"
+// configPaths are the relative paths to check for BMAD config within marker folders.
+// Both core/config.yaml and bmm/config.yaml are valid (user's choice during install).
+// Try core first as it typically contains the version header.
+var configPaths = []string{"core/config.yaml", "bmm/config.yaml"}
 
 // versionRegex extracts version from the config header comment.
 // Example: "# Version: 6.0.0-alpha.13" -> "6.0.0-alpha.13"
@@ -63,10 +69,11 @@ func (d *BMADDetector) CanDetect(ctx context.Context, path string) bool {
 }
 
 // Detect performs full BMAD v6 methodology detection on the given path.
-// It checks for .bmad/bmm/config.yaml, extracts version from the header,
-// and detects the current workflow stage from sprint-status.yaml or artifacts.
+// It checks for marker directories (.bmad, _bmad, _bmad-output) in priority order,
+// then looks for config.yaml in core/ or bmm/ subdirectories to extract version.
+// Stage detection uses sprint-status.yaml or artifact analysis.
 // Returns ConfidenceCertain if config.yaml exists with version and stage detected.
-// Returns ConfidenceLikely if .bmad/ exists but config.yaml is missing or stage uncertain.
+// Returns ConfidenceLikely if marker exists but config.yaml is missing or stage uncertain.
 func (d *BMADDetector) Detect(ctx context.Context, path string) (*domain.DetectionResult, error) {
 	// Check context first
 	select {
@@ -96,18 +103,39 @@ func (d *BMADDetector) Detect(ctx context.Context, path string) (*domain.Detecti
 	default:
 	}
 
-	// Check for config.yaml
-	cfgPath := filepath.Join(bmadDir, configPath)
-	slog.Debug("reading bmad config", "config_path", cfgPath)
-	version, err := extractVersion(cfgPath)
-
-	if err != nil {
-		// config.yaml doesn't exist or can't be read - lower confidence
+	// Special case: _bmad-output has no config.yaml
+	if strings.HasSuffix(bmadDir, "_bmad-output") {
 		result := domain.NewDetectionResult(
 			d.Name(),
 			domain.StageUnknown,
 			domain.ConfidenceLikely,
-			".bmad folder exists but config.yaml not found",
+			"BMAD detected (_bmad-output), config not expected",
+		)
+		return &result, nil
+	}
+
+	// Try each config path in order
+	var version string
+	var cfgFound bool
+	for _, cfgRelPath := range configPaths {
+		cfgPath := filepath.Join(bmadDir, cfgRelPath)
+		slog.Debug("checking bmad config", "config_path", cfgPath)
+		v, err := extractVersion(cfgPath)
+		if err == nil {
+			version = v
+			cfgFound = true
+			slog.Debug("bmad config found", "config_path", cfgPath, "version", version)
+			break // Use first valid config found
+		}
+	}
+
+	if !cfgFound {
+		// No config found - return lower confidence
+		result := domain.NewDetectionResult(
+			d.Name(),
+			domain.StageUnknown,
+			domain.ConfidenceLikely,
+			filepath.Base(bmadDir)+" folder exists but config.yaml not found",
 		)
 		return &result, nil
 	}
@@ -118,8 +146,6 @@ func (d *BMADDetector) Detect(ctx context.Context, path string) (*domain.Detecti
 		return nil, ctx.Err()
 	default:
 	}
-
-	slog.Debug("extracted version", "version", version)
 
 	// Detect stage from sprint-status.yaml or artifacts
 	stage, stageConfidence, stageReasoning := d.detectStage(ctx, path)

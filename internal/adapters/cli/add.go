@@ -200,6 +200,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		if err == nil && result != nil {
 			project.DetectedMethod = result.Method
 			project.CurrentStage = result.Stage
+			project.DetectionReasoning = result.Reasoning
 		}
 		// Detection failure is non-fatal - project defaults to unknown
 	}
