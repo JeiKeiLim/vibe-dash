@@ -67,13 +67,13 @@ import (
 // ResourceMonitor tracks system resources (goroutines, FDs, memory) for leak detection.
 // Used by long-running integration tests to detect resource leaks.
 type ResourceMonitor struct {
-	t              *testing.T
-	initialFDs     int
+	t                 *testing.T
+	initialFDs        int
 	initialGoroutines int
-	initialHeapAlloc uint64
-	fdSupported    bool
-	checkCount     int
-	lastCheckTime  time.Time
+	initialHeapAlloc  uint64
+	fdSupported       bool
+	checkCount        int
+	lastCheckTime     time.Time
 }
 
 // NewResourceMonitor creates a new ResourceMonitor and captures initial resource state.
@@ -706,4 +706,3 @@ func TestResource_DetectsIntentionalFDLeak(t *testing.T) {
 
 	t.Log("Intentional FD leak detection: PASS (leak was detected)")
 }
-

@@ -790,9 +790,9 @@ func TestCrossDetectorExclusion(t *testing.T) {
 // The reasoning string should include the marker directory name for transparency.
 func TestBMADDetector_ReasoningFormat(t *testing.T) {
 	tests := []struct {
-		name           string
-		setup          func(t *testing.T, dir string)
-		wantContains   string // substring that should appear in reasoning
+		name         string
+		setup        func(t *testing.T, dir string)
+		wantContains string // substring that should appear in reasoning
 	}{
 		{
 			name: ".bmad folder shows in reasoning",

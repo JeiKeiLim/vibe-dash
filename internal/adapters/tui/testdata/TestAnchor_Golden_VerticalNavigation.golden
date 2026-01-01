@@ -1,11 +1,50 @@
-[?25l[?2004h    long-notes                           never  ┌─────────────────────────────┐[K
->   medium-...                           never  │ DETAILS: medium-notes       │[K
+[?25l[?2004h>   long-notes                           never  ┌─────────────────────────────┐[K
+    medium-...                           never  │ DETAILS: long-notes         │[K
     no-notes                             never  │                             │[K
     short-n...                           never  │ Path:        /tmp           │[K
                                                 │ Method:      Unknown        │[K
                                                 │ Stage:       Unknown        │[K
                                                 │ Detection:   No detection   │[K
                                                 │ reasoning available         │[K
+                                                │ Notes:       Line           │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │ Line                        │[K
+                                                │                             │[K
+                                                │ Favorite:    No             │[K
+                                                │ Added:       0001-01-01     │[K
+                                                │ Last Active: never          │[K
+                                                │                             │[K
+                                                │                             │[K
+                                                │                             │[K
+                                                │                             │[K
+                                                │                             │[K
+                                                └─────────────────────────────┘[K
+│ 4 active │ 0 hibernated │ 0 waiting │                                        [K
+│ [j/k] nav [d] details [f] fav [r] refresh [?] help [q] quit │                [K[39A    long-notes                           never  ┌─────────────────────────────┐[K
+>   medium-...                           never  │ DETAILS: medium-notes       │[K
+
+
+
+
+
+
                                                 │ Notes:       Text Text Text │[K
                                                 │ Text Text Text Text Text    │[K
                                                 │ Text Text Text Text Text    │[K
@@ -26,18 +65,18 @@
                                                 │                             │[K
                                                 │                             │[K
                                                 │                             │[K
+
                                                 │                             │[K
                                                 │                             │[K
                                                 │                             │[K
-                                                │                             │[K
-                                                │                             │[K
-                                                │                             │[K
-                                                │                             │[K
-                                                │                             │[K
-                                                │                             │[K
-                                                └─────────────────────────────┘[K
-│ 4 active │ 0 hibernated │ 0 waiting │                                        [K
-│ [j/k] nav [d] details [f] fav [r] refresh [?] help [q] quit │                [K[39A
+
+
+
+
+
+
+
+[39A
     medium-...                           never  │ DETAILS: no-notes           │[K
 >   no-notes                             never  │                             │[K
 

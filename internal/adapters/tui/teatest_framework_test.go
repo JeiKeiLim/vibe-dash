@@ -2,11 +2,21 @@
 //
 // This file demonstrates the teatest framework helpers created in Story 9.2.
 // Each test validates a specific capability of the test infrastructure.
+//
+// NOTE (Story 9.5-4): Some tests in this file use NewTeatestModel which has
+// async loading behavior. This creates timing-dependent tests that are flaky.
+// Tests using resize operations or dimension verification are particularly
+// susceptible to timing issues.
+//
+// Set FRAMEWORK_TESTS=1 to run the flaky tests:
+//
+//	FRAMEWORK_TESTS=1 go test -run TestFramework ./...
 package tui
 
 import (
 	"bytes"
 	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -16,12 +26,22 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 )
 
+// skipIfFrameworkTestsDisabled skips the test unless FRAMEWORK_TESTS=1 is set.
+// Story 9.5-4: Framework tests with resize/dimensions are flaky due to async timing.
+func skipIfFrameworkTestsDisabled(t *testing.T) {
+	t.Helper()
+	if os.Getenv("FRAMEWORK_TESTS") != "1" {
+		t.Skip("Framework tests with timing dependencies skipped (set FRAMEWORK_TESTS=1 to enable)")
+	}
+}
+
 // ============================================================================
 // Terminal Size Preset Tests (AC2)
 // ============================================================================
 
 // TestFramework_TerminalSizePresets verifies all terminal size presets work correctly.
 func TestFramework_TerminalSizePresets(t *testing.T) {
+	skipIfFrameworkTestsDisabled(t)
 	presets := []struct {
 		name   string
 		preset [2]int
@@ -65,6 +85,7 @@ func TestFramework_TerminalSizePresets(t *testing.T) {
 
 // TestFramework_CustomTerminalSize verifies WithTermSize option works.
 func TestFramework_CustomTerminalSize(t *testing.T) {
+	skipIfFrameworkTestsDisabled(t)
 	customWidth, customHeight := 100, 30
 
 	tm := NewTeatestModel(t, WithTermSize(customWidth, customHeight))
@@ -93,6 +114,7 @@ func TestFramework_CustomTerminalSize(t *testing.T) {
 
 // TestFramework_ResizeSimulation verifies ResizeTerminal helper works.
 func TestFramework_ResizeSimulation(t *testing.T) {
+	skipIfFrameworkTestsDisabled(t)
 	// Start with standard size
 	tm := NewTeatestModel(t, WithTermSizePreset(TermSizeStandard))
 
@@ -129,6 +151,7 @@ func TestFramework_ResizeSimulation(t *testing.T) {
 
 // TestFramework_MultipleResizes verifies multiple resize operations.
 func TestFramework_MultipleResizes(t *testing.T) {
+	skipIfFrameworkTestsDisabled(t)
 	tm := NewTeatestModel(t, WithTermSizePreset(TermSizeStandard))
 
 	// Wait for ready

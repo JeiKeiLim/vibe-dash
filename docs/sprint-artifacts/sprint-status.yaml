@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2026-01-01
-updated_by: Dev - Story 9.5-3 code review complete, all issues fixed
+updated_by: Dev (Amelia) - Story 9.5-4 done, code review fixes applied
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -264,7 +264,7 @@ development_status:
   9-5-1-file-watcher-stability-investigation: done
   9-5-2-file-watcher-error-handling: done
   9-5-3-bmad-directory-structure-update: done
-  9-5-4-pre-existing-test-failures-cleanup: backlog
+  9-5-4-pre-existing-test-failures-cleanup: done
   9-5-5-pipeline-summary-output: backlog
   9-5-6-user-visible-changes-section: backlog
   # 9-5-7: Stage detection doesn't recognize backlog epics as next stage

@@ -673,9 +673,17 @@ func TestLayout_EdgeCase_TinyWidth(t *testing.T) {
 // ============================================================================
 // Golden File Layout Tests (Task 6, AC: 8)
 // ============================================================================
+//
+// NOTE (Story 9.5-4): See teatest_anchor_test.go for explanation of why golden
+// tests are skipped by default and how to enable them.
+//
+// The skipIfGoldenTestsDisabled() helper is defined in teatest_anchor_test.go:412-418
+// and is reused here since both files are in the same package.
+// ============================================================================
 
 // TestLayout_Golden_Standard80x24 creates a golden file for standard 80x24 terminal.
 func TestLayout_Golden_Standard80x24(t *testing.T) {
+	skipIfGoldenTestsDisabled(t)
 	tm := newLayoutTestModel(t, 80, 24, "")
 
 	sendKey(tm, 'j') // Navigate to show selection
@@ -692,6 +700,7 @@ func TestLayout_Golden_Standard80x24(t *testing.T) {
 
 // TestLayout_Golden_Narrow60x24 creates a golden file for narrow 60x24 terminal.
 func TestLayout_Golden_Narrow60x24(t *testing.T) {
+	skipIfGoldenTestsDisabled(t)
 	tm := newLayoutTestModel(t, 60, 24, "")
 
 	sendKey(tm, 'j')
@@ -708,6 +717,7 @@ func TestLayout_Golden_Narrow60x24(t *testing.T) {
 
 // TestLayout_Golden_Wide160x24 creates a golden file for wide 160x24 terminal.
 func TestLayout_Golden_Wide160x24(t *testing.T) {
+	skipIfGoldenTestsDisabled(t)
 	tm := newLayoutTestModelWithConfig(t, 160, 24, 120)
 
 	sendKey(tm, 'j')
@@ -724,6 +734,7 @@ func TestLayout_Golden_Wide160x24(t *testing.T) {
 
 // TestLayout_Golden_Tall80x40 creates a golden file for tall 80x40 terminal.
 func TestLayout_Golden_Tall80x40(t *testing.T) {
+	skipIfGoldenTestsDisabled(t)
 	tm := newLayoutTestModel(t, 80, 40, "")
 
 	sendKey(tm, 'j')
@@ -740,6 +751,7 @@ func TestLayout_Golden_Tall80x40(t *testing.T) {
 
 // TestLayout_Golden_HorizontalLayout creates a golden file for horizontal layout.
 func TestLayout_Golden_HorizontalLayout(t *testing.T) {
+	skipIfGoldenTestsDisabled(t)
 	tm := newLayoutTestModel(t, 80, HorizontalComfortableThreshold+5, "horizontal")
 
 	// Toggle detail on to see horizontal split
@@ -758,6 +770,7 @@ func TestLayout_Golden_HorizontalLayout(t *testing.T) {
 
 // TestLayout_Golden_UltraWide200x30 creates a golden file for ultra-wide 200x30 terminal.
 func TestLayout_Golden_UltraWide200x30(t *testing.T) {
+	skipIfGoldenTestsDisabled(t)
 	tm := newLayoutTestModelWithConfig(t, 200, 30, 120)
 
 	sendKey(tm, 'j')

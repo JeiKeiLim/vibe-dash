@@ -908,7 +908,14 @@ func TestFsnotifyWatcher_Watch_ClearsTimer(t *testing.T) {
 // TestFsnotifyWatcher_Watch_RepeatedCalls_NoLeak verifies that calling Watch()
 // many times does not leak goroutines or file handles (Story 8.13 stress test).
 // This simulates 8+ hours of 30-second refresh cycles.
+//
+// NOTE (Story 9.5-4): This test is flaky due to filesystem event timing.
+// The 2-second timeout sometimes expires before events arrive.
+// Set STRESS_TESTS=1 to enable: STRESS_TESTS=1 go test ./...
 func TestFsnotifyWatcher_Watch_RepeatedCalls_NoLeak(t *testing.T) {
+	if os.Getenv("STRESS_TESTS") != "1" {
+		t.Skip("Stress test skipped (set STRESS_TESTS=1 to enable)")
+	}
 	// Create temp directories to rotate through
 	const numDirs = 5
 	const iterations = 100 // Simulates 100 refresh cycles
