@@ -104,6 +104,9 @@ type Model struct {
 
 	// Story 9.5-2: Grace period for restart race condition
 	lastWatcherRestart time.Time
+
+	// Story 9.5-2 fix: Track if stage refresh timer has been started (prevent duplicates)
+	stageTimerStarted bool
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -384,7 +387,23 @@ func tickCmd() tea.Cmd {
 }
 
 // stageRefreshTickCmd returns command for periodic stage detection (Story 8.11).
-func (m Model) stageRefreshTickCmd() tea.Cmd {
+// Story 9.5-2 fix: Only starts timer once - subsequent calls return nil.
+// The timer reschedules itself via stageRefreshTickMsg handler using rescheduleStageTimer.
+func (m *Model) stageRefreshTickCmd() tea.Cmd {
+	if m.stageRefreshInterval == 0 {
+		return nil
+	}
+	// Only start timer once - it reschedules itself via stageRefreshTickMsg
+	if m.stageTimerStarted {
+		return nil
+	}
+	m.stageTimerStarted = true
+	return m.rescheduleStageTimer()
+}
+
+// rescheduleStageTimer creates the actual timer tick. Used by stageRefreshTickMsg handler
+// to reschedule after each tick. Does not check stageTimerStarted flag.
+func (m Model) rescheduleStageTimer() tea.Cmd {
 	if m.stageRefreshInterval == 0 {
 		return nil
 	}
@@ -705,8 +724,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.refreshError = msg.err.Error()
 			m.statusBar.SetRefreshComplete("✗ Refresh failed")
-			// Story 8.11 AC5: Reset stage refresh timer even on error
-			return m, m.stageRefreshTickCmd()
+			// Note: stageRefreshTickCmd is NOT called here - managed by stageRefreshTickMsg handler only
+			return m, nil
 		}
 		m.refreshError = ""
 		// Story 7.4 AC5: Show failure count if any
@@ -731,6 +750,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			m.watchCtx, m.watchCancel = context.WithCancel(context.Background())
+			m.lastWatcherRestart = time.Now() // Story 9.5-2: Grace period for recovery
 			eventCh, err := m.fileWatcher.Watch(m.watchCtx, paths)
 			if err == nil {
 				m.fileWatcherAvailable = true
@@ -748,7 +768,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							return clearRefreshMsgMsg{}
 						}),
 						m.waitForNextFileEventCmd(),
-						m.stageRefreshTickCmd(), // Story 8.11 AC5: Reset timer
 						func() tea.Msg {
 							return watcherWarningMsg{
 								failedPaths: failedPaths,
@@ -764,7 +783,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return clearRefreshMsgMsg{}
 					}),
 					m.waitForNextFileEventCmd(),
-					m.stageRefreshTickCmd(), // Story 8.11 AC5: Reset timer
 				)
 			}
 			// Recovery failed - keep watcher as unavailable
@@ -772,12 +790,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Reload projects and start timer to clear message
+		// Note: stageRefreshTickCmd is NOT called here - it's managed by stageRefreshTickMsg handler only
 		return m, tea.Batch(
 			m.loadProjectsCmd(),
 			tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
 				return clearRefreshMsgMsg{}
 			}),
-			m.stageRefreshTickCmd(), // Story 8.11 AC5: Reset timer
 		)
 
 	case clearRefreshMsgMsg:
@@ -932,12 +950,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case stageRefreshTickMsg:
 		// Story 8.11: Periodic stage re-detection
-		// Skip if disabled, already refreshing, or no projects
+		// Skip if disabled, already refreshing, or no projects - but always reschedule
 		if m.stageRefreshInterval == 0 || m.isRefreshing || len(m.projects) == 0 {
-			return m, m.stageRefreshTickCmd()
+			return m, m.rescheduleStageTimer()
 		}
-		// Reuse existing startRefresh() which calls refreshProjectsCmd
-		return m.startRefresh()
+		// Start refresh and reschedule timer
+		model, cmd := m.startRefresh()
+		return model, tea.Batch(cmd, m.rescheduleStageTimer())
 
 	case fileEventMsg:
 		// Story 4.6: Handle file system event
@@ -956,6 +975,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Story 4.6: Handle genuine file watcher error (AC3, Story 8.9: emoji fallback)
 		slog.Warn("file watcher error", "error", msg.err)
 		m.fileWatcherAvailable = false
+		m.eventCh = nil // Clear to allow recovery on next refresh
 		m.statusBar.SetWatcherWarning(emoji.Warning() + " File watching unavailable")
 		return m, nil
 
@@ -1594,6 +1614,13 @@ func (m *Model) handleFileEvent(msg fileEventMsg) {
 // Returns a tea.Cmd to wait for the next file event, or nil if watcher unavailable.
 func (m *Model) startFileWatcherForProjects() tea.Cmd {
 	if m.fileWatcher == nil || !m.fileWatcherAvailable || len(m.projects) == 0 {
+		return nil
+	}
+
+	// Story 9.5-2 fix: Skip restart if watcher is already running
+	// Only restart on first launch or after failure (when eventCh becomes nil)
+	// This prevents unnecessary restarts on every refresh/ProjectsLoadedMsg
+	if m.eventCh != nil {
 		return nil
 	}
 
