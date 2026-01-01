@@ -1,3 +1,6 @@
+# SHELL must be bash for pipefail support
+SHELL := /bin/bash
+
 .PHONY: build test test-all test-behavioral lint fmt check-fmt run clean install test-accuracy
 
 # Version information for ldflags
@@ -10,13 +13,33 @@ LDFLAGS = -ldflags "-X github.com/JeiKeiLim/vibe-dash/internal/adapters/cli.Vers
 
 # CGO_ENABLED=1 required for go-sqlite3
 build:
-	CGO_ENABLED=1 go build $(LDFLAGS) -o bin/vibe ./cmd/vibe
+	@set -o pipefail; \
+	start=$$(date +%s); \
+	CGO_ENABLED=1 go build $(LDFLAGS) -o bin/vibe ./cmd/vibe; \
+	exit_code=$$?; \
+	end=$$(date +%s); \
+	. scripts/summary.sh && print_build_summary $$exit_code $$((end-start)) bin/vibe $(VERSION); \
+	exit $$exit_code
 
 test:
-	go test ./...
+	@set -o pipefail; \
+	tmpfile="/tmp/vibe-test-output-$$$$.txt"; \
+	start=$$(date +%s); \
+	go test -v ./... 2>&1 | tee "$$tmpfile"; \
+	exit_code=$$?; \
+	end=$$(date +%s); \
+	. scripts/summary.sh && print_test_summary $$exit_code $$((end-start)) "$$tmpfile"; \
+	exit $$exit_code
 
 test-all:
-	go test -tags=integration -timeout=10m ./...
+	@set -o pipefail; \
+	tmpfile="/tmp/vibe-test-output-$$$$.txt"; \
+	start=$$(date +%s); \
+	go test -v -tags=integration -timeout=10m ./... 2>&1 | tee "$$tmpfile"; \
+	exit_code=$$?; \
+	end=$$(date +%s); \
+	. scripts/summary.sh && print_test_summary $$exit_code $$((end-start)) "$$tmpfile"; \
+	exit $$exit_code
 
 # Behavioral tests only (for debugging TUI issues locally)
 # Runs anchor, layout, and resource tests with verbose output
@@ -25,7 +48,12 @@ test-behavioral:
 	go test -tags=integration -timeout=10m -v ./internal/adapters/tui/... -run 'TestAnchor_|TestLayout_|TestResource_'
 
 lint:
-	$(shell go env GOPATH)/bin/golangci-lint run
+	@start=$$(date +%s); \
+	$(shell go env GOPATH)/bin/golangci-lint run; \
+	exit_code=$$?; \
+	end=$$(date +%s); \
+	. scripts/summary.sh && print_lint_summary $$exit_code $$((end-start)); \
+	exit $$exit_code
 
 fmt:
 	$(shell go env GOPATH)/bin/goimports -w .

@@ -38,13 +38,29 @@ jobs:
         run: go install golang.org/x/tools/cmd/goimports@latest
 
       - name: Check formatting
-        run: make check-fmt
+        id: fmt
+        run: |
+          start=$(date +%s)
+          make check-fmt
+          echo "duration=$(($(date +%s) - start))" >> $GITHUB_OUTPUT
 
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v4
         with:
           version: latest
           args: --timeout=5m
+
+      - name: Add lint summary
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "### Lint :white_check_mark:" >> $GITHUB_STEP_SUMMARY
+            echo "- **Format check**: PASS" >> $GITHUB_STEP_SUMMARY
+            echo "- **golangci-lint**: PASS" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Lint :x:" >> $GITHUB_STEP_SUMMARY
+            echo "- See job logs for details" >> $GITHUB_STEP_SUMMARY
+          fi
 
   unit-tests:
     runs-on: ubuntu-latest
@@ -58,7 +74,30 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Run unit tests
-        run: make test
+        id: test
+        run: |
+          start=$(date +%s)
+          go test -v ./... 2>&1 | tee test-output.txt
+          exit_code=${PIPESTATUS[0]}
+          echo "duration=$(($(date +%s) - start))" >> $GITHUB_OUTPUT
+          echo "passed=$(grep -c '^--- PASS:' test-output.txt || echo 0)" >> $GITHUB_OUTPUT
+          echo "failed=$(grep -c '^--- FAIL:' test-output.txt || echo 0)" >> $GITHUB_OUTPUT
+          exit $exit_code
+
+      - name: Add unit test summary
+        if: always()
+        run: |
+          if [ "${{ steps.test.outcome }}" = "success" ]; then
+            echo "### Unit Tests :white_check_mark:" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status**: PASS" >> $GITHUB_STEP_SUMMARY
+            echo "- **Duration**: ${{ steps.test.outputs.duration }}s" >> $GITHUB_STEP_SUMMARY
+            echo "- **Tests passed**: ${{ steps.test.outputs.passed }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Unit Tests :x:" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status**: FAIL" >> $GITHUB_STEP_SUMMARY
+            echo "- **Tests failed**: ${{ steps.test.outputs.failed }}" >> $GITHUB_STEP_SUMMARY
+            echo "- See job logs for details" >> $GITHUB_STEP_SUMMARY
+          fi
 
   integration-tests:
     runs-on: macos-latest  # Required for /dev/fd FD counting (Story 9.5)
@@ -75,7 +114,30 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Run integration tests
-        run: make test-all
+        id: integration
+        run: |
+          start=$(date +%s)
+          go test -v -tags=integration -timeout=10m ./... 2>&1 | tee test-output.txt
+          exit_code=${PIPESTATUS[0]}
+          echo "duration=$(($(date +%s) - start))" >> $GITHUB_OUTPUT
+          echo "passed=$(grep -c '^--- PASS:' test-output.txt || echo 0)" >> $GITHUB_OUTPUT
+          echo "failed=$(grep -c '^--- FAIL:' test-output.txt || echo 0)" >> $GITHUB_OUTPUT
+          exit $exit_code
+
+      - name: Add integration test summary
+        if: always()
+        run: |
+          if [ "${{ steps.integration.outcome }}" = "success" ]; then
+            echo "### Integration Tests :white_check_mark:" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status**: PASS" >> $GITHUB_STEP_SUMMARY
+            echo "- **Duration**: ${{ steps.integration.outputs.duration }}s" >> $GITHUB_STEP_SUMMARY
+            echo "- **Tests passed**: ${{ steps.integration.outputs.passed }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Integration Tests :x:" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status**: FAIL" >> $GITHUB_STEP_SUMMARY
+            echo "- **Tests failed**: ${{ steps.integration.outputs.failed }}" >> $GITHUB_STEP_SUMMARY
+            echo "- See job logs for details" >> $GITHUB_STEP_SUMMARY
+          fi
 
   build:
     runs-on: ubuntu-latest
@@ -89,4 +151,40 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Build
-        run: make build
+        id: build
+        run: |
+          start=$(date +%s)
+          CGO_ENABLED=1 go build -ldflags "-X github.com/JeiKeiLim/vibe-dash/internal/adapters/cli.Version=$(git describe --tags --always --dirty 2>/dev/null || echo 'dev')" -o bin/vibe ./cmd/vibe
+          exit_code=$?
+          echo "duration=$(($(date +%s) - start))" >> $GITHUB_OUTPUT
+          echo "version=$(./bin/vibe --version 2>/dev/null | head -1 || echo 'dev')" >> $GITHUB_OUTPUT
+          exit $exit_code
+
+      - name: Add build summary
+        if: always()
+        run: |
+          if [ "${{ steps.build.outcome }}" = "success" ]; then
+            echo "### Build :white_check_mark:" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status**: PASS" >> $GITHUB_STEP_SUMMARY
+            echo "- **Duration**: ${{ steps.build.outputs.duration }}s" >> $GITHUB_STEP_SUMMARY
+            echo "- **Binary**: bin/vibe" >> $GITHUB_STEP_SUMMARY
+            echo "- **Version**: ${{ steps.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Build :x:" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status**: FAIL" >> $GITHUB_STEP_SUMMARY
+            echo "- See job logs for details" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Pipeline summary
+        if: always()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "## Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint | ${{ needs.lint.result == 'success' && ':white_check_mark: PASS' || ':x: FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests | ${{ needs.unit-tests.result == 'success' && ':white_check_mark: PASS' || ':x: FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Tests | ${{ needs.integration-tests.result == 'success' && ':white_check_mark: PASS' || ':x: FAIL' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ steps.build.outcome == 'success' && ':white_check_mark: PASS' || ':x: FAIL' }} |" >> $GITHUB_STEP_SUMMARY
