@@ -8,6 +8,19 @@ As a {{role}},
 I want {{action}},
 so that {{benefit}}.
 
+## User-Visible Changes
+
+<!-- REPLACE the placeholders below with actual user-visible changes -->
+<!-- Use bullet points with New/Changed/Removed prefixes -->
+<!-- If no user-facing changes, write: None - [brief reason why] -->
+
+- **New:** <!-- REPLACE: Feature/behavior users didn't have before -->
+- **Changed:** <!-- REPLACE: Existing feature that works differently now -->
+- **Removed:** <!-- REPLACE: Feature/behavior no longer available -->
+
+<!-- DELETE unused bullet points above. For internal changes, use: -->
+<!-- None - this is an internal [refactoring/cleanup/infrastructure] change. -->
+
 ## Acceptance Criteria
 
 1. [Add acceptance criteria from epics/PRD]

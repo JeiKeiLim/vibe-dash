@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2026-01-02
-updated_by: Dev (Amelia) - Story 9.5-5 done, code review passed
+updated_by: Dev (Amelia) - Story 9.5-6 done, code review complete
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -266,7 +266,7 @@ development_status:
   9-5-3-bmad-directory-structure-update: done
   9-5-4-pre-existing-test-failures-cleanup: done
   9-5-5-pipeline-summary-output: done
-  9-5-6-user-visible-changes-section: backlog
+  9-5-6-user-visible-changes-section: done
   # 9-5-7: Stage detection doesn't recognize backlog epics as next stage
   # Problem: When all epics done + next epic in backlog, shows "Unknown" instead of next epic
   # Example: Epic 9 done, Epic 9.5 in backlog → should show "Epic 9.5 / Story 9.5-1"

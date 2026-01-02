@@ -166,6 +166,12 @@ You will systematically re-do the entire story creation process, but with a crit
 - **Scope creep:** Missing boundaries that could cause unnecessary work
 - **Quality failures:** Missing quality requirements that could deliver broken features
 
+#### **User-Visible Changes Verification**
+
+- **Section presence:** Is `## User-Visible Changes` section present after `## Story`?
+- **Content completeness:** Does it have at least one New/Changed/Removed item OR explicit "None - [reason]"?
+- **Empty section:** Is it left blank without explanation? (FAIL if so)
+
 ### **Step 4: LLM-Dev-Agent Optimization Analysis**
 
 **CRITICAL STEP: Optimize story context for LLM developer agent consumption**

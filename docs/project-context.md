@@ -214,6 +214,19 @@ Every story that touches TUI, CLI, or integration must include:
 | Detection logic | Run vibe on test project, verify stage/reasoning |
 | Integration | End-to-end flow works, not just unit tests pass |
 
+### User-Visible Changes Requirement
+
+Every story MUST include a `## User-Visible Changes` section that describes:
+- What users will see/experience differently (New/Changed/Removed)
+- Or explicitly "None - [reason]" for internal changes
+
+This section:
+- Enables quick release note generation
+- Helps reviewers focus on user impact
+- Documents historical changes for future developers
+
+**Reference example:** See the `## User-Visible Changes` section in Story 9.5-6 (`docs/sprint-artifacts/stories/epic-9.5/9-5-6-user-visible-changes-section.md`) for a correctly formatted section.
+
 ---
 
 ## Post-MVP References
