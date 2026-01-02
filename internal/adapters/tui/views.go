@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/components"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
 )
@@ -270,4 +271,62 @@ func renderNarrowWarning(width int) string {
 
 	warning := warningStyle.Render(NarrowWarning())
 	return lipgloss.PlaceHorizontal(width, lipgloss.Center, warning)
+}
+
+// renderHibernatedEmptyView renders the empty state for hibernated projects view (Story 11.4 AC6).
+func renderHibernatedEmptyView(width, height int) string {
+	content := strings.Join([]string{
+		"",
+		"No hibernated projects.",
+		"",
+		hintStyle.Render("Projects auto-hibernate after inactivity"),
+		hintStyle.Render("Press [h] to return to active view"),
+		"",
+	}, "\n")
+
+	box := boxStyle.
+		Width(40).
+		Render(content)
+
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
+}
+
+// renderHibernatedView renders the hibernated projects list (Story 11.4).
+// Reuses the same ProjectListModel component as active view but with hibernated data.
+func renderHibernatedView(hibernatedList *components.ProjectListModel, showDetail bool, detailPanel *components.DetailPanelModel, width, height, maxContentWidth int) string {
+	// Calculate effective width (cap at maxContentWidth - Story 8.10)
+	effectiveWidth := width
+	if maxContentWidth > 0 && width > maxContentWidth {
+		effectiveWidth = maxContentWidth
+	}
+
+	// Update list dimensions
+	hibernatedList.SetSize(effectiveWidth, height)
+
+	// Render project list
+	listView := hibernatedList.View()
+
+	// If detail panel is visible, render it below list (horizontal layout only for hibernated view)
+	if showDetail {
+		detailPanel.SetProject(hibernatedList.SelectedProject())
+		detailPanel.SetVisible(true)
+		detailPanel.SetHorizontalMode(false)
+		detailPanel.SetSize(effectiveWidth, 0)
+		detailView := detailPanel.View()
+
+		// Count detail lines
+		detailLines := strings.Count(detailView, "\n") + 1
+		listHeight := height - detailLines - 1
+		if listHeight > 0 {
+			hibernatedList.SetSize(effectiveWidth, listHeight)
+			listView = hibernatedList.View()
+			listView += "\n" + detailView
+		}
+	}
+
+	// Center if width is capped
+	if maxContentWidth > 0 && width > maxContentWidth {
+		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Top, listView)
+	}
+	return listView
 }

@@ -3059,3 +3059,532 @@ func TestModel_HandleFileEvent_ErrInvalidStateTransition_Ignored(t *testing.T) {
 		t.Error("LastActivityAt should be updated despite ErrInvalidStateTransition")
 	}
 }
+
+// Story 11.4 Tests: Hibernated Projects View
+
+func TestModel_HibernatedViewToggle_AC1(t *testing.T) {
+	// AC1: 'h' key switches to hibernated view
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+
+	// Setup active projects
+	projects := []*domain.Project{
+		{ID: "1", Name: "Active1", State: domain.StateActive},
+	}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, 100, 30)
+
+	// Press 'h' to enter hibernated view
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}
+	newModel, cmd := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert view mode changed
+	if updated.viewMode != viewModeHibernated {
+		t.Errorf("expected viewModeHibernated, got %d", updated.viewMode)
+	}
+
+	// Assert command returned to load hibernated projects
+	if cmd == nil {
+		t.Error("expected loadHibernatedProjectsCmd, got nil")
+	}
+
+	// Assert status bar updated
+	// (SetInHibernatedView called with true - we can verify via renderShortcuts in actual test)
+}
+
+func TestModel_HibernatedViewToggle_AC4_HKeyBack(t *testing.T) {
+	// AC4: 'h' returns from hibernated view
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.viewMode = viewModeHibernated
+
+	// Setup active and hibernated projects
+	projects := []*domain.Project{
+		{ID: "1", Name: "Active1", State: domain.StateActive},
+	}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, 100, 30)
+	m.activeSelectedIdx = 0
+
+	// Press 'h' to exit hibernated view
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert view mode changed back
+	if updated.viewMode != viewModeNormal {
+		t.Errorf("expected viewModeNormal, got %d", updated.viewMode)
+	}
+}
+
+func TestModel_HibernatedViewToggle_AC4_EscapeKeyBack(t *testing.T) {
+	// AC4: Esc returns from hibernated view
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.viewMode = viewModeHibernated
+
+	// Setup active projects
+	projects := []*domain.Project{
+		{ID: "1", Name: "Active1", State: domain.StateActive},
+	}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, 100, 30)
+	m.activeSelectedIdx = 0
+
+	// Press Esc to exit hibernated view
+	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert view mode changed back
+	if updated.viewMode != viewModeNormal {
+		t.Errorf("expected viewModeNormal, got %d", updated.viewMode)
+	}
+}
+
+func TestModel_HibernatedProjectsLoadedMsg_AC2(t *testing.T) {
+	// AC2: Shows empty state or list of hibernated projects
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+
+	hibernated := []*domain.Project{
+		{ID: "h1", Name: "Hibernated1", State: domain.StateHibernated, LastActivityAt: time.Now().Add(-2 * time.Hour)},
+		{ID: "h2", Name: "Hibernated2", State: domain.StateHibernated, LastActivityAt: time.Now().Add(-1 * time.Hour)},
+	}
+
+	msg := hibernatedProjectsLoadedMsg{projects: hibernated, err: nil}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert hibernated projects stored
+	if len(updated.hibernatedProjects) != 2 {
+		t.Errorf("expected 2 hibernated projects, got %d", len(updated.hibernatedProjects))
+	}
+
+	// Assert sorted by LastActivityAt descending (most recent first)
+	if updated.hibernatedProjects[0].ID != "h2" {
+		t.Error("expected most recent hibernated project first")
+	}
+}
+
+func TestModel_HibernatedProjectsLoadedMsg_Error(t *testing.T) {
+	// Test error handling
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+
+	msg := hibernatedProjectsLoadedMsg{projects: nil, err: fmt.Errorf("load error")}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert hibernated projects remain nil
+	if updated.hibernatedProjects != nil {
+		t.Error("expected nil hibernated projects on error")
+	}
+}
+
+func TestModel_WakeHibernatedProject_AC3(t *testing.T) {
+	// AC3: Enter key activates project and returns to active view
+	mockActivator := &mockStateActivator{}
+	m := NewModel(nil)
+	m.stateService = mockActivator
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.viewMode = viewModeHibernated
+
+	// Setup hibernated project
+	hibernated := []*domain.Project{
+		{ID: "h1", Name: "Hibernated1", State: domain.StateHibernated},
+	}
+	m.hibernatedProjects = hibernated
+	m.hibernatedList = components.NewProjectListModel(hibernated, 100, 30)
+
+	// Press Enter to wake project
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	_, cmd := m.Update(msg)
+
+	// Assert command returned
+	if cmd == nil {
+		t.Error("expected activateProjectCmd, got nil")
+	}
+}
+
+func TestModel_ProjectActivatedMsg_Success(t *testing.T) {
+	// Test successful activation
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.viewMode = viewModeHibernated
+
+	msg := projectActivatedMsg{projectID: "h1", projectName: "Hibernated1", err: nil}
+	newModel, cmd := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert view mode changed to normal
+	if updated.viewMode != viewModeNormal {
+		t.Errorf("expected viewModeNormal, got %d", updated.viewMode)
+	}
+
+	// Assert justActivatedProjectID set for selection
+	if updated.justActivatedProjectID != "h1" {
+		t.Errorf("expected justActivatedProjectID='h1', got '%s'", updated.justActivatedProjectID)
+	}
+
+	// Assert reload command returned
+	if cmd == nil {
+		t.Error("expected loadProjectsCmd, got nil")
+	}
+}
+
+func TestModel_ProjectActivatedMsg_RaceCondition_AC10(t *testing.T) {
+	// AC10: Handle race condition - project already activated by Story 11.3
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.viewMode = viewModeHibernated
+
+	// Setup hibernated projects
+	hibernated := []*domain.Project{
+		{ID: "h1", Name: "Hibernated1", State: domain.StateHibernated},
+	}
+	m.hibernatedProjects = hibernated
+	m.hibernatedList = components.NewProjectListModel(hibernated, 100, 30)
+
+	msg := projectActivatedMsg{projectID: "h1", err: domain.ErrInvalidStateTransition}
+	newModel, cmd := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert stays in hibernated view (not switching to normal)
+	if updated.viewMode != viewModeHibernated {
+		t.Errorf("expected to stay in viewModeHibernated on race condition, got %d", updated.viewMode)
+	}
+
+	// Assert reload hibernated list
+	if cmd == nil {
+		t.Error("expected loadHibernatedProjectsCmd on race condition")
+	}
+}
+
+func TestModel_ProjectActivatedMsg_GeneralError(t *testing.T) {
+	// Code review H1: Test general error path (not race condition)
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.viewMode = viewModeHibernated
+
+	// Setup hibernated projects
+	hibernated := []*domain.Project{
+		{ID: "h1", Name: "Hibernated1", State: domain.StateHibernated},
+	}
+	m.hibernatedProjects = hibernated
+	m.hibernatedList = components.NewProjectListModel(hibernated, 100, 30)
+
+	// Simulate general activation error (not ErrInvalidStateTransition)
+	msg := projectActivatedMsg{projectID: "h1", err: fmt.Errorf("database connection failed")}
+	newModel, cmd := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert stays in hibernated view (not switching to normal)
+	if updated.viewMode != viewModeHibernated {
+		t.Errorf("expected to stay in viewModeHibernated on general error, got %d", updated.viewMode)
+	}
+
+	// Assert NO command returned (unlike race condition which reloads)
+	if cmd != nil {
+		t.Error("expected nil cmd on general error (no reload)")
+	}
+
+	// Assert justActivatedProjectID NOT set
+	if updated.justActivatedProjectID != "" {
+		t.Errorf("expected justActivatedProjectID='', got '%s'", updated.justActivatedProjectID)
+	}
+}
+
+func TestModel_RemoveInHibernatedView_AC5(t *testing.T) {
+	// AC5: 'x' works in hibernated view
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.viewMode = viewModeHibernated
+
+	// Setup hibernated project
+	hibernated := []*domain.Project{
+		{ID: "h1", Name: "Hibernated1", State: domain.StateHibernated},
+	}
+	m.hibernatedProjects = hibernated
+	m.hibernatedList = components.NewProjectListModel(hibernated, 100, 30)
+
+	// Press 'x' to start removal
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert confirmation started
+	if !updated.isConfirmingRemove {
+		t.Error("expected isConfirmingRemove=true")
+	}
+	if updated.confirmTarget == nil {
+		t.Error("expected confirmTarget to be set")
+	}
+	if updated.confirmTarget.ID != "h1" {
+		t.Errorf("expected confirmTarget.ID='h1', got '%s'", updated.confirmTarget.ID)
+	}
+}
+
+func TestModel_RemoveConfirmedInHibernatedView_ReloadsHibernatedList(t *testing.T) {
+	// Test that removal in hibernated view reloads hibernated list
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.viewMode = viewModeHibernated
+
+	// Setup hibernated project
+	hibernated := []*domain.Project{
+		{ID: "h1", Name: "Hibernated1", State: domain.StateHibernated},
+	}
+	m.hibernatedProjects = hibernated
+	m.hibernatedList = components.NewProjectListModel(hibernated, 100, 30)
+
+	msg := removeConfirmedMsg{projectID: "h1", projectName: "Hibernated1", err: nil}
+	newModel, cmd := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert stays in hibernated view
+	if updated.viewMode != viewModeHibernated {
+		t.Errorf("expected to stay in viewModeHibernated, got %d", updated.viewMode)
+	}
+
+	// Assert reload command returned
+	if cmd == nil {
+		t.Error("expected loadHibernatedProjectsCmd")
+	}
+
+	// Assert feedback shown
+	output := updated.statusBar.View()
+	if !strings.Contains(output, "Removed") {
+		t.Error("expected 'Removed' feedback in status bar")
+	}
+}
+
+func TestModel_NavigationInHibernatedView_AC8(t *testing.T) {
+	// AC8: Navigation works in hibernated view
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.viewMode = viewModeHibernated
+
+	// Setup hibernated projects
+	hibernated := []*domain.Project{
+		{ID: "h1", Name: "Hibernated1", State: domain.StateHibernated},
+		{ID: "h2", Name: "Hibernated2", State: domain.StateHibernated},
+	}
+	m.hibernatedProjects = hibernated
+	m.hibernatedList = components.NewProjectListModel(hibernated, 100, 30)
+	m.detailPanel = components.NewDetailPanelModel(100, 30)
+
+	// Initial selection should be 0
+	if m.hibernatedList.Index() != 0 {
+		t.Errorf("expected initial selection 0, got %d", m.hibernatedList.Index())
+	}
+
+	// Press 'j' to move down
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert selection moved
+	if updated.hibernatedList.Index() != 1 {
+		t.Errorf("expected selection 1 after 'j', got %d", updated.hibernatedList.Index())
+	}
+}
+
+func TestModel_DetailPanelInHibernatedView_AC9(t *testing.T) {
+	// AC9: Detail panel works in hibernated view
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.viewMode = viewModeHibernated
+	m.showDetailPanel = false
+
+	// Setup hibernated project
+	hibernated := []*domain.Project{
+		{ID: "h1", Name: "Hibernated1", State: domain.StateHibernated},
+	}
+	m.hibernatedProjects = hibernated
+	m.hibernatedList = components.NewProjectListModel(hibernated, 100, 30)
+	m.detailPanel = components.NewDetailPanelModel(100, 30)
+
+	// Press 'd' to toggle detail panel
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert detail panel visible
+	if !updated.showDetailPanel {
+		t.Error("expected showDetailPanel=true after 'd' key")
+	}
+
+	// Assert detail panel has correct project
+	if updated.detailPanel.Project().ID != "h1" {
+		t.Errorf("expected detail panel to show h1, got %s", updated.detailPanel.Project().ID)
+	}
+}
+
+func TestModel_View_RendersHibernatedView_AC6(t *testing.T) {
+	// AC6: View renders hibernated projects
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.viewMode = viewModeHibernated
+
+	// Setup hibernated project
+	hibernated := []*domain.Project{
+		{ID: "h1", Name: "Hibernated1", State: domain.StateHibernated},
+	}
+	m.hibernatedProjects = hibernated
+	m.hibernatedList = components.NewProjectListModel(hibernated, 100, 30)
+	m.statusBar = components.NewStatusBarModel(100)
+	m.statusBar.SetInHibernatedView(true)
+	m.statusBar.SetHibernatedViewCount(1)
+
+	output := m.View()
+
+	// Assert hibernated project visible
+	if !strings.Contains(output, "Hibernated1") {
+		t.Error("expected 'Hibernated1' in hibernated view")
+	}
+}
+
+func TestModel_View_RendersHibernatedEmptyState_AC2(t *testing.T) {
+	// AC2: Shows empty state when no hibernated projects
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.viewMode = viewModeHibernated
+	m.hibernatedProjects = []*domain.Project{} // Empty
+
+	m.statusBar = components.NewStatusBarModel(100)
+	m.statusBar.SetInHibernatedView(true)
+	m.statusBar.SetHibernatedViewCount(0)
+
+	output := m.View()
+
+	// Assert empty state message visible
+	if !strings.Contains(output, "No hibernated projects") {
+		t.Error("expected 'No hibernated projects' in empty hibernated view")
+	}
+}
+
+func TestStatusBar_HibernatedView_AC7(t *testing.T) {
+	// AC7: Status bar shows hibernated count
+	sb := components.NewStatusBarModel(100)
+	sb.SetInHibernatedView(true)
+	sb.SetHibernatedViewCount(5)
+
+	output := sb.View()
+
+	if !strings.Contains(output, "5 hibernated") {
+		t.Errorf("expected '5 hibernated' in status bar, got: %s", output)
+	}
+}
+
+func TestStatusBar_HibernatedView_Shortcuts(t *testing.T) {
+	// Test hibernated view shortcuts
+	sb := components.NewStatusBarModel(100)
+	sb.SetInHibernatedView(true)
+	sb.SetWidth(100) // Wide enough for full shortcuts
+
+	output := sb.View()
+
+	// Check for hibernated-specific shortcuts
+	if !strings.Contains(output, "wake") || !strings.Contains(output, "back") {
+		t.Errorf("expected hibernated shortcuts (wake, back), got: %s", output)
+	}
+}
+
+func TestModel_JustActivatedProjectID_SelectionRestored_AC3(t *testing.T) {
+	// AC3: Just-activated project is selected after switch back
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.justActivatedProjectID = "p2" // Set from projectActivatedMsg
+
+	projects := []*domain.Project{
+		{ID: "p1", Name: "Project1", State: domain.StateActive},
+		{ID: "p2", Name: "Project2", State: domain.StateActive},
+		{ID: "p3", Name: "Project3", State: domain.StateActive},
+	}
+
+	msg := ProjectsLoadedMsg{projects: projects, err: nil}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert justActivatedProjectID cleared
+	if updated.justActivatedProjectID != "" {
+		t.Error("expected justActivatedProjectID to be cleared")
+	}
+
+	// Assert project p2 is selected (index 1)
+	if updated.projectList.Index() != 1 {
+		t.Errorf("expected selection at index 1 (p2), got %d", updated.projectList.Index())
+	}
+}
+
+func TestModel_ActiveSelectionPreserved_WhenSwitchingViews(t *testing.T) {
+	// Test that active selection is preserved when switching views
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+
+	// Setup active projects with selection at index 2
+	projects := []*domain.Project{
+		{ID: "1", Name: "Project1", State: domain.StateActive},
+		{ID: "2", Name: "Project2", State: domain.StateActive},
+		{ID: "3", Name: "Project3", State: domain.StateActive},
+	}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, 100, 30)
+	m.projectList.SelectByIndex(2)
+
+	// Enter hibernated view
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}}
+	newModel, _ := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Assert activeSelectedIdx saved
+	if updated.activeSelectedIdx != 2 {
+		t.Errorf("expected activeSelectedIdx=2, got %d", updated.activeSelectedIdx)
+	}
+
+	// Exit hibernated view
+	msg = tea.KeyMsg{Type: tea.KeyEsc}
+	newModel, _ = updated.Update(msg)
+	updated = newModel.(Model)
+
+	// Assert selection restored
+	if updated.projectList.Index() != 2 {
+		t.Errorf("expected selection restored to index 2, got %d", updated.projectList.Index())
+	}
+}

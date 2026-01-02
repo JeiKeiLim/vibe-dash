@@ -21,11 +21,10 @@ const (
 	widthThreshold = 80
 )
 
-// Future Story 5.4: Hibernated view shortcuts (placeholder constants)
-// nolint:unused // Placeholder for Story 5.4 - Hibernated Projects View
+// Story 11.4: Hibernated view shortcuts (activated from placeholder)
 const (
-	_shortcutsHibernatedFull   = "│ [j/k] nav [h] back to active [?] help [q] quit │"
-	_shortcutsHibernatedAbbrev = "│ [j/k] [h] [?] [q] │"
+	shortcutsHibernatedFull   = "│ [j/k] nav [Enter] wake [x] remove [h] back [?] help [q] quit │"
+	shortcutsHibernatedAbbrev = "│ [j/k] [⏎] [x] [h] [?] [q] │"
 )
 
 // StatusBarModel displays summary counts and keyboard shortcuts.
@@ -54,6 +53,9 @@ type StatusBarModel struct {
 
 	// Height hint (Story 8.12)
 	heightHint string // "[d] Detail hidden - insufficient height"
+
+	// Story 11.4: Hibernated view count
+	hibernatedViewCount int // Count for hibernated view display
 }
 
 // NewStatusBarModel creates a new StatusBarModel with the given width.
@@ -121,6 +123,11 @@ func (s *StatusBarModel) SetHeightHint(hint string) {
 	s.heightHint = hint
 }
 
+// SetHibernatedViewCount sets the count for hibernated view (Story 11.4).
+func (s *StatusBarModel) SetHibernatedViewCount(count int) {
+	s.hibernatedViewCount = count
+}
+
 // View renders the status bar to a string.
 // Returns two lines: counts line and shortcuts line (AC1).
 // Returns single line when condensed mode is active (Story 3.10 AC5).
@@ -183,6 +190,11 @@ func (s StatusBarModel) renderCondensed() string {
 
 // renderCounts renders the counts line with pipe separators (AC1, AC4, AC5).
 func (s StatusBarModel) renderCounts() string {
+	// Story 11.4: Show hibernated count when in hibernated view (AC7)
+	if s.inHibernatedView {
+		return fmt.Sprintf("│ Viewing %d hibernated projects │", s.hibernatedViewCount)
+	}
+
 	// Story 7.4 AC1: Show loading indicator first
 	if s.isLoading {
 		return "│ Loading projects... │"
@@ -236,7 +248,13 @@ func (s StatusBarModel) renderCounts() string {
 
 // renderShortcuts renders the shortcuts line (AC7: responsive width).
 func (s StatusBarModel) renderShortcuts() string {
-	// TODO(Story-5.4): Use hibernated shortcuts when s.inHibernatedView is true
+	// Story 11.4: Use hibernated shortcuts when in hibernated view
+	if s.inHibernatedView {
+		if s.width >= widthThreshold {
+			return shortcutsHibernatedFull
+		}
+		return shortcutsHibernatedAbbrev
+	}
 	if s.width >= widthThreshold {
 		return shortcutsFull
 	}

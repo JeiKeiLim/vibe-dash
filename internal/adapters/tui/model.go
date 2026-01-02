@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -115,6 +116,12 @@ type Model struct {
 
 	// Story 11.3: State service for auto-activation on file events
 	stateService ports.StateActivator
+
+	// Story 11.4: Hibernated projects view state
+	hibernatedProjects     []*domain.Project
+	hibernatedList         components.ProjectListModel
+	activeSelectedIdx      int    // Preserve selection when switching views
+	justActivatedProjectID string // Track which project to select after activation (AC3)
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -218,6 +225,19 @@ type hibernationCompleteMsg struct {
 
 // hibernationTickMsg triggers hourly auto-hibernation check (Story 11.2).
 type hibernationTickMsg time.Time
+
+// hibernatedProjectsLoadedMsg signals hibernated projects loaded (Story 11.4).
+type hibernatedProjectsLoadedMsg struct {
+	projects []*domain.Project
+	err      error
+}
+
+// projectActivatedMsg signals a project was activated (Story 11.4).
+type projectActivatedMsg struct {
+	projectID   string
+	projectName string
+	err         error
+}
 
 // fileEventMsg wraps file system events for Bubble Tea message passing (Story 4.6).
 type fileEventMsg struct {
@@ -478,6 +498,32 @@ func (m Model) rescheduleHibernationTimer() tea.Cmd {
 	return tea.Tick(time.Hour, func(t time.Time) tea.Msg {
 		return hibernationTickMsg(t)
 	})
+}
+
+// loadHibernatedProjectsCmd loads hibernated projects from repository (Story 11.4).
+func (m Model) loadHibernatedProjectsCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		projects, err := m.repository.FindHibernated(ctx)
+		return hibernatedProjectsLoadedMsg{projects: projects, err: err}
+	}
+}
+
+// activateProjectCmd activates a hibernated project (Story 11.4).
+func (m Model) activateProjectCmd(projectID, projectName string) tea.Cmd {
+	if m.stateService == nil {
+		return func() tea.Msg {
+			return projectActivatedMsg{
+				projectID: projectID,
+				err:       errors.New("state service not available"),
+			}
+		}
+	}
+	return func() tea.Msg {
+		ctx := context.Background()
+		err := m.stateService.Activate(ctx, projectID)
+		return projectActivatedMsg{projectID: projectID, projectName: projectName, err: err}
+	}
 }
 
 // waitForNextFileEventCmd waits for the next file event from the stored channel (Story 4.6).
@@ -762,8 +808,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.projectList = components.NewProjectListModel(m.projects, effectiveWidth, contentHeight)
 
-			// Restore selection (clamp to valid range)
-			if prevIndex >= 0 && prevIndex < len(m.projects) {
+			// Story 11.4: Select just-activated project (AC3)
+			if m.justActivatedProjectID != "" {
+				for i, p := range m.projects {
+					if p.ID == m.justActivatedProjectID {
+						m.projectList.SelectByIndex(i)
+						break
+					}
+				}
+				m.justActivatedProjectID = "" // Clear after use
+			} else if prevIndex >= 0 && prevIndex < len(m.projects) {
+				// Restore selection (clamp to valid range)
 				m.projectList.SelectByIndex(prevIndex)
 			}
 
@@ -975,13 +1030,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case removeConfirmedMsg:
-		// Handle async delete completion (Story 3.9)
+		// Handle async delete completion (Story 3.9, 11.4 AC5)
 		if msg.err != nil {
 			m.statusBar.SetRefreshComplete("✗ Failed to remove: " + msg.projectName)
 			return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
 				return clearRemoveFeedbackMsg{}
 			})
 		}
+
+		// Story 11.4: Stay in hibernated view and reload if we were viewing hibernated
+		if m.viewMode == viewModeHibernated {
+			m.statusBar.SetRefreshComplete("✓ Removed: " + msg.projectName)
+			return m, tea.Batch(
+				m.loadHibernatedProjectsCmd(),
+				tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+					return clearRemoveFeedbackMsg{}
+				}),
+			)
+		}
+
 		// Remove from local projects slice
 		var newProjects []*domain.Project
 		for _, p := range m.projects {
@@ -1127,6 +1194,48 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.checkAutoHibernationCmd(),
 			m.rescheduleHibernationTimer(),
 		)
+
+	case hibernatedProjectsLoadedMsg:
+		// Story 11.4: Handle hibernated projects loaded (AC2)
+		if msg.err != nil {
+			slog.Error("failed to load hibernated projects", "error", msg.err)
+			return m, nil
+		}
+		m.hibernatedProjects = msg.projects
+		// Sort by LastActivityAt descending (most recent first)
+		sort.Slice(m.hibernatedProjects, func(i, j int) bool {
+			return m.hibernatedProjects[i].LastActivityAt.After(m.hibernatedProjects[j].LastActivityAt)
+		})
+		// Create list component - uses same component as active list
+		effectiveWidth := m.width
+		if m.isWideWidth() {
+			effectiveWidth = m.maxContentWidth
+		}
+		contentHeight := m.height - statusBarHeight(m.height)
+		m.hibernatedList = components.NewProjectListModel(m.hibernatedProjects, effectiveWidth, contentHeight)
+		// Update status bar with hibernated count for AC7
+		m.statusBar.SetHibernatedViewCount(len(m.hibernatedProjects))
+		return m, nil
+
+	case projectActivatedMsg:
+		// Story 11.4: Handle project activation (AC3)
+		// Handle race condition: project may have been auto-activated by Story 11.3
+		if msg.err != nil {
+			if errors.Is(msg.err, domain.ErrInvalidStateTransition) {
+				// Project already active - reload hibernated list silently
+				slog.Debug("project already active, reloading hibernated list", "project_id", msg.projectID)
+				return m, m.loadHibernatedProjectsCmd()
+			}
+			slog.Warn("failed to activate project", "error", msg.err)
+			return m, nil
+		}
+		slog.Debug("project activated", "project_id", msg.projectID, "project_name", msg.projectName)
+		// Track for post-load selection (AC3)
+		m.justActivatedProjectID = msg.projectID
+		// Switch to active view and reload
+		m.viewMode = viewModeNormal
+		m.statusBar.SetInHibernatedView(false)
+		return m, m.loadProjectsCmd()
 	}
 
 	return m, nil
@@ -1281,11 +1390,54 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.showHelp = !m.showHelp
 		return m, nil
 	case KeyEscape:
-		// No-op in normal mode - future stories (3.7, 3.9) will add prompt cancellation
+		// Story 11.4: Return from hibernated view (AC4)
+		if m.viewMode == viewModeHibernated {
+			m.viewMode = viewModeNormal
+			m.statusBar.SetInHibernatedView(false)
+			// Restore active selection
+			if m.activeSelectedIdx >= 0 && m.activeSelectedIdx < len(m.projects) {
+				m.projectList.SelectByIndex(m.activeSelectedIdx)
+			}
+			return m, nil
+		}
+		// No-op in normal mode
+		return m, nil
+	case KeyHibernated:
+		// Story 11.4: Toggle hibernated view (AC1, AC4)
+		if m.viewMode == viewModeHibernated {
+			// Return to active view
+			m.viewMode = viewModeNormal
+			m.statusBar.SetInHibernatedView(false)
+			// Restore active selection
+			if m.activeSelectedIdx >= 0 && m.activeSelectedIdx < len(m.projects) {
+				m.projectList.SelectByIndex(m.activeSelectedIdx)
+			}
+			return m, nil
+		}
+		// Enter hibernated view
+		m.activeSelectedIdx = m.projectList.Index()
+		m.viewMode = viewModeHibernated
+		m.statusBar.SetInHibernatedView(true)
+		return m, m.loadHibernatedProjectsCmd()
+	case "enter":
+		// Story 11.4: Wake hibernated project (AC3)
+		if m.viewMode == viewModeHibernated && len(m.hibernatedProjects) > 0 {
+			selected := m.hibernatedList.SelectedProject()
+			if selected != nil {
+				return m, m.activateProjectCmd(selected.ID, project.EffectiveName(selected))
+			}
+			return m, nil
+		}
+		// No-op in normal view (project list handles Enter for expand/collapse if needed)
 		return m, nil
 	case KeyDetail:
+		// Story 11.4: Detail panel works in hibernated view too (AC9)
 		m.showDetailPanel = !m.showDetailPanel
 		m.detailPanel.SetVisible(m.showDetailPanel)
+		// Update detail panel with current selection in hibernated view
+		if m.viewMode == viewModeHibernated {
+			m.detailPanel.SetProject(m.hibernatedList.SelectedProject())
+		}
 		return m, nil
 	case KeyRefresh:
 		if m.isRefreshing {
@@ -1313,14 +1465,30 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.toggleFavorite()
 	case KeyRemove:
-		// Story 3.9: Start remove confirmation for selected project
+		// Story 3.9, 11.4 (AC5): Start remove confirmation for selected project
 		if m.isConfirmingRemove {
 			return m, nil // Already confirming
+		}
+		// Story 11.4: Allow removal in hibernated view
+		if m.viewMode == viewModeHibernated {
+			if len(m.hibernatedProjects) == 0 {
+				return m, nil // No project to remove
+			}
+			return m.startRemoveConfirmation()
 		}
 		if len(m.projects) == 0 {
 			return m, nil // No project to remove
 		}
 		return m.startRemoveConfirmation()
+	}
+
+	// Story 11.4: Forward key messages to hibernated list when in hibernated view (AC8)
+	if m.viewMode == viewModeHibernated && len(m.hibernatedProjects) > 0 {
+		var cmd tea.Cmd
+		m.hibernatedList, cmd = m.hibernatedList.Update(msg)
+		// Update detail panel with current selection (AC9)
+		m.detailPanel.SetProject(m.hibernatedList.SelectedProject())
+		return m, cmd
 	}
 
 	// Forward key messages to project list when in normal mode
@@ -1444,9 +1612,15 @@ func (m Model) saveFavoriteCmd(projectID string, isFavorite bool) tea.Cmd {
 	}
 }
 
-// startRemoveConfirmation opens the remove confirmation dialog (Story 3.9).
+// startRemoveConfirmation opens the remove confirmation dialog (Story 3.9, 11.4 AC5).
 func (m Model) startRemoveConfirmation() (tea.Model, tea.Cmd) {
-	selected := m.projectList.SelectedProject()
+	// Story 11.4: Get selected project based on current view
+	var selected *domain.Project
+	if m.viewMode == viewModeHibernated {
+		selected = m.hibernatedList.SelectedProject()
+	} else {
+		selected = m.projectList.SelectedProject()
+	}
 	if selected == nil {
 		return m, nil
 	}
@@ -1534,6 +1708,19 @@ func (m Model) View() string {
 	if m.isConfirmingRemove && m.confirmTarget != nil {
 		projectName := project.EffectiveName(m.confirmTarget)
 		return renderConfirmRemoveDialog(projectName, m.width, m.height)
+	}
+
+	// Story 11.4: Render hibernated view (AC6)
+	if m.viewMode == viewModeHibernated {
+		contentHeight := m.height - statusBarHeight(m.height)
+		var content string
+		if len(m.hibernatedProjects) == 0 {
+			content = renderHibernatedEmptyView(m.width, contentHeight)
+		} else {
+			content = renderHibernatedView(&m.hibernatedList, m.showDetailPanel, &m.detailPanel, m.width, contentHeight, m.maxContentWidth)
+		}
+		statusBar := m.statusBar.View()
+		return lipgloss.JoinVertical(lipgloss.Left, content, statusBar)
 	}
 
 	// Render empty view if no projects (AC6)

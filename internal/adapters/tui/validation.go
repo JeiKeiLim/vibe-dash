@@ -17,6 +17,7 @@ type viewMode int
 const (
 	viewModeNormal viewMode = iota
 	viewModeValidation
+	viewModeHibernated // Story 11.4: Hibernated projects view
 )
 
 // InvalidProject represents a project with an inaccessible path
