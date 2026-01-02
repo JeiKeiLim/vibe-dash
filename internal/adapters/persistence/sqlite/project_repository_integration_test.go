@@ -6,7 +6,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -275,18 +274,18 @@ func TestIntegration_ProjectRepository_WithDirectoryManager(t *testing.T) {
 	ctx := context.Background()
 
 	// Use DirectoryManager to set up project directory
+	// Note: Story 3.5.9 removed marker files; directory existence is sufficient
 	projectDir, err := dm.EnsureProjectDir(ctx, projectPath)
 	if err != nil {
 		t.Fatalf("EnsureProjectDir failed: %v", err)
 	}
 
-	// Verify .project-path marker exists
-	markerPath := filepath.Join(projectDir, ".project-path")
-	if _, err := os.Stat(markerPath); os.IsNotExist(err) {
-		t.Fatalf(".project-path marker not found")
+	// Verify directory exists
+	if _, err := os.Stat(projectDir); os.IsNotExist(err) {
+		t.Fatalf("project directory not created")
 	}
 
-	// Create repository - should succeed because marker exists
+	// Create repository - should succeed because directory exists
 	repo, err := NewProjectRepository(projectDir)
 	if err != nil {
 		t.Fatalf("NewProjectRepository failed: %v", err)
@@ -319,23 +318,6 @@ func TestIntegration_ProjectRepository_WithDirectoryManager(t *testing.T) {
 	}
 }
 
-// Test that repository fails without DirectoryManager setup
-func TestIntegration_ProjectRepository_FailsWithoutMarker(t *testing.T) {
-	tempDir := t.TempDir()
-
-	// Create directory but NOT the .project-path marker
-	projectDir := filepath.Join(tempDir, "project-without-marker")
-	if err := os.MkdirAll(projectDir, 0755); err != nil {
-		t.Fatalf("failed to create dir: %v", err)
-	}
-
-	// This should fail because .project-path marker is missing
-	_, err := NewProjectRepository(projectDir)
-	if err == nil {
-		t.Fatal("expected error without .project-path marker")
-	}
-
-	if !strings.Contains(err.Error(), "missing .project-path") {
-		t.Errorf("error should mention missing marker: %v", err)
-	}
-}
+// Note: TestIntegration_ProjectRepository_FailsWithoutMarker was removed.
+// Story 3.5.9 removed .project-path marker file requirement.
+// ProjectRepository now works with any valid directory.

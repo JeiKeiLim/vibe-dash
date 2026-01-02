@@ -47,17 +47,8 @@ func TestIntegration_EnsureProjectDir_CreatesRealDirectory(t *testing.T) {
 		t.Errorf("path mismatch: got %q, want %q", fullPath, expectedPath)
 	}
 
-	// Verify marker file exists and has correct content
-	markerPath := filepath.Join(fullPath, ".project-path")
-	data, err := os.ReadFile(markerPath)
-	if err != nil {
-		t.Fatalf("marker file not readable: %v", err)
-	}
-
-	canonicalPath, _ := CanonicalPath(projectPath)
-	if string(data) != canonicalPath {
-		t.Errorf("marker content mismatch: got %q, want %q", string(data), canonicalPath)
-	}
+	// Note: Story 3.5.9 removed .project-path marker files.
+	// Directory creation is verified above; config.yaml is created by RepositoryCoordinator.
 }
 
 // Test collision with real directories
@@ -186,27 +177,8 @@ func TestIntegration_EnsureProjectDir_CollisionResolution_ThreeProjects(t *testi
 		t.Errorf("third dir name: got %q, want %q", filepath.Base(dir3), "workspace-c-api")
 	}
 
-	// Verify marker files have correct content
-	for i, test := range []struct {
-		dir         string
-		projectPath string
-	}{
-		{dir1, project1},
-		{dir2, project2},
-		{dir3, project3},
-	} {
-		markerPath := filepath.Join(test.dir, ".project-path")
-		data, err := os.ReadFile(markerPath)
-		if err != nil {
-			t.Errorf("project %d: marker file not readable: %v", i+1, err)
-			continue
-		}
-
-		canonicalPath, _ := CanonicalPath(test.projectPath)
-		if string(data) != canonicalPath {
-			t.Errorf("project %d: marker content mismatch: got %q, want %q", i+1, string(data), canonicalPath)
-		}
-	}
+	// Note: Story 3.5.9 removed .project-path marker files.
+	// Directory creation and naming verified above.
 }
 
 // Subtask 5.3: Test permission error handling with read-only directory
@@ -248,7 +220,8 @@ func TestIntegration_EnsureProjectDir_PermissionError(t *testing.T) {
 	}
 }
 
-// Test that same project path returns same directory name (determinism with marker file)
+// Test that same project path returns same directory name (determinism via config lookup)
+// Note: Story 3.5.9 removed marker files. Determinism now relies on configLookup.
 func TestIntegration_EnsureProjectDir_Determinism(t *testing.T) {
 	tempDir := t.TempDir()
 	basePath := filepath.Join(tempDir, "vibe-dash")
@@ -258,7 +231,9 @@ func TestIntegration_EnsureProjectDir_Determinism(t *testing.T) {
 		t.Fatalf("failed to create project dir: %v", err)
 	}
 
-	dm := NewDirectoryManager(basePath, &mockPathLookup{})
+	// Use a mock that tracks path→directory mappings (simulates RepositoryCoordinator behavior)
+	lookup := &mockPathLookup{paths: make(map[string]string)}
+	dm := NewDirectoryManager(basePath, lookup)
 	ctx := context.Background()
 
 	// First call creates directory
@@ -267,7 +242,11 @@ func TestIntegration_EnsureProjectDir_Determinism(t *testing.T) {
 		t.Fatalf("first call failed: %v", err)
 	}
 
-	// Second call should return same path
+	// Simulate what RepositoryCoordinator does: update config with the mapping
+	canonicalPath, _ := CanonicalPath(projectPath)
+	lookup.paths[canonicalPath] = filepath.Base(dir1)
+
+	// Second call should return same path (via configLookup)
 	dir2, err := dm.EnsureProjectDir(ctx, projectPath)
 	if err != nil {
 		t.Fatalf("second call failed: %v", err)
@@ -295,6 +274,7 @@ func TestIntegration_EnsureProjectDir_Determinism(t *testing.T) {
 }
 
 // Test symlink handling in real filesystem
+// Note: Story 3.5.9 removed marker files. Symlink resolution relies on configLookup.
 func TestIntegration_EnsureProjectDir_SymlinkHandling(t *testing.T) {
 	tempDir := t.TempDir()
 	basePath := filepath.Join(tempDir, "vibe-dash")
@@ -311,7 +291,9 @@ func TestIntegration_EnsureProjectDir_SymlinkHandling(t *testing.T) {
 		t.Skipf("symlinks not supported: %v", err)
 	}
 
-	dm := NewDirectoryManager(basePath, &mockPathLookup{})
+	// Use a mock that tracks path→directory mappings
+	lookup := &mockPathLookup{paths: make(map[string]string)}
+	dm := NewDirectoryManager(basePath, lookup)
 	ctx := context.Background()
 
 	// Add via real path
@@ -320,7 +302,12 @@ func TestIntegration_EnsureProjectDir_SymlinkHandling(t *testing.T) {
 		t.Fatalf("real path failed: %v", err)
 	}
 
+	// Simulate coordinator updating config
+	canonicalPath, _ := CanonicalPath(realProject)
+	lookup.paths[canonicalPath] = filepath.Base(dir1)
+
 	// Add via symlink path - should recognize it's the same project
+	// (both resolve to same canonical path)
 	dir2, err := dm.EnsureProjectDir(ctx, symlinkProject)
 	if err != nil {
 		t.Fatalf("symlink path failed: %v", err)

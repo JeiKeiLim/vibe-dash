@@ -306,12 +306,10 @@ func TestIntegration_NewProjectCreation(t *testing.T) {
 		basePath: basePath,
 		ensureFunc: func(ctx context.Context, projectPath string) (string, error) {
 			// Create directory like real DirectoryManager would
+			// Note: Story 3.5.9 removed marker files
 			dirName := filepath.Base(projectPath)
 			fullPath := filepath.Join(basePath, dirName)
 			os.MkdirAll(fullPath, 0755)
-			// Create marker file
-			markerPath := filepath.Join(fullPath, ".project-path")
-			os.WriteFile(markerPath, []byte(projectPath), 0644)
 			newDirCreated = fullPath
 			return fullPath, nil
 		},
@@ -415,10 +413,7 @@ func setupIntegrationProjectDir(t *testing.T, basePath, dirName string) string {
 	if err := os.MkdirAll(projDir, 0755); err != nil {
 		t.Fatalf("failed to create project dir: %v", err)
 	}
-	markerPath := filepath.Join(projDir, ".project-path")
-	if err := os.WriteFile(markerPath, []byte("/test/path"), 0644); err != nil {
-		t.Fatalf("failed to create marker file: %v", err)
-	}
+	// Note: Story 3.5.9 removed .project-path marker files
 	return projDir
 }
 

@@ -19,16 +19,12 @@ import (
 
 // TestIntegration_ProjectConfigLoader_FullLifecycle tests the full lifecycle:
 // create loader → save → load → verify
+// Note: Story 3.5.9 removed .project-path marker file requirement.
 func TestIntegration_ProjectConfigLoader_FullLifecycle(t *testing.T) {
-	// Setup: Create temp directory with .project-path marker
+	// Setup: Create temp directory (no marker file needed per Story 3.5.9)
 	tempDir := t.TempDir()
 	projectDir := filepath.Join(tempDir, "test-project")
 	err := os.MkdirAll(projectDir, 0755)
-	require.NoError(t, err)
-
-	// Create marker file (simulating DirectoryManager)
-	markerPath := filepath.Join(projectDir, ".project-path")
-	err = os.WriteFile(markerPath, []byte("/path/to/original/project"), 0644)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -93,15 +89,15 @@ func TestIntegration_ProjectConfigLoader_WithDirectoryManager(t *testing.T) {
 
 	ctx := context.Background()
 
-	// EnsureProjectDir creates the vibe-dash project directory with marker file
+	// EnsureProjectDir creates the vibe-dash project directory
+	// Note: Story 3.5.9 removed marker files; config.yaml is created by RepositoryCoordinator
 	projectDir, err := dm.EnsureProjectDir(ctx, fakeProjectPath)
 	require.NoError(t, err)
 	require.NotEmpty(t, projectDir)
 
-	// Verify .project-path marker exists
-	markerPath := filepath.Join(projectDir, ".project-path")
-	_, err = os.Stat(markerPath)
-	require.NoError(t, err, ".project-path marker should exist after EnsureProjectDir")
+	// Verify directory was created
+	_, err = os.Stat(projectDir)
+	require.NoError(t, err, "project directory should exist after EnsureProjectDir")
 
 	// Now create ProjectConfigLoader for this directory
 	loader, err := config.NewProjectConfigLoader(projectDir)
@@ -166,11 +162,9 @@ projects: {}
 	assert.Equal(t, 21, masterConfig.HibernationDays)
 	assert.Equal(t, 12, masterConfig.AgentWaitingThresholdMinutes)
 
-	// Create project directory with marker
+	// Create project directory (no marker needed per Story 3.5.9)
 	projectDir := filepath.Join(tempDir, "test-project")
 	err = os.MkdirAll(projectDir, 0755)
-	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(projectDir, ".project-path"), []byte("/test/path"), 0644)
 	require.NoError(t, err)
 
 	// Create project config with partial overrides
@@ -208,13 +202,6 @@ notes: "Test project"
 		"Master config should be used for waiting_threshold since project doesn't override")
 }
 
-// TestIntegration_ProjectConfigLoader_RejectionWithoutMarker verifies
-// that ProjectConfigLoader refuses to work with directories not created by DirectoryManager
-func TestIntegration_ProjectConfigLoader_RejectionWithoutMarker(t *testing.T) {
-	tempDir := t.TempDir()
-
-	// Try to create loader for directory without marker
-	_, err := config.NewProjectConfigLoader(tempDir)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), ".project-path")
-}
+// Note: TestIntegration_ProjectConfigLoader_RejectionWithoutMarker was removed.
+// Story 3.5.9 removed .project-path marker file requirement.
+// ProjectConfigLoader now works with any valid directory.
