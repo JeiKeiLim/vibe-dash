@@ -8,6 +8,9 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 )
 
+// Compile-time interface compliance check
+var _ ports.StateActivator = (*StateService)(nil)
+
 // StateService handles project state transitions (Active <-> Hibernated).
 // It enforces business rules:
 // - Only Active projects can be hibernated

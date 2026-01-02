@@ -178,6 +178,9 @@ func run(ctx context.Context) error {
 	hibernationSvc := services.NewHibernationService(coordinator, stateService, cfg)
 	cli.SetHibernationService(hibernationSvc)
 
+	// Story 11.3: Wire StateService for auto-activation on file events
+	cli.SetStateService(stateService)
+
 	slog.Debug("hibernation service initialized",
 		"global_hibernation_days", cfg.HibernationDays,
 	)

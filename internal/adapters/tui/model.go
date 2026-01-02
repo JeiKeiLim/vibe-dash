@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -111,6 +112,9 @@ type Model struct {
 	// Story 11.2: Hibernation service for auto-hibernation
 	hibernationService      ports.HibernationService
 	hibernationTimerStarted bool // Prevent duplicate hourly timers
+
+	// Story 11.3: State service for auto-activation on file events
+	stateService ports.StateActivator
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -315,6 +319,12 @@ func (m *Model) SetConfig(cfg *ports.Config) {
 // This is optional - if not set, auto-hibernation is disabled.
 func (m *Model) SetHibernationService(svc ports.HibernationService) {
 	m.hibernationService = svc
+}
+
+// SetStateService sets the StateService for auto-activation on file events (Story 11.3).
+// This is optional - if not set, auto-activation is disabled.
+func (m *Model) SetStateService(svc ports.StateActivator) {
+	m.stateService = svc
 }
 
 // isProjectWaiting wraps WaitingDetector.IsWaiting for component callbacks.
@@ -1662,13 +1672,37 @@ func (m Model) renderHorizontalSplit(height int) string {
 	return listView + "\n" + detailView
 }
 
-// handleFileEvent processes a file system event and updates project state (Story 4.6).
+// handleFileEvent processes a file system event and updates project state (Story 4.6, 11.3).
 func (m *Model) handleFileEvent(msg fileEventMsg) {
 	// Find project by path prefix
 	project := m.findProjectByPath(msg.Path)
 	if project == nil {
 		slog.Debug("event path not matched to project", "path", msg.Path)
 		return
+	}
+
+	// Story 11.3: Auto-activate hibernated project on file activity (AC1, AC2)
+	if project.State == domain.StateHibernated && m.stateService != nil {
+		ctx := context.Background()
+		if err := m.stateService.Activate(ctx, project.ID); err != nil {
+			// AC6: Log warning but continue (partial failure tolerance)
+			// AC3: ErrInvalidStateTransition is expected during races, log at debug
+			if !errors.Is(err, domain.ErrInvalidStateTransition) {
+				slog.Warn("failed to auto-activate project",
+					"project_id", project.ID,
+					"project_name", project.Name,
+					"error", err)
+			}
+			// Note: Don't return - still update LastActivityAt in memory
+		} else {
+			// AC8: Log successful activation for debugging
+			slog.Debug("auto-activated hibernated project",
+				"project_id", project.ID,
+				"project_name", project.Name)
+			// Update local state to reflect activation (AC1, AC4)
+			project.State = domain.StateActive
+			project.HibernatedAt = nil
+		}
 	}
 
 	// Update repository (skip if nil - e.g., in tests without mocked repo)
@@ -1693,7 +1727,7 @@ func (m *Model) handleFileEvent(msg fileEventMsg) {
 		m.detailPanel.SetProject(project)
 	}
 
-	// Recalculate status bar (waiting may have cleared)
+	// Recalculate status bar (waiting may have cleared, counts may have changed from activation)
 	active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
 	m.statusBar.SetCounts(active, hibernated, waiting)
 }

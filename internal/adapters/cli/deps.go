@@ -19,6 +19,9 @@ var appConfig *ports.Config
 // hibernationService handles auto-hibernation of inactive projects (Story 11.2).
 var hibernationService ports.HibernationService
 
+// stateService handles state activation for auto-activation on file events (Story 11.3).
+var stateService ports.StateActivator
+
 // SetDirectoryManager sets the directory manager for CLI commands.
 func SetDirectoryManager(dm ports.DirectoryManager) {
 	directoryManager = dm
@@ -67,4 +70,9 @@ func GetConfig() *ports.Config {
 // SetHibernationService sets the hibernation service for auto-hibernation (Story 11.2).
 func SetHibernationService(svc ports.HibernationService) {
 	hibernationService = svc
+}
+
+// SetStateService sets the state service for auto-activation (Story 11.3).
+func SetStateService(svc ports.StateActivator) {
+	stateService = svc
 }

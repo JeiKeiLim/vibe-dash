@@ -13,6 +13,7 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/testhelpers"
 )
 
 func init() {
@@ -2722,5 +2723,339 @@ func TestStartFileWatcher_SetsLastWatcherRestart(t *testing.T) {
 	if m.lastWatcherRestart.Before(beforeCall) || m.lastWatcherRestart.After(afterCall) {
 		t.Errorf("lastWatcherRestart = %v, want between %v and %v",
 			m.lastWatcherRestart, beforeCall, afterCall)
+	}
+}
+
+// =============================================================================
+// Story 11.3: Auto-Activation Tests
+// =============================================================================
+
+// mockStateActivator implements ports.StateActivator for testing.
+type mockStateActivator struct {
+	activateCalls []string // Project IDs that were activated
+	activateErr   error    // Error to return from Activate()
+}
+
+func (m *mockStateActivator) Activate(ctx context.Context, projectID string) error {
+	m.activateCalls = append(m.activateCalls, projectID)
+	return m.activateErr
+}
+
+func TestModel_SetStateService(t *testing.T) {
+	m := NewModel(nil)
+	mock := &mockStateActivator{}
+
+	// Initially should be nil
+	if m.stateService != nil {
+		t.Error("stateService should be nil initially")
+	}
+
+	// Set state service
+	m.SetStateService(mock)
+
+	if m.stateService != mock {
+		t.Error("SetStateService should set the state service")
+	}
+}
+
+func TestModel_HandleFileEvent_HibernatedProject_Activates(t *testing.T) {
+	// Setup mock state activator
+	mock := &mockStateActivator{}
+
+	// Create model with hibernated project
+	now := time.Now()
+	hibTime := now.Add(-24 * time.Hour)
+	projects := []*domain.Project{
+		{
+			ID:           "hibernated-id",
+			Name:         "hibernated-project",
+			Path:         "/home/user/hibernated",
+			State:        domain.StateHibernated,
+			HibernatedAt: &hibTime,
+		},
+	}
+
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.projects = projects
+	m.SetStateService(mock)
+
+	// Initialize components required for handleFileEvent
+	m.projectList = components.NewProjectListModel(projects, m.width, m.height)
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	// Send file event for hibernated project
+	msg := fileEventMsg{
+		Path:      "/home/user/hibernated/file.txt",
+		Timestamp: now,
+	}
+	m.handleFileEvent(msg)
+
+	// Assert: stateService.Activate() was called with correct project ID
+	if len(mock.activateCalls) != 1 {
+		t.Errorf("expected 1 Activate call, got %d", len(mock.activateCalls))
+	}
+	if len(mock.activateCalls) > 0 && mock.activateCalls[0] != "hibernated-id" {
+		t.Errorf("expected Activate call for 'hibernated-id', got '%s'", mock.activateCalls[0])
+	}
+
+	// Assert: project.State == StateActive, HibernatedAt == nil
+	if projects[0].State != domain.StateActive {
+		t.Errorf("expected project state to be Active, got %s", projects[0].State)
+	}
+	if projects[0].HibernatedAt != nil {
+		t.Error("expected HibernatedAt to be nil after activation")
+	}
+}
+
+func TestModel_HandleFileEvent_ActiveProject_NoStateChange(t *testing.T) {
+	// Setup mock state activator
+	mock := &mockStateActivator{}
+
+	// Create model with active project
+	projects := []*domain.Project{
+		{
+			ID:    "active-id",
+			Name:  "active-project",
+			Path:  "/home/user/active",
+			State: domain.StateActive,
+		},
+	}
+
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.projects = projects
+	m.SetStateService(mock)
+
+	// Initialize components
+	m.projectList = components.NewProjectListModel(projects, m.width, m.height)
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	// Send file event for active project
+	msg := fileEventMsg{
+		Path:      "/home/user/active/file.txt",
+		Timestamp: time.Now(),
+	}
+	m.handleFileEvent(msg)
+
+	// Assert: stateService.Activate() NOT called (AC3)
+	if len(mock.activateCalls) != 0 {
+		t.Errorf("expected 0 Activate calls for active project, got %d", len(mock.activateCalls))
+	}
+}
+
+func TestModel_HandleFileEvent_ActivationError_ContinuesProcessing(t *testing.T) {
+	// Setup mock state activator that returns error
+	mockActivator := &mockStateActivator{
+		activateErr: fmt.Errorf("database error"),
+	}
+
+	// Create model with hibernated project
+	now := time.Now()
+	hibTime := now.Add(-24 * time.Hour)
+	projects := []*domain.Project{
+		{
+			ID:           "hibernated-id",
+			Name:         "hibernated-project",
+			Path:         "/home/user/hibernated",
+			State:        domain.StateHibernated,
+			HibernatedAt: &hibTime,
+		},
+	}
+
+	// Setup mock repository so handleFileEvent doesn't return early
+	mockRepo := testhelpers.NewMockRepository().WithProjects(projects)
+
+	m := NewModel(mockRepo)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.projects = projects
+	m.SetStateService(mockActivator)
+
+	// Initialize components
+	m.projectList = components.NewProjectListModel(projects, m.width, m.height)
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	// Send file event - should not panic despite error (AC6)
+	msg := fileEventMsg{
+		Path:      "/home/user/hibernated/file.txt",
+		Timestamp: now,
+	}
+	m.handleFileEvent(msg)
+
+	// Assert: Activate was called
+	if len(mockActivator.activateCalls) != 1 {
+		t.Errorf("expected 1 Activate call, got %d", len(mockActivator.activateCalls))
+	}
+
+	// Assert: State NOT changed due to error
+	if projects[0].State != domain.StateHibernated {
+		t.Error("project state should remain Hibernated on activation error")
+	}
+
+	// Assert: LastActivityAt still updated (graceful degradation)
+	if projects[0].LastActivityAt != now {
+		t.Error("LastActivityAt should be updated even on activation error")
+	}
+}
+
+func TestModel_HandleFileEvent_NoStateService_NoActivation(t *testing.T) {
+	// Create model with hibernated project but NO stateService set
+	now := time.Now()
+	hibTime := now.Add(-24 * time.Hour)
+	projects := []*domain.Project{
+		{
+			ID:           "hibernated-id",
+			Name:         "hibernated-project",
+			Path:         "/home/user/hibernated",
+			State:        domain.StateHibernated,
+			HibernatedAt: &hibTime,
+		},
+	}
+
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.projects = projects
+	// Note: stateService NOT set - should be nil
+
+	// Initialize components
+	m.projectList = components.NewProjectListModel(projects, m.width, m.height)
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	// Send file event - should not panic even with nil stateService
+	msg := fileEventMsg{
+		Path:      "/home/user/hibernated/file.txt",
+		Timestamp: now,
+	}
+	m.handleFileEvent(msg)
+
+	// Assert: No panic occurred and project state unchanged
+	if projects[0].State != domain.StateHibernated {
+		t.Error("project state should remain Hibernated when stateService is nil")
+	}
+
+	// Assert: HibernatedAt unchanged
+	if projects[0].HibernatedAt == nil || *projects[0].HibernatedAt != hibTime {
+		t.Error("HibernatedAt should remain unchanged when stateService is nil")
+	}
+}
+
+func TestModel_HandleFileEvent_StatusBarCountsUpdate(t *testing.T) {
+	// Setup mock state activator
+	mock := &mockStateActivator{}
+
+	// Create model with 2 active, 1 hibernated
+	now := time.Now()
+	hibTime := now.Add(-24 * time.Hour)
+	projects := []*domain.Project{
+		{ID: "active-1", Name: "active-1", Path: "/home/user/active1", State: domain.StateActive},
+		{ID: "active-2", Name: "active-2", Path: "/home/user/active2", State: domain.StateActive},
+		{ID: "hibernated-1", Name: "hibernated-1", Path: "/home/user/hibernated1", State: domain.StateHibernated, HibernatedAt: &hibTime},
+	}
+
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.projects = projects
+	m.SetStateService(mock)
+
+	// Initialize components
+	m.projectList = components.NewProjectListModel(projects, m.width, m.height)
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	// Calculate initial counts (2 active, 1 hibernated)
+	active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
+	m.statusBar.SetCounts(active, hibernated, waiting)
+
+	// Send file event for hibernated project
+	msg := fileEventMsg{
+		Path:      "/home/user/hibernated1/file.txt",
+		Timestamp: now,
+	}
+	m.handleFileEvent(msg)
+
+	// Assert: project is now active
+	if projects[2].State != domain.StateActive {
+		t.Errorf("expected project state to be Active, got %s", projects[2].State)
+	}
+
+	// Assert: Recalculate and verify counts (should be 3 active, 0 hibernated)
+	active, hibernated, _ = components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
+	if active != 3 {
+		t.Errorf("expected 3 active projects, got %d", active)
+	}
+	if hibernated != 0 {
+		t.Errorf("expected 0 hibernated projects, got %d", hibernated)
+	}
+}
+
+func TestModel_HandleFileEvent_ErrInvalidStateTransition_Ignored(t *testing.T) {
+	// Setup mock state activator that returns ErrInvalidStateTransition
+	mockActivator := &mockStateActivator{
+		activateErr: domain.ErrInvalidStateTransition,
+	}
+
+	// Create model with hibernated project
+	now := time.Now()
+	hibTime := now.Add(-24 * time.Hour)
+	projects := []*domain.Project{
+		{
+			ID:           "hibernated-id",
+			Name:         "hibernated-project",
+			Path:         "/home/user/hibernated",
+			State:        domain.StateHibernated,
+			HibernatedAt: &hibTime,
+		},
+	}
+
+	// Setup mock repository so handleFileEvent doesn't return early
+	mockRepo := testhelpers.NewMockRepository().WithProjects(projects)
+
+	m := NewModel(mockRepo)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.projects = projects
+	m.SetStateService(mockActivator)
+
+	// Initialize components
+	m.projectList = components.NewProjectListModel(projects, m.width, m.height)
+	m.detailPanel = components.NewDetailPanelModel(m.width, m.height)
+	m.statusBar = components.NewStatusBarModel(m.width)
+
+	// Send file event - should handle silently (no warning)
+	msg := fileEventMsg{
+		Path:      "/home/user/hibernated/file.txt",
+		Timestamp: now,
+	}
+	m.handleFileEvent(msg)
+
+	// Assert: Activate was called
+	if len(mockActivator.activateCalls) != 1 {
+		t.Errorf("expected 1 Activate call, got %d", len(mockActivator.activateCalls))
+	}
+
+	// Assert: State NOT changed (expected since it's an invalid transition)
+	// This is fine - ErrInvalidStateTransition means project was already active
+	if projects[0].State != domain.StateHibernated {
+		t.Error("project state should remain unchanged on ErrInvalidStateTransition")
+	}
+
+	// Assert: Processing continued (LastActivityAt updated)
+	if projects[0].LastActivityAt != now {
+		t.Error("LastActivityAt should be updated despite ErrInvalidStateTransition")
 	}
 }
