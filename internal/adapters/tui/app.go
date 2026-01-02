@@ -18,8 +18,9 @@ import (
 // The detailLayout parameter controls detail panel position (Story 8.6):
 // "vertical" (default) = side-by-side, "horizontal" = stacked (top/bottom).
 // The config parameter is used for help overlay display (Story 8.7) - nil-safe.
+// The hibernationService parameter is optional - if nil, auto-hibernation is disabled (Story 11.2).
 // Note: Config passed as parameter to avoid cli→tui→cli import cycle.
-func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detector, waitingDetector ports.WaitingDetector, fileWatcher ports.FileWatcher, detailLayout string, config *ports.Config) error {
+func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detector, waitingDetector ports.WaitingDetector, fileWatcher ports.FileWatcher, detailLayout string, config *ports.Config, hibernationService ports.HibernationService) error {
 	// Story 8.9: Initialize emoji fallback system BEFORE TUI renders
 	var useEmoji *bool
 	if config != nil {
@@ -43,6 +44,10 @@ func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detec
 	m.SetDetailLayout(detailLayout)
 	// Story 8.7: Set config for help overlay display
 	m.SetConfig(config)
+	// Story 11.2: Wire hibernation service for auto-hibernation
+	if hibernationService != nil {
+		m.SetHibernationService(hibernationService)
+	}
 
 	p := tea.NewProgram(
 		m,

@@ -107,6 +107,10 @@ type Model struct {
 
 	// Story 9.5-2 fix: Track if stage refresh timer has been started (prevent duplicates)
 	stageTimerStarted bool
+
+	// Story 11.2: Hibernation service for auto-hibernation
+	hibernationService      ports.HibernationService
+	hibernationTimerStarted bool // Prevent duplicate hourly timers
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -201,6 +205,15 @@ type tickMsg time.Time
 
 // stageRefreshTickMsg triggers periodic stage re-detection (Story 8.11).
 type stageRefreshTickMsg time.Time
+
+// hibernationCompleteMsg signals auto-hibernation check is complete (Story 11.2).
+type hibernationCompleteMsg struct {
+	count int
+	err   error
+}
+
+// hibernationTickMsg triggers hourly auto-hibernation check (Story 11.2).
+type hibernationTickMsg time.Time
 
 // fileEventMsg wraps file system events for Bubble Tea message passing (Story 4.6).
 type fileEventMsg struct {
@@ -298,6 +311,12 @@ func (m *Model) SetConfig(cfg *ports.Config) {
 	m.stageRefreshInterval = cfg.StageRefreshIntervalSeconds // Story 8.11
 }
 
+// SetHibernationService sets the hibernation service for auto-hibernation (Story 11.2).
+// This is optional - if not set, auto-hibernation is disabled.
+func (m *Model) SetHibernationService(svc ports.HibernationService) {
+	m.hibernationService = svc
+}
+
 // isProjectWaiting wraps WaitingDetector.IsWaiting for component callbacks.
 // Uses context.Background() since Bubble Tea Render() doesn't provide ctx.
 // Story 4.5: Returns false if detector is nil.
@@ -352,9 +371,22 @@ func statusBarHeight(height int) int {
 // Init implements tea.Model. Returns commands to validate project paths and start periodic tick.
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
+		m.checkAutoHibernationCmd(), // Story 11.2: Run FIRST before validation
 		m.validatePathsCmd(),
 		tickCmd(), // Start periodic timestamp refresh (Story 4.2, AC4)
 	)
+}
+
+// checkAutoHibernationCmd creates a command that checks for auto-hibernation (Story 11.2).
+// Returns nil if hibernation service is not set.
+func (m Model) checkAutoHibernationCmd() tea.Cmd {
+	if m.hibernationService == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		count, err := m.hibernationService.CheckAndHibernate(context.Background())
+		return hibernationCompleteMsg{count: count, err: err}
+	}
 }
 
 // validatePathsCmd creates a command that validates all project paths.
@@ -412,6 +444,32 @@ func (m Model) rescheduleStageTimer() tea.Cmd {
 	})
 }
 
+// hibernationTickCmd returns command for hourly hibernation check (Story 11.2, AC3).
+// Only starts timer once - subsequent calls return nil.
+// The timer reschedules itself via hibernationTickMsg handler.
+func (m *Model) hibernationTickCmd() tea.Cmd {
+	if m.hibernationService == nil {
+		return nil
+	}
+	// Only start timer once - it reschedules itself via hibernationTickMsg
+	if m.hibernationTimerStarted {
+		return nil
+	}
+	m.hibernationTimerStarted = true
+	return m.rescheduleHibernationTimer()
+}
+
+// rescheduleHibernationTimer creates the actual hourly timer tick (Story 11.2).
+// Used by hibernationTickMsg handler to reschedule after each tick.
+func (m Model) rescheduleHibernationTimer() tea.Cmd {
+	if m.hibernationService == nil {
+		return nil
+	}
+	return tea.Tick(time.Hour, func(t time.Time) tea.Msg {
+		return hibernationTickMsg(t)
+	})
+}
+
 // waitForNextFileEventCmd waits for the next file event from the stored channel (Story 4.6).
 // Returns nil if channel is not set or context is cancelled.
 func (m Model) waitForNextFileEventCmd() tea.Cmd {
@@ -436,6 +494,7 @@ func (m Model) waitForNextFileEventCmd() tea.Cmd {
 }
 
 // startRefresh initiates async refresh of all projects (Story 3.6).
+// Story 11.2 AC3: Runs hibernation check before refresh.
 func (m Model) startRefresh() (tea.Model, tea.Cmd) {
 	m.isRefreshing = true
 	m.refreshTotal = len(m.projects)
@@ -443,6 +502,11 @@ func (m Model) startRefresh() (tea.Model, tea.Cmd) {
 	m.refreshError = ""
 	m.statusBar.SetRefreshing(true, 0, m.refreshTotal)
 
+	// Story 11.2: Run hibernation check before refresh (AC3)
+	// The refreshProjectsCmd will run after hibernation completes or immediately if service is nil
+	if m.hibernationService != nil {
+		return m, tea.Batch(m.checkAutoHibernationCmd(), m.refreshProjectsCmd())
+	}
 	return m, m.refreshProjectsCmd()
 }
 
@@ -582,8 +646,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Story 8.11: Start periodic stage refresh timer
 				stageCmd := m.stageRefreshTickCmd()
 
-				if watcherCmd != nil || stageCmd != nil {
-					return m, tea.Batch(watcherCmd, stageCmd)
+				// Story 11.2: Start hourly hibernation timer (AC3)
+				hibernationCmd := m.hibernationTickCmd()
+
+				if watcherCmd != nil || stageCmd != nil || hibernationCmd != nil {
+					return m, tea.Batch(watcherCmd, stageCmd, hibernationCmd)
 				}
 			}
 
@@ -711,8 +778,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Story 8.11: Start periodic stage refresh timer
 			stageCmd := m.stageRefreshTickCmd()
 
-			if watcherCmd != nil || stageCmd != nil {
-				return m, tea.Batch(watcherCmd, stageCmd)
+			// Story 11.2: Start hourly hibernation timer (AC3)
+			hibernationCmd := m.hibernationTickCmd()
+
+			if watcherCmd != nil || stageCmd != nil || hibernationCmd != nil {
+				return m, tea.Batch(watcherCmd, stageCmd, hibernationCmd)
 			}
 		}
 		return m, nil
@@ -1027,6 +1097,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.SetWatcherWarning(warning)
 		}
 		return m, nil
+
+	case hibernationCompleteMsg:
+		// Story 11.2: Handle auto-hibernation check completion (AC4: silent transition)
+		if msg.err != nil {
+			slog.Warn("auto-hibernation check failed", "error", msg.err)
+		} else if msg.count > 0 {
+			slog.Debug("auto-hibernated projects", "count", msg.count)
+		}
+		// Reload projects to update counts (silent - AC4)
+		return m, m.loadProjectsCmd()
+
+	case hibernationTickMsg:
+		// Story 11.2: Hourly auto-hibernation check (AC3)
+		if m.hibernationService == nil {
+			return m, m.rescheduleHibernationTimer()
+		}
+		return m, tea.Batch(
+			m.checkAutoHibernationCmd(),
+			m.rescheduleHibernationTimer(),
+		)
 	}
 
 	return m, nil

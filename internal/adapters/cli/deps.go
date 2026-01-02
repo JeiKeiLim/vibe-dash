@@ -16,6 +16,9 @@ var detailLayout = "horizontal"
 // appConfig stores the loaded configuration for TUI access (Story 8.7).
 var appConfig *ports.Config
 
+// hibernationService handles auto-hibernation of inactive projects (Story 11.2).
+var hibernationService ports.HibernationService
+
 // SetDirectoryManager sets the directory manager for CLI commands.
 func SetDirectoryManager(dm ports.DirectoryManager) {
 	directoryManager = dm
@@ -59,4 +62,9 @@ func GetConfig() *ports.Config {
 		return ports.NewConfig()
 	}
 	return appConfig
+}
+
+// SetHibernationService sets the hibernation service for auto-hibernation (Story 11.2).
+func SetHibernationService(svc ports.HibernationService) {
+	hibernationService = svc
 }

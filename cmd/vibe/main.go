@@ -173,5 +173,14 @@ func run(ctx context.Context) error {
 	// Pass to CLI for TUI integration
 	cli.SetFileWatcher(fileWatcher)
 
+	// Story 11.2: Create StateService and HibernationService for auto-hibernation
+	stateService := services.NewStateService(coordinator)
+	hibernationSvc := services.NewHibernationService(coordinator, stateService, cfg)
+	cli.SetHibernationService(hibernationSvc)
+
+	slog.Debug("hibernation service initialized",
+		"global_hibernation_days", cfg.HibernationDays,
+	)
+
 	return cli.Execute(ctx)
 }
