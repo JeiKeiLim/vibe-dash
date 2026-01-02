@@ -26,6 +26,7 @@ type projectRow struct {
 	State              string         `db:"state"`
 	Notes              sql.NullString `db:"notes"`
 	PathMissing        int            `db:"path_missing"`
+	HibernatedAt       sql.NullString `db:"hibernated_at"`
 	LastActivityAt     string         `db:"last_activity_at"`
 	CreatedAt          string         `db:"created_at"`
 	UpdatedAt          string         `db:"updated_at"`
@@ -47,6 +48,15 @@ func rowToProject(row *projectRow) (*domain.Project, error) {
 		return nil, fmt.Errorf("invalid updated_at: %w", err)
 	}
 
+	// Parse HibernatedAt (nullable)
+	var hibernatedAt *time.Time
+	if row.HibernatedAt.Valid {
+		t, err := time.Parse(time.RFC3339Nano, row.HibernatedAt.String)
+		if err == nil {
+			hibernatedAt = &t
+		}
+	}
+
 	// Parse enums (use zero value on error)
 	stage, _ := domain.ParseStage(row.CurrentStage)
 	state, _ := domain.ParseProjectState(row.State)
@@ -65,6 +75,7 @@ func rowToProject(row *projectRow) (*domain.Project, error) {
 		State:              state,
 		Notes:              row.Notes.String,
 		PathMissing:        row.PathMissing == 1,
+		HibernatedAt:       hibernatedAt,
 		LastActivityAt:     lastActivity,
 		CreatedAt:          created,
 		UpdatedAt:          updated,
@@ -97,4 +108,12 @@ func stateToString(state domain.ProjectState) string {
 	default:
 		return "active"
 	}
+}
+
+// nullTimeString converts a *time.Time to sql.NullString for database storage
+func nullTimeString(t *time.Time) sql.NullString {
+	if t == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: t.Format(time.RFC3339Nano), Valid: true}
 }

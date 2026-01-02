@@ -23,6 +23,7 @@ type Project struct {
 	Notes              string       // User notes/memo (FR21)
 	PathMissing        bool         // True if path was inaccessible at launch (FR-validation)
 	LastActivityAt     time.Time    // Last file change detected (FR34-38)
+	HibernatedAt       *time.Time   // When project was hibernated (nil if active)
 	CreatedAt          time.Time    // When project was added
 	UpdatedAt          time.Time    // Last database update
 }
@@ -85,6 +86,17 @@ func (p *Project) IsActive() bool {
 // HasDisplayName returns true if the project has a custom display name set
 func (p *Project) HasDisplayName() bool {
 	return p.DisplayName != ""
+}
+
+// DaysSinceHibernated returns the number of complete days since the project was hibernated.
+// Returns 0 if the project is not hibernated (HibernatedAt is nil).
+// Note: Uses truncating integer division, so 23.9 hours returns 0 days, not 1.
+func (p *Project) DaysSinceHibernated() int {
+	if p.HibernatedAt == nil {
+		return 0
+	}
+	duration := time.Since(*p.HibernatedAt)
+	return int(duration.Hours() / 24)
 }
 
 // Validate checks Project invariants. Use after modification.

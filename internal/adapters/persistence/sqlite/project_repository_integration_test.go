@@ -321,3 +321,132 @@ func TestIntegration_ProjectRepository_WithDirectoryManager(t *testing.T) {
 // Note: TestIntegration_ProjectRepository_FailsWithoutMarker was removed.
 // Story 3.5.9 removed .project-path marker file requirement.
 // ProjectRepository now works with any valid directory.
+
+// Story 11.1: Test HibernatedAt persistence round-trip
+func TestIntegration_ProjectRepository_HibernatedAt(t *testing.T) {
+	tempDir := t.TempDir()
+	basePath := filepath.Join(tempDir, "vibe-dash")
+
+	projectPath := filepath.Join(tempDir, "projects", "hibernation-test")
+	if err := os.MkdirAll(projectPath, 0755); err != nil {
+		t.Fatalf("failed to create project dir: %v", err)
+	}
+
+	lookup := &mockPathLookupForIntegration{}
+	dm := filesystem.NewDirectoryManager(basePath, lookup)
+	ctx := context.Background()
+
+	projectDir, err := dm.EnsureProjectDir(ctx, projectPath)
+	if err != nil {
+		t.Fatalf("failed to ensure project dir: %v", err)
+	}
+
+	repo, err := NewProjectRepository(projectDir)
+	if err != nil {
+		t.Fatalf("failed to create repository: %v", err)
+	}
+
+	t.Run("HibernatedAt is nil for active project", func(t *testing.T) {
+		now := time.Now()
+		project := &domain.Project{
+			ID:             "active-project-id",
+			Name:           "active-project",
+			Path:           projectPath,
+			CurrentStage:   domain.StageUnknown,
+			State:          domain.StateActive,
+			HibernatedAt:   nil, // Not hibernated
+			LastActivityAt: now,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		}
+
+		if err := repo.Save(ctx, project); err != nil {
+			t.Fatalf("failed to save project: %v", err)
+		}
+
+		found, err := repo.FindByID(ctx, project.ID)
+		if err != nil {
+			t.Fatalf("failed to find project: %v", err)
+		}
+
+		if found.HibernatedAt != nil {
+			t.Errorf("HibernatedAt should be nil for active project, got %v", found.HibernatedAt)
+		}
+	})
+
+	t.Run("HibernatedAt persists and round-trips correctly", func(t *testing.T) {
+		now := time.Now()
+		hibernatedTime := now.Add(-24 * time.Hour)
+		project := &domain.Project{
+			ID:             "hibernated-project-id",
+			Name:           "hibernated-project",
+			Path:           projectPath + "-hibernated",
+			CurrentStage:   domain.StageUnknown,
+			State:          domain.StateHibernated,
+			HibernatedAt:   &hibernatedTime,
+			LastActivityAt: now,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		}
+
+		if err := repo.Save(ctx, project); err != nil {
+			t.Fatalf("failed to save project: %v", err)
+		}
+
+		found, err := repo.FindByID(ctx, project.ID)
+		if err != nil {
+			t.Fatalf("failed to find project: %v", err)
+		}
+
+		if found.HibernatedAt == nil {
+			t.Fatal("HibernatedAt should not be nil for hibernated project")
+		}
+
+		// Compare with some tolerance for time serialization
+		diff := found.HibernatedAt.Sub(hibernatedTime)
+		if diff > time.Second || diff < -time.Second {
+			t.Errorf("HibernatedAt mismatch: got %v, want ~%v", *found.HibernatedAt, hibernatedTime)
+		}
+	})
+
+	t.Run("HibernatedAt can be cleared (activation)", func(t *testing.T) {
+		now := time.Now()
+		hibernatedTime := now.Add(-48 * time.Hour)
+		project := &domain.Project{
+			ID:             "reactivated-project-id",
+			Name:           "reactivated-project",
+			Path:           projectPath + "-reactivated",
+			CurrentStage:   domain.StageUnknown,
+			State:          domain.StateHibernated,
+			HibernatedAt:   &hibernatedTime,
+			LastActivityAt: now,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		}
+
+		// Save with HibernatedAt set
+		if err := repo.Save(ctx, project); err != nil {
+			t.Fatalf("failed to save project: %v", err)
+		}
+
+		// Clear HibernatedAt (simulate activation)
+		project.State = domain.StateActive
+		project.HibernatedAt = nil
+		if err := repo.Save(ctx, project); err != nil {
+			t.Fatalf("failed to update project: %v", err)
+		}
+
+		// Verify HibernatedAt is nil after activation
+		found, err := repo.FindByID(ctx, project.ID)
+		if err != nil {
+			t.Fatalf("failed to find project: %v", err)
+		}
+
+		if found.HibernatedAt != nil {
+			t.Errorf("HibernatedAt should be nil after activation, got %v", found.HibernatedAt)
+		}
+		if found.State != domain.StateActive {
+			t.Errorf("State should be Active, got %v", found.State)
+		}
+	})
+}

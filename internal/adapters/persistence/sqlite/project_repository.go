@@ -126,6 +126,7 @@ func (r *ProjectRepository) Save(ctx context.Context, project *domain.Project) e
 		stateToString(project.State),
 		nullString(project.Notes),
 		boolToInt(project.PathMissing),
+		nullTimeString(project.HibernatedAt),
 		project.LastActivityAt.Format(time.RFC3339Nano),
 		project.CreatedAt.Format(time.RFC3339Nano),
 		project.UpdatedAt.Format(time.RFC3339Nano),

@@ -1,7 +1,7 @@
 package sqlite
 
 // SchemaVersion is the current schema version for migrations
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // CreateSchemaVersionTableSQL creates the schema_version table for tracking migrations
 const CreateSchemaVersionTableSQL = `
@@ -13,12 +13,13 @@ CREATE TABLE IF NOT EXISTS schema_version (
 // CreateProjectsTableSQL creates the projects table with base columns.
 // IMPORTANT: Additional columns are added via migrations (see migrations.go):
 //   - v2: path_missing INTEGER DEFAULT 0
+//   - v3: hibernated_at TEXT
 //
 // The full schema after all migrations:
 //
 //	id, name, path, display_name, detected_method, current_stage,
 //	confidence, detection_reasoning, is_favorite, state, notes,
-//	path_missing, last_activity_at, created_at, updated_at
+//	path_missing, hibernated_at, last_activity_at, created_at, updated_at
 const CreateProjectsTableSQL = `
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,

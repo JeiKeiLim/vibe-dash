@@ -310,3 +310,48 @@ func TestNewProject_TimestampsAreRecent(t *testing.T) {
 		t.Errorf("LastActivityAt = %v, want between %v and %v", project.LastActivityAt, before, after)
 	}
 }
+
+// Story 11.1: Test DaysSinceHibernated helper method
+func TestProject_DaysSinceHibernated(t *testing.T) {
+	tests := []struct {
+		name         string
+		hibernatedAt *time.Time
+		wantDays     int
+	}{
+		{
+			name:         "nil HibernatedAt returns 0",
+			hibernatedAt: nil,
+			wantDays:     0,
+		},
+		{
+			name:         "hibernated today returns 0",
+			hibernatedAt: func() *time.Time { t := time.Now(); return &t }(),
+			wantDays:     0,
+		},
+		{
+			name:         "hibernated 1 day ago returns 1",
+			hibernatedAt: func() *time.Time { t := time.Now().Add(-25 * time.Hour); return &t }(),
+			wantDays:     1,
+		},
+		{
+			name:         "hibernated 7 days ago returns 7",
+			hibernatedAt: func() *time.Time { t := time.Now().Add(-7 * 24 * time.Hour); return &t }(),
+			wantDays:     7,
+		},
+		{
+			name:         "hibernated 30 days ago returns 30",
+			hibernatedAt: func() *time.Time { t := time.Now().Add(-30 * 24 * time.Hour); return &t }(),
+			wantDays:     30,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Project{HibernatedAt: tt.hibernatedAt}
+			got := p.DaysSinceHibernated()
+			if got != tt.wantDays {
+				t.Errorf("Project.DaysSinceHibernated() = %v, want %v", got, tt.wantDays)
+			}
+		})
+	}
+}

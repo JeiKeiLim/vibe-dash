@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2026-01-02
-updated_by: SM (Bob) - Epic 9.5 retrospective complete, Epic 11 next (Epic 10 deferred)
+updated_by: Dev (Amelia) - Story 11-1 done after code review
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -290,14 +290,15 @@ development_status:
   10-8-documentation-troubleshooting-guide: backlog
   epic-10-retrospective: optional
 
-  # Epic 11: Project State & Hibernation - POST-MVP (NEXT)
+  # Epic 11: Project State & Hibernation - POST-MVP (IN PROGRESS)
   # (Was Epic 5, renumbered 2025-12-31)
   # DEFERRED TO POST-MVP (2025-12-22)
   # Rationale: Hibernation is a power-user feature. MVP is functional.
   # Dashboard has space for this info, but core polish took priority.
   # 2026-01-02: Selected as next epic (Epic 10 deferred - architecture stable)
-  epic-11: backlog
-  11-1-project-state-model: backlog
+  # 2026-01-02: Story 11-1 drafted by SM Bob
+  epic-11: in-progress
+  11-1-project-state-model: done
   11-2-auto-hibernation: backlog
   11-3-auto-activation-on-activity: backlog
   11-4-hibernated-projects-view: backlog

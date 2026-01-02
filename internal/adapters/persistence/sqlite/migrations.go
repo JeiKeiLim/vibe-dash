@@ -30,6 +30,11 @@ var migrations = []Migration{
 		Description: "Add path_missing column to projects",
 		SQL:         "ALTER TABLE projects ADD COLUMN path_missing INTEGER DEFAULT 0;",
 	},
+	{
+		Version:     3,
+		Description: "Add hibernated_at column to projects",
+		SQL:         "ALTER TABLE projects ADD COLUMN hibernated_at TEXT;",
+	},
 }
 
 // RunMigrations applies all pending migrations to the database
