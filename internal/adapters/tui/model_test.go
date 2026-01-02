@@ -2732,8 +2732,15 @@ func TestStartFileWatcher_SetsLastWatcherRestart(t *testing.T) {
 
 // mockStateActivator implements ports.StateActivator for testing.
 type mockStateActivator struct {
-	activateCalls []string // Project IDs that were activated
-	activateErr   error    // Error to return from Activate()
+	hibernateCalls []string // Project IDs that were hibernated
+	hibernateErr   error    // Error to return from Hibernate()
+	activateCalls  []string // Project IDs that were activated
+	activateErr    error    // Error to return from Activate()
+}
+
+func (m *mockStateActivator) Hibernate(ctx context.Context, projectID string) error {
+	m.hibernateCalls = append(m.hibernateCalls, projectID)
+	return m.hibernateErr
 }
 
 func (m *mockStateActivator) Activate(ctx context.Context, projectID string) error {
