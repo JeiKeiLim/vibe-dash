@@ -82,6 +82,16 @@ func isActiveStatus(normalizedStatus string) bool {
 // storyKeyRegex matches story keys like "1-1-project-scaffolding", "4-5-2-bmad-v6-...".
 var storyKeyRegex = regexp.MustCompile(`^\d+-\d+-`)
 
+// epicInfo holds information about an epic and its stories for stage analysis.
+type epicInfo struct {
+	key     string
+	status  string
+	stories []struct {
+		key    string
+		status string
+	}
+}
+
 // parseSprintStatus reads and parses the sprint-status.yaml file.
 func parseSprintStatus(ctx context.Context, path string) (*SprintStatus, error) {
 	select {
@@ -114,16 +124,6 @@ func parseSprintStatus(ctx context.Context, path string) (*SprintStatus, error) 
 func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confidence, string) {
 	if status == nil || status.DevelopmentStatus == nil || len(status.DevelopmentStatus) == 0 {
 		return domain.StageUnknown, domain.ConfidenceUncertain, "sprint-status.yaml is empty"
-	}
-
-	// Collect epics and stories
-	type epicInfo struct {
-		key     string
-		status  string
-		stories []struct {
-			key    string
-			status string
-		}
 	}
 
 	// G23: Track retrospectives for all-done case
@@ -248,12 +248,17 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 	backlogCount := 0
 	doneCount := 0
 	var firstInProgressEpic *epicInfo
+	var firstBacklogEpic *epicInfo // G25: Capture first backlog epic for fallback analysis
 
 	for _, epicKey := range epicOrder {
 		epic := epics[epicKey]
 		switch epic.status {
 		case "backlog":
 			backlogCount++
+			// G25/G27: Capture first backlog epic (by natural order) for story analysis
+			if firstBacklogEpic == nil {
+				firstBacklogEpic = epic
+			}
 		case "in-progress", "contexted":
 			if firstInProgressEpic == nil {
 				firstInProgressEpic = epic
@@ -315,96 +320,28 @@ func determineStageFromStatus(status *SprintStatus) (domain.Stage, domain.Confid
 		return domain.StageSpecify, domain.ConfidenceCertain, appendWarnings("No epics in progress - planning phase")
 	}
 
-	// Has in-progress epic - analyze its stories
+	// G25/G27: Check for backlog epic when no in-progress epic exists
+	// This handles the case where some epics are done and some are backlog
+	if firstInProgressEpic == nil && firstBacklogEpic != nil {
+		// Analyze backlog epic's stories using same priority logic as in-progress
+		stage, confidence, reasoning, found := analyzeEpicStories(firstBacklogEpic, &warnings, appendWarnings)
+		if found {
+			return stage, confidence, reasoning
+		}
+
+		// G26: Backlog epic has no stories - needs story planning
+		return domain.StagePlan, domain.ConfidenceCertain,
+			appendWarnings(formatEpicKey(firstBacklogEpic.key) + " in backlog, needs story planning")
+	}
+
+	// Has in-progress epic - analyze its stories using shared helper
 	if firstInProgressEpic != nil {
-		// G19: Sort stories for deterministic ordering
-		sortedStories := make([]struct {
-			key    string
-			status string
-		}, len(firstInProgressEpic.stories))
-		copy(sortedStories, firstInProgressEpic.stories)
-		sort.Slice(sortedStories, func(i, j int) bool {
-			return naturalCompare(sortedStories[i].key, sortedStories[j].key)
-		})
-
-		// G2/G3/G19: Priority-based story selection
-		// Priority: review > in-progress > ready-for-dev > drafted > backlog > done
-		storyPriority := map[string]int{
-			"review":        1,
-			"in-progress":   2,
-			"ready-for-dev": 3,
-			"drafted":       4,
-			"backlog":       5,
-			"done":          6,
+		stage, confidence, reasoning, found := analyzeEpicStories(firstInProgressEpic, &warnings, appendWarnings)
+		if found {
+			return stage, confidence, reasoning
 		}
 
-		var selectedStory string
-		var selectedStatus string
-		const unsetPriority = 999
-		selectedPriority := unsetPriority
-
-		// Track stories with unknown status for fallback display
-		var unknownStatusStories []struct {
-			key    string
-			status string
-		}
-
-		for _, story := range sortedStories {
-			if p, ok := storyPriority[story.status]; ok && p < selectedPriority {
-				selectedStory = story.key
-				selectedStatus = story.status
-				selectedPriority = p
-			} else if _, known := storyPriority[story.status]; !known && story.status != "" {
-				// Track unknown statuses (not empty, not in priority map)
-				unknownStatusStories = append(unknownStatusStories, struct {
-					key    string
-					status string
-				}{key: story.key, status: story.status})
-			}
-		}
-
-		// Return based on selected story status
-		switch selectedStatus {
-		case "review":
-			return domain.StageTasks, domain.ConfidenceCertain,
-				appendWarnings("Story " + formatStoryKey(selectedStory) + " in code review")
-		case "in-progress":
-			return domain.StageImplement, domain.ConfidenceCertain,
-				appendWarnings("Story " + formatStoryKey(selectedStory) + " being implemented")
-		case "ready-for-dev":
-			return domain.StagePlan, domain.ConfidenceCertain,
-				appendWarnings("Story " + formatStoryKey(selectedStory) + " ready for development")
-		case "drafted":
-			return domain.StagePlan, domain.ConfidenceCertain,
-				appendWarnings("Story " + formatStoryKey(selectedStory) + " drafted, needs review")
-		case "backlog":
-			return domain.StagePlan, domain.ConfidenceCertain,
-				appendWarnings("Story " + formatStoryKey(selectedStory) + " in backlog, needs drafting")
-		}
-
-		// G1: Check if ALL stories in this epic are done
-		allDone := true
-		hasStories := len(firstInProgressEpic.stories) > 0
-		for _, story := range firstInProgressEpic.stories {
-			if story.status != "done" {
-				allDone = false
-				break
-			}
-		}
-		if hasStories && allDone {
-			return domain.StageImplement, domain.ConfidenceCertain,
-				appendWarnings(formatEpicKey(firstInProgressEpic.key) + " stories complete, update epic status")
-		}
-
-		// Epic in-progress but no known-status stories started
-		// If there are stories with unknown status, show the first one
-		if len(unknownStatusStories) > 0 {
-			first := unknownStatusStories[0]
-			warnings = append(warnings, "unknown status '"+first.status+"' for "+first.key)
-			return domain.StagePlan, domain.ConfidenceLikely,
-				appendWarnings("Story " + formatStoryKey(first.key) + " has unknown status '" + first.status + "'")
-		}
-
+		// Epic in-progress but no actionable stories found
 		return domain.StagePlan, domain.ConfidenceCertain,
 			appendWarnings(formatEpicKey(firstInProgressEpic.key) + " started, preparing stories")
 	}
@@ -576,6 +513,104 @@ func formatEpicKey(key string) string {
 	numPart := strings.TrimPrefix(key, "epic-")
 	// Replace dashes with dots
 	return "Epic " + strings.ReplaceAll(numPart, "-", ".")
+}
+
+// analyzeEpicStories analyzes an epic's stories and returns stage info.
+// G25: Extracted helper to share story analysis logic between in-progress and backlog epics.
+// Returns (stage, confidence, reasoning, found) where found indicates if a result was produced.
+// The warnings pointer allows adding warnings that get formatted by appendWarnings.
+func analyzeEpicStories(epic *epicInfo, warnings *[]string, appendWarnings func(string) string) (domain.Stage, domain.Confidence, string, bool) {
+	if len(epic.stories) == 0 {
+		return domain.StageUnknown, domain.ConfidenceUncertain, "", false
+	}
+
+	// G19: Sort stories for deterministic ordering
+	sortedStories := make([]struct {
+		key    string
+		status string
+	}, len(epic.stories))
+	copy(sortedStories, epic.stories)
+	sort.Slice(sortedStories, func(i, j int) bool {
+		return naturalCompare(sortedStories[i].key, sortedStories[j].key)
+	})
+
+	// G2/G3/G19: Priority-based story selection
+	// Priority: review > in-progress > ready-for-dev > drafted > backlog > done
+	storyPriority := map[string]int{
+		"review":        1,
+		"in-progress":   2,
+		"ready-for-dev": 3,
+		"drafted":       4,
+		"backlog":       5,
+		"done":          6,
+	}
+
+	var selectedStory string
+	var selectedStatus string
+	const unsetPriority = 999
+	selectedPriority := unsetPriority
+
+	// Track stories with unknown status for fallback display
+	var unknownStatusStories []struct {
+		key    string
+		status string
+	}
+
+	for _, story := range sortedStories {
+		if p, ok := storyPriority[story.status]; ok && p < selectedPriority {
+			selectedStory = story.key
+			selectedStatus = story.status
+			selectedPriority = p
+		} else if _, known := storyPriority[story.status]; !known && story.status != "" {
+			// Track unknown statuses (not empty, not in priority map)
+			unknownStatusStories = append(unknownStatusStories, struct {
+				key    string
+				status string
+			}{key: story.key, status: story.status})
+		}
+	}
+
+	// Return based on selected story status
+	switch selectedStatus {
+	case "review":
+		return domain.StageTasks, domain.ConfidenceCertain,
+			appendWarnings("Story " + formatStoryKey(selectedStory) + " in code review"), true
+	case "in-progress":
+		return domain.StageImplement, domain.ConfidenceCertain,
+			appendWarnings("Story " + formatStoryKey(selectedStory) + " being implemented"), true
+	case "ready-for-dev":
+		return domain.StagePlan, domain.ConfidenceCertain,
+			appendWarnings("Story " + formatStoryKey(selectedStory) + " ready for development"), true
+	case "drafted":
+		return domain.StagePlan, domain.ConfidenceCertain,
+			appendWarnings("Story " + formatStoryKey(selectedStory) + " drafted, needs review"), true
+	case "backlog":
+		return domain.StagePlan, domain.ConfidenceCertain,
+			appendWarnings("Story " + formatStoryKey(selectedStory) + " in backlog, needs drafting"), true
+	}
+
+	// G1: Check if ALL stories in this epic are done
+	allDone := true
+	for _, story := range epic.stories {
+		if story.status != "done" {
+			allDone = false
+			break
+		}
+	}
+	if allDone {
+		return domain.StageImplement, domain.ConfidenceCertain,
+			appendWarnings(formatEpicKey(epic.key) + " stories complete, update epic status"), true
+	}
+
+	// If there are stories with unknown status, show the first one
+	if len(unknownStatusStories) > 0 {
+		first := unknownStatusStories[0]
+		*warnings = append(*warnings, "unknown status '"+first.status+"' for "+first.key)
+		return domain.StagePlan, domain.ConfidenceLikely,
+			appendWarnings("Story " + formatStoryKey(first.key) + " has unknown status '" + first.status + "'"), true
+	}
+
+	return domain.StageUnknown, domain.ConfidenceUncertain, "", false
 }
 
 // detectStageFromArtifacts checks for BMAD artifact files as a fallback.

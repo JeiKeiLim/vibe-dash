@@ -1423,6 +1423,182 @@ func TestDetermineStageFromStatus_MixedDoubleDigitScenario(t *testing.T) {
 }
 
 // =============================================================================
+// G25-G27: Backlog Epic Stage Detection Tests (Story 9.5.7)
+// =============================================================================
+
+// TestDetermineStageFromStatus_G25_BacklogEpicWithStories tests that when all done epics
+// are complete and the next epic is in backlog (not in-progress), we still analyze its stories.
+func TestDetermineStageFromStatus_G25_BacklogEpicWithStories(t *testing.T) {
+	tests := []struct {
+		name          string
+		status        *SprintStatus
+		wantStage     domain.Stage
+		wantReasoning string
+	}{
+		{
+			name: "G25: done epics + backlog epic with backlog stories",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-9":                 "done",
+					"9-1-feature":            "done",
+					"epic-9-5":               "backlog",
+					"9-5-1-feature":          "backlog",
+					"9-5-2-feature":          "backlog",
+					"epic-9-5-retrospective": "optional",
+				},
+			},
+			wantStage:     domain.StagePlan,
+			wantReasoning: "Story 9.5.1 in backlog, needs drafting",
+		},
+		{
+			name: "G25: done epics + backlog epic with ready-for-dev story",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-9":        "done",
+					"9-1-feature":   "done",
+					"epic-9-5":      "backlog",
+					"9-5-1-feature": "ready-for-dev",
+				},
+			},
+			wantStage:     domain.StagePlan,
+			wantReasoning: "Story 9.5.1 ready for development",
+		},
+		{
+			name: "G25: done epics + backlog epic with drafted story",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-9":        "done",
+					"9-1-feature":   "done",
+					"epic-9-5":      "backlog",
+					"9-5-1-feature": "drafted",
+				},
+			},
+			wantStage:     domain.StagePlan,
+			wantReasoning: "Story 9.5.1 drafted, needs review",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stage, _, reasoning := determineStageFromStatus(tt.status)
+			if stage != tt.wantStage {
+				t.Errorf("stage = %v, want %v", stage, tt.wantStage)
+			}
+			if reasoning != tt.wantReasoning {
+				t.Errorf("reasoning = %q, want %q", reasoning, tt.wantReasoning)
+			}
+		})
+	}
+}
+
+// TestDetermineStageFromStatus_G26_BacklogEpicNoStories tests that when a backlog epic
+// has no stories defined, we return an appropriate planning message.
+func TestDetermineStageFromStatus_G26_BacklogEpicNoStories(t *testing.T) {
+	tests := []struct {
+		name          string
+		status        *SprintStatus
+		wantStage     domain.Stage
+		wantReasoning string
+	}{
+		{
+			name: "G26: done epics + backlog epic with no stories",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-9":    "done",
+					"9-1-story": "done",
+					"epic-10":   "backlog",
+					// No stories for epic-10
+				},
+			},
+			wantStage:     domain.StagePlan,
+			wantReasoning: "Epic 10 in backlog, needs story planning",
+		},
+		{
+			name: "G26: sub-epic (9.5) backlog with no stories",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-9":   "done",
+					"epic-9-5": "backlog",
+					// No stories for epic-9-5
+				},
+			},
+			wantStage:     domain.StagePlan,
+			wantReasoning: "Epic 9.5 in backlog, needs story planning",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stage, _, reasoning := determineStageFromStatus(tt.status)
+			if stage != tt.wantStage {
+				t.Errorf("stage = %v, want %v", stage, tt.wantStage)
+			}
+			if reasoning != tt.wantReasoning {
+				t.Errorf("reasoning = %q, want %q", reasoning, tt.wantReasoning)
+			}
+		})
+	}
+}
+
+// TestDetermineStageFromStatus_G27_MixedDoneBacklog tests that when some epics are done
+// and some are backlog (none in-progress), we select the first backlog epic by natural order.
+func TestDetermineStageFromStatus_G27_MixedDoneBacklog(t *testing.T) {
+	tests := []struct {
+		name          string
+		status        *SprintStatus
+		wantStage     domain.Stage
+		wantReasoning string
+	}{
+		{
+			name: "G27: done + multiple backlog epics, selects first backlog",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-8":        "done",
+					"8-1-story":     "done",
+					"epic-9":        "done",
+					"9-1-story":     "done",
+					"epic-10":       "backlog",
+					"10-1-story":    "backlog",
+					"epic-11":       "backlog",
+					"11-1-story":    "backlog",
+					"epic-9-5":      "backlog", // Out of order - should still pick epic-9-5 first
+					"9-5-1-feature": "backlog",
+				},
+			},
+			wantStage:     domain.StagePlan,
+			wantReasoning: "Story 9.5.1 in backlog, needs drafting", // epic-9-5 < epic-10 < epic-11
+		},
+		{
+			name: "G27: all done except one backlog epic",
+			status: &SprintStatus{
+				DevelopmentStatus: map[string]string{
+					"epic-1":      "done",
+					"1-1-feature": "done",
+					"epic-2":      "done",
+					"2-1-feature": "done",
+					"epic-3":      "backlog",
+					"3-1-feature": "drafted",
+				},
+			},
+			wantStage:     domain.StagePlan,
+			wantReasoning: "Story 3.1 drafted, needs review",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stage, _, reasoning := determineStageFromStatus(tt.status)
+			if stage != tt.wantStage {
+				t.Errorf("stage = %v, want %v", stage, tt.wantStage)
+			}
+			if reasoning != tt.wantReasoning {
+				t.Errorf("reasoning = %q, want %q", reasoning, tt.wantReasoning)
+			}
+		})
+	}
+}
+
+// =============================================================================
 // findSprintStatusPath Tests
 // =============================================================================
 

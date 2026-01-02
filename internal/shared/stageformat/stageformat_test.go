@@ -254,6 +254,34 @@ func TestFormatStageInfo(t *testing.T) {
 			},
 			expected: "E1 S1.1 review",
 		},
+		// G26: Epic backlog with no stories (needs story planning)
+		{
+			name: "bmad epic backlog needs planning",
+			project: domain.Project{
+				DetectedMethod:     "bmad",
+				DetectionReasoning: "Epic 10 in backlog, needs story planning",
+				CurrentStage:       domain.StagePlan,
+			},
+			expected: "E10 backlog",
+		},
+		{
+			name: "bmad sub-epic backlog needs planning",
+			project: domain.Project{
+				DetectedMethod:     "bmad",
+				DetectionReasoning: "Epic 9.5 in backlog, needs story planning",
+				CurrentStage:       domain.StagePlan,
+			},
+			expected: "E9.5 backlog",
+		},
+		{
+			name: "bmad epic backlog with version prefix",
+			project: domain.Project{
+				DetectedMethod:     "bmad",
+				DetectionReasoning: "BMAD v6.0.0-alpha.13, Epic 10 in backlog, needs story planning",
+				CurrentStage:       domain.StagePlan,
+			},
+			expected: "E10 backlog",
+		},
 	}
 
 	for _, tt := range tests {

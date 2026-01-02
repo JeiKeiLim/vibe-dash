@@ -226,6 +226,11 @@ func abbreviateEpicStatus(status string) string {
 		return "done"
 	case strings.Contains(status, "started") || strings.Contains(status, "preparing"):
 		return "prep"
+	// G26: Backlog epic without stories
+	case strings.Contains(status, "backlog") && strings.Contains(status, "story planning"):
+		return "backlog"
+	case strings.Contains(status, "backlog"):
+		return "backlog"
 	default:
 		return ""
 	}
