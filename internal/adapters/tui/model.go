@@ -431,11 +431,12 @@ func (m Model) validatePathsCmd() tea.Cmd {
 	}
 }
 
-// loadProjectsCmd creates a command that loads all projects from the repository.
+// loadProjectsCmd creates a command that loads active projects from the repository.
+// Hibernated projects are loaded separately via loadHibernatedProjectsCmd.
 func (m Model) loadProjectsCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		projects, err := m.repository.FindAll(ctx)
+		projects, err := m.repository.FindActive(ctx)
 		return ProjectsLoadedMsg{projects: projects, err: err}
 	}
 }
@@ -587,18 +588,29 @@ func (m Model) refreshProjectsCmd() tea.Cmd {
 				continue
 			}
 
-			// Update project with new detection result
-			project.DetectedMethod = result.Method
-			project.CurrentStage = result.Stage
-			project.Confidence = result.Confidence
-			project.DetectionReasoning = result.Reasoning
-			project.UpdatedAt = time.Now()
+			// Reload project from DB to get current state (prevents overwriting CLI changes)
+			currentProject, findErr := m.repository.FindByID(ctx, project.ID)
+			if findErr != nil {
+				slog.Debug("refresh find failed", "project", project.Name, "error", findErr)
+				failedCount++
+				continue
+			}
 
-			if err := m.repository.Save(ctx, project); err != nil {
+			// Update ONLY detection fields, preserve state/hibernation/favorites
+			currentProject.DetectedMethod = result.Method
+			currentProject.CurrentStage = result.Stage
+			currentProject.Confidence = result.Confidence
+			currentProject.DetectionReasoning = result.Reasoning
+			currentProject.UpdatedAt = time.Now()
+
+			if err := m.repository.Save(ctx, currentProject); err != nil {
 				slog.Debug("refresh save failed", "project", project.Name, "error", err)
 				failedCount++
 				continue
 			}
+
+			// Update in-memory project with current DB state
+			*project = *currentProject
 
 			refreshedCount++
 		}
