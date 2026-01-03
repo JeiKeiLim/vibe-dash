@@ -103,6 +103,7 @@ func renderHelpOverlay(width, height int, cfg *ports.Config) string {
 		"f        Toggle favorite",
 		"n        Edit notes",
 		"x        Remove project",
+		"H        Hibernate/Activate",
 		"a        Add project",
 		"r        Refresh/rescan",
 		"",

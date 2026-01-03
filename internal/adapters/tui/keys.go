@@ -24,7 +24,8 @@ const (
 	KeyRefresh  = "r"
 
 	// Views
-	KeyHibernated = "h"
+	KeyHibernated  = "h"
+	KeyStateToggle = "H" // Story 11.7: Manual state toggle (uppercase H)
 )
 
 // KeyBindings holds the current key bindings for the TUI.
@@ -51,7 +52,8 @@ type KeyBindings struct {
 	Refresh  string
 
 	// Views
-	Hibernated string
+	Hibernated  string
+	StateToggle string // Story 11.7: Manual state toggle
 }
 
 // DefaultKeyBindings returns the default key bindings.
@@ -78,6 +80,7 @@ func DefaultKeyBindings() KeyBindings {
 		Refresh:  KeyRefresh,
 
 		// Views
-		Hibernated: KeyHibernated,
+		Hibernated:  KeyHibernated,
+		StateToggle: KeyStateToggle, // Story 11.7
 	}
 }

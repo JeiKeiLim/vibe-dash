@@ -239,6 +239,14 @@ type projectActivatedMsg struct {
 	err         error
 }
 
+// stateToggledMsg signals a project state was toggled via H key (Story 11.7).
+type stateToggledMsg struct {
+	projectID   string
+	projectName string
+	action      string // "hibernated" or "activated"
+	err         error
+}
+
 // fileEventMsg wraps file system events for Bubble Tea message passing (Story 4.6).
 type fileEventMsg struct {
 	Path      string
@@ -524,6 +532,35 @@ func (m Model) activateProjectCmd(projectID, projectName string) tea.Cmd {
 		ctx := context.Background()
 		err := m.stateService.Activate(ctx, projectID)
 		return projectActivatedMsg{projectID: projectID, projectName: projectName, err: err}
+	}
+}
+
+// stateToggleCmd toggles project state via H key (Story 11.7).
+// If hibernate=true, calls Hibernate(); otherwise calls Activate().
+// Uses 5-second timeout to prevent TUI freeze on DB issues.
+func (m Model) stateToggleCmd(projectID, projectName string, hibernate bool) tea.Cmd {
+	if m.stateService == nil {
+		return func() tea.Msg {
+			return stateToggledMsg{
+				projectID:   projectID,
+				projectName: projectName,
+				err:         errors.New("state service not available"),
+			}
+		}
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		var err error
+		var action string
+		if hibernate {
+			err = m.stateService.Hibernate(ctx, projectID)
+			action = "hibernated"
+		} else {
+			err = m.stateService.Activate(ctx, projectID)
+			action = "activated"
+		}
+		return stateToggledMsg{projectID: projectID, projectName: projectName, action: action, err: err}
 	}
 }
 
@@ -1248,6 +1285,52 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewMode = viewModeNormal
 		m.statusBar.SetInHibernatedView(false)
 		return m, m.loadProjectsCmd()
+
+	case stateToggledMsg:
+		// Story 11.7: Handle state toggle result (AC3, AC4, AC5)
+		if msg.err != nil {
+			if errors.Is(msg.err, domain.ErrFavoriteCannotHibernate) {
+				// AC3: Favorite protection - show error feedback
+				m.statusBar.SetRefreshComplete("Cannot hibernate favorite project")
+				return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+					return clearRemoveFeedbackMsg{} // Reuse existing clear msg
+				})
+			}
+			if errors.Is(msg.err, domain.ErrInvalidStateTransition) {
+				// Idempotent case - reload appropriate list silently
+				if msg.action == "hibernated" {
+					return m, m.loadProjectsCmd()
+				}
+				return m, m.loadHibernatedProjectsCmd()
+			}
+			// General error
+			slog.Warn("failed to toggle project state", "error", msg.err)
+			m.statusBar.SetRefreshComplete("✗ State change failed")
+			return m, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+				return clearRemoveFeedbackMsg{}
+			})
+		}
+		// AC4: Success feedback
+		var feedback string
+		if msg.action == "hibernated" {
+			feedback = fmt.Sprintf("✓ Hibernated: %s", msg.projectName)
+		} else {
+			feedback = fmt.Sprintf("✓ Activated: %s", msg.projectName)
+		}
+		m.statusBar.SetRefreshComplete(feedback)
+		// AC5: Reload appropriate list
+		var reloadCmd tea.Cmd
+		if msg.action == "hibernated" {
+			reloadCmd = m.loadProjectsCmd()
+		} else {
+			reloadCmd = m.loadHibernatedProjectsCmd()
+		}
+		return m, tea.Batch(
+			reloadCmd,
+			tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+				return clearRemoveFeedbackMsg{}
+			}),
+		)
 	}
 
 	return m, nil
@@ -1492,6 +1575,29 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil // No project to remove
 		}
 		return m.startRemoveConfirmation()
+
+	case KeyStateToggle:
+		// Story 11.7: Toggle project state with H key (AC1, AC2, AC7)
+		if m.viewMode == viewModeHibernated {
+			// In hibernated view: activate selected project (AC2)
+			if len(m.hibernatedProjects) == 0 {
+				return m, nil // AC7: No-op when empty
+			}
+			selected := m.hibernatedList.SelectedProject()
+			if selected == nil {
+				return m, nil
+			}
+			return m, m.stateToggleCmd(selected.ID, project.EffectiveName(selected), false)
+		}
+		// In active view: hibernate selected project (AC1)
+		if len(m.projects) == 0 {
+			return m, nil // AC7: No-op when empty
+		}
+		selected := m.projectList.SelectedProject()
+		if selected == nil {
+			return m, nil
+		}
+		return m, m.stateToggleCmd(selected.ID, project.EffectiveName(selected), true)
 	}
 
 	// Story 11.4: Forward key messages to hibernated list when in hibernated view (AC8)

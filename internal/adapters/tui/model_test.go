@@ -3595,3 +3595,299 @@ func TestModel_ActiveSelectionPreserved_WhenSwitchingViews(t *testing.T) {
 		t.Errorf("expected selection restored to index 2, got %d", updated.projectList.Index())
 	}
 }
+
+// =============================================================================
+// Story 11.7: TUI Manual State Toggle Tests
+// =============================================================================
+
+func TestModel_StateToggle_HibernateFromActiveView_AC1(t *testing.T) {
+	// AC1: H key in active view calls Hibernate()
+	mock := &mockStateActivator{}
+
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.stateService = mock
+
+	// Setup active project
+	projects := []*domain.Project{
+		{ID: "p1", Name: "Project1", State: domain.StateActive},
+	}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, 100, 30)
+
+	// Press H key
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'H'}}
+	_, cmd := m.Update(msg)
+
+	// Should return stateToggleCmd
+	if cmd == nil {
+		t.Fatal("expected command from H key")
+	}
+
+	// Execute command and verify Hibernate was called
+	resultMsg := cmd()
+	result, ok := resultMsg.(stateToggledMsg)
+	if !ok {
+		t.Fatalf("expected stateToggledMsg, got %T", resultMsg)
+	}
+
+	if result.projectID != "p1" {
+		t.Errorf("expected projectID 'p1', got %q", result.projectID)
+	}
+	if result.action != "hibernated" {
+		t.Errorf("expected action 'hibernated', got %q", result.action)
+	}
+	if len(mock.hibernateCalls) != 1 || mock.hibernateCalls[0] != "p1" {
+		t.Errorf("expected Hibernate() called with p1, got %v", mock.hibernateCalls)
+	}
+}
+
+func TestModel_StateToggle_ActivateFromHibernatedView_AC2(t *testing.T) {
+	// AC2: H key in hibernated view calls Activate()
+	mock := &mockStateActivator{}
+
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.stateService = mock
+	m.viewMode = viewModeHibernated
+
+	// Setup hibernated projects
+	hibTime := time.Now().Add(-24 * time.Hour)
+	projects := []*domain.Project{
+		{ID: "p1", Name: "Project1", State: domain.StateHibernated, HibernatedAt: &hibTime},
+	}
+	m.hibernatedProjects = projects
+	m.hibernatedList = components.NewProjectListModel(projects, 100, 30)
+
+	// Press H key
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'H'}}
+	_, cmd := m.Update(msg)
+
+	// Should return stateToggleCmd
+	if cmd == nil {
+		t.Fatal("expected command from H key")
+	}
+
+	// Execute command and verify Activate was called
+	resultMsg := cmd()
+	result, ok := resultMsg.(stateToggledMsg)
+	if !ok {
+		t.Fatalf("expected stateToggledMsg, got %T", resultMsg)
+	}
+
+	if result.projectID != "p1" {
+		t.Errorf("expected projectID 'p1', got %q", result.projectID)
+	}
+	if result.action != "activated" {
+		t.Errorf("expected action 'activated', got %q", result.action)
+	}
+	if len(mock.activateCalls) != 1 || mock.activateCalls[0] != "p1" {
+		t.Errorf("expected Activate() called with p1, got %v", mock.activateCalls)
+	}
+}
+
+func TestModel_StateToggle_FavoriteProtection_AC3(t *testing.T) {
+	// AC3: Error feedback for favorite project
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(120)
+
+	// Simulate stateToggledMsg with ErrFavoriteCannotHibernate
+	msg := stateToggledMsg{
+		projectID:   "p1",
+		projectName: "FavoriteProject",
+		action:      "hibernated",
+		err:         domain.ErrFavoriteCannotHibernate,
+	}
+
+	newModel, cmd := m.Update(msg)
+	updated := newModel.(Model)
+
+	// Should have set error feedback in status bar
+	// We can't directly check statusBar state, but verify command returned for 3s timer
+	if cmd == nil {
+		t.Error("expected clear timer command")
+	}
+
+	// Verify status bar is set (indirectly via view containing the message)
+	_ = updated // status bar was updated internally
+}
+
+func TestModel_StateToggle_SuccessFeedback_AC4(t *testing.T) {
+	// AC4: Success message in status bar
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(120)
+
+	// Setup repo for reload command
+	m.repository = testhelpers.NewMockRepository()
+
+	// Simulate successful stateToggledMsg
+	msg := stateToggledMsg{
+		projectID:   "p1",
+		projectName: "TestProject",
+		action:      "hibernated",
+		err:         nil,
+	}
+
+	_, cmd := m.Update(msg)
+
+	// Should have batch command (reload + timer)
+	if cmd == nil {
+		t.Error("expected batch command")
+	}
+}
+
+func TestModel_StateToggle_ListRefresh_AC5(t *testing.T) {
+	// AC5: Returns loadProjectsCmd/loadHibernatedProjectsCmd
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(120)
+	m.repository = testhelpers.NewMockRepository()
+
+	// Test hibernate action reloads active list
+	msg := stateToggledMsg{
+		projectID:   "p1",
+		projectName: "TestProject",
+		action:      "hibernated",
+		err:         nil,
+	}
+
+	_, cmd := m.Update(msg)
+	if cmd == nil {
+		t.Error("expected command to reload projects")
+	}
+
+	// Test activate action reloads hibernated list
+	m.viewMode = viewModeHibernated
+	msg.action = "activated"
+	_, cmd = m.Update(msg)
+	if cmd == nil {
+		t.Error("expected command to reload hibernated projects")
+	}
+}
+
+func TestModel_StateToggle_NoOpWhenEmpty_AC7(t *testing.T) {
+	// AC7: No crash when list is empty
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.projects = []*domain.Project{} // Empty
+
+	// Press H key with empty list
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'H'}}
+	_, cmd := m.Update(msg)
+
+	// Should return nil (no-op)
+	if cmd != nil {
+		t.Error("H key on empty list should return nil")
+	}
+
+	// Test hibernated view as well
+	m.viewMode = viewModeHibernated
+	m.hibernatedProjects = []*domain.Project{} // Empty
+
+	_, cmd = m.Update(msg)
+	if cmd != nil {
+		t.Error("H key on empty hibernated list should return nil")
+	}
+}
+
+func TestModel_StateToggle_IdempotentBehavior(t *testing.T) {
+	// ErrInvalidStateTransition handled gracefully
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.statusBar = components.NewStatusBarModel(120)
+	m.repository = testhelpers.NewMockRepository()
+
+	// Simulate stateToggledMsg with ErrInvalidStateTransition
+	msg := stateToggledMsg{
+		projectID:   "p1",
+		projectName: "TestProject",
+		action:      "hibernated",
+		err:         domain.ErrInvalidStateTransition,
+	}
+
+	_, cmd := m.Update(msg)
+
+	// Should reload list silently (no error shown)
+	if cmd == nil {
+		t.Error("expected reload command for idempotent case")
+	}
+}
+
+func TestModel_StateToggle_NoStateService(t *testing.T) {
+	// Test error when stateService is nil
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.stateService = nil // No service
+
+	// Setup project
+	projects := []*domain.Project{
+		{ID: "p1", Name: "Project1", State: domain.StateActive},
+	}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, 100, 30)
+
+	// Press H key
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'H'}}
+	_, cmd := m.Update(msg)
+
+	if cmd == nil {
+		t.Fatal("expected command even with nil service")
+	}
+
+	// Execute and verify error returned
+	resultMsg := cmd()
+	result, ok := resultMsg.(stateToggledMsg)
+	if !ok {
+		t.Fatalf("expected stateToggledMsg, got %T", resultMsg)
+	}
+
+	if result.err == nil {
+		t.Error("expected error when stateService is nil")
+	}
+}
+
+func TestHelpOverlay_ContainsStateToggleKeybinding_AC6(t *testing.T) {
+	// AC6: Help overlay shows H keybinding with "Hibernate/Activate" description
+	cfg := ports.NewConfig()
+	rendered := renderHelpOverlay(120, 40, cfg)
+
+	// Verify H keybinding is present
+	if !strings.Contains(rendered, "H") {
+		t.Error("help overlay should contain 'H' keybinding")
+	}
+	if !strings.Contains(rendered, "Hibernate/Activate") {
+		t.Error("help overlay should contain 'Hibernate/Activate' description")
+	}
+
+	// Verify it appears in the Actions section (after 'x' for remove, before 'a' for add)
+	xIndex := strings.Index(rendered, "x        Remove project")
+	hIndex := strings.Index(rendered, "H        Hibernate/Activate")
+	aIndex := strings.Index(rendered, "a        Add project")
+
+	if xIndex == -1 || hIndex == -1 || aIndex == -1 {
+		t.Error("expected all keybindings to be present in help overlay")
+		return
+	}
+
+	if !(xIndex < hIndex && hIndex < aIndex) {
+		t.Error("H keybinding should appear after 'x' and before 'a' in Actions section")
+	}
+}
