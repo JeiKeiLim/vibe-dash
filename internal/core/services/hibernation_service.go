@@ -3,8 +3,11 @@ package services
 import (
 	"context"
 	"log/slog"
+	"path/filepath"
 	"time"
 
+	"github.com/JeiKeiLim/vibe-dash/internal/config"
+	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 )
 
@@ -15,6 +18,7 @@ type HibernationService struct {
 	repo         ports.ProjectRepository
 	stateService *StateService
 	config       *ports.Config
+	vibeHome     string // Base path for per-project configs (~/.vibe-dash)
 }
 
 // Compile-time interface compliance check
@@ -24,12 +28,14 @@ var _ ports.HibernationService = (*HibernationService)(nil)
 func NewHibernationService(
 	repo ports.ProjectRepository,
 	stateService *StateService,
-	config *ports.Config,
+	cfg *ports.Config,
+	vibeHome string,
 ) *HibernationService {
 	return &HibernationService{
 		repo:         repo,
 		stateService: stateService,
-		config:       config,
+		config:       cfg,
+		vibeHome:     vibeHome,
 	}
 }
 
@@ -52,8 +58,8 @@ func (h *HibernationService) CheckAndHibernate(ctx context.Context) (int, error)
 			continue
 		}
 
-		// Get effective threshold (respects per-project override)
-		thresholdDays := h.config.GetEffectiveHibernationDays(project.ID)
+		// Get effective threshold (respects per-project config file override)
+		thresholdDays := h.getEffectiveHibernationDays(ctx, project)
 
 		// Check if auto-hibernation is disabled
 		if thresholdDays == 0 {
@@ -84,4 +90,34 @@ func (h *HibernationService) CheckAndHibernate(ctx context.Context) (int, error)
 func (h *HibernationService) isInactive(lastActivityAt time.Time, thresholdDays int) bool {
 	threshold := time.Duration(thresholdDays) * 24 * time.Hour
 	return time.Since(lastActivityAt) > threshold
+}
+
+// getEffectiveHibernationDays returns threshold for project.
+// Priority: per-project config file > global config
+func (h *HibernationService) getEffectiveHibernationDays(ctx context.Context, project *domain.Project) int {
+	// Resolve directory name from config (canonical path -> dir name)
+	dirName := h.config.GetDirForPath(project.Path)
+	if dirName == "" {
+		// Project not in config - use global
+		return h.config.HibernationDays
+	}
+
+	projectDir := filepath.Join(h.vibeHome, dirName)
+	loader, err := config.NewProjectConfigLoader(projectDir)
+	if err != nil {
+		return h.config.HibernationDays
+	}
+
+	data, err := loader.Load(ctx)
+	if err != nil {
+		slog.Debug("failed to load per-project config, using global",
+			"project", project.Name, "error", err)
+		return h.config.HibernationDays
+	}
+
+	if data.CustomHibernationDays != nil {
+		return *data.CustomHibernationDays
+	}
+
+	return h.config.HibernationDays
 }

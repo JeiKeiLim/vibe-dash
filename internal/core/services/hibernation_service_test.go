@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -70,7 +72,7 @@ func TestNewHibernationService(t *testing.T) {
 	stateSvc := NewStateService(repo)
 	config := ports.NewConfig()
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 
 	if svc == nil {
 		t.Fatal("expected non-nil service")
@@ -90,7 +92,7 @@ func TestHibernationService_InactiveProjectHibernates(t *testing.T) {
 	project.LastActivityAt = time.Now().Add(-15 * 24 * time.Hour)
 	repo.projects[project.ID] = project
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 	ctx := context.Background()
 
 	count, err := svc.CheckAndHibernate(ctx)
@@ -121,7 +123,7 @@ func TestHibernationService_ActiveProjectStaysActive(t *testing.T) {
 	project.LastActivityAt = time.Now().Add(-10 * 24 * time.Hour)
 	repo.projects[project.ID] = project
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 	ctx := context.Background()
 
 	count, err := svc.CheckAndHibernate(ctx)
@@ -153,7 +155,7 @@ func TestHibernationService_FavoriteNeverHibernates(t *testing.T) {
 	project.LastActivityAt = time.Now().Add(-100 * 24 * time.Hour)
 	repo.projects[project.ID] = project
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 	ctx := context.Background()
 
 	count, err := svc.CheckAndHibernate(ctx)
@@ -186,7 +188,7 @@ func TestHibernationService_HibernatedProjectSkipped(t *testing.T) {
 	project.LastActivityAt = time.Now().Add(-100 * 24 * time.Hour)
 	repo.projects[project.ID] = project
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 	ctx := context.Background()
 
 	count, err := svc.CheckAndHibernate(ctx)
@@ -218,7 +220,7 @@ func TestHibernationService_DisabledWithZeroDays(t *testing.T) {
 	project.LastActivityAt = time.Now().Add(-100 * 24 * time.Hour)
 	repo.projects[project.ID] = project
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 	ctx := context.Background()
 
 	count, err := svc.CheckAndHibernate(ctx)
@@ -237,26 +239,41 @@ func TestHibernationService_DisabledWithZeroDays(t *testing.T) {
 }
 
 // TestHibernationService_PerProjectOverride (AC5)
-// Per-project override is respected
+// Per-project override is respected via per-project config file
 func TestHibernationService_PerProjectOverride(t *testing.T) {
+	// Create temp vibeHome with per-project config
+	vibeHome := t.TempDir()
+	projectDir := filepath.Join(vibeHome, "test-project")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create per-project config with 7-day override
+	configPath := filepath.Join(projectDir, "config.yaml")
+	configContent := `custom_hibernation_days: 7
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	repo := newMockHibernationRepo()
 	stateSvc := NewStateService(repo)
-	config := ports.NewConfig()
-	config.HibernationDays = 14 // Global: 14 days
+	cfg := ports.NewConfig()
+	cfg.HibernationDays = 14 // Global: 14 days
 
-	// Create project with 10 days inactivity
+	// Create project with 10 days inactivity (> 7, < 14)
 	project, _ := domain.NewProject("/path/to/project", "test-project")
 	project.State = domain.StateActive
 	project.LastActivityAt = time.Now().Add(-10 * 24 * time.Hour)
 	repo.projects[project.ID] = project
 
-	// Set per-project override: 7 days (project should be hibernated)
-	sevenDays := 7
-	config.Projects = map[string]ports.ProjectConfig{
-		project.ID: {HibernationDays: &sevenDays},
+	// Configure config to resolve project path -> directory name
+	cfg.Projects["test-project"] = ports.ProjectConfig{
+		Path:          project.Path,
+		DirectoryName: "test-project",
 	}
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, cfg, vibeHome)
 	ctx := context.Background()
 
 	count, err := svc.CheckAndHibernate(ctx)
@@ -265,12 +282,12 @@ func TestHibernationService_PerProjectOverride(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if count != 1 {
-		t.Errorf("expected 1 hibernated (per-project override), got %d", count)
+		t.Errorf("expected 1 hibernated (per-project override 7 days), got %d", count)
 	}
 
 	// Verify project is now hibernated
 	if repo.projects[project.ID].State != domain.StateHibernated {
-		t.Error("expected project to be hibernated based on per-project override")
+		t.Error("expected project to be hibernated based on per-project config file override")
 	}
 }
 
@@ -289,7 +306,7 @@ func TestHibernationService_BoundaryCondition(t *testing.T) {
 	project.LastActivityAt = time.Now().Add(-14*24*time.Hour + time.Minute)
 	repo.projects[project.ID] = project
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 	ctx := context.Background()
 
 	count, err := svc.CheckAndHibernate(ctx)
@@ -320,7 +337,7 @@ func TestHibernationService_JustOverBoundary(t *testing.T) {
 	project.LastActivityAt = time.Now().Add(-14*24*time.Hour - time.Second)
 	repo.projects[project.ID] = project
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 	ctx := context.Background()
 
 	count, err := svc.CheckAndHibernate(ctx)
@@ -357,7 +374,7 @@ func TestHibernationService_PartialFailure(t *testing.T) {
 	project2.LastActivityAt = time.Now().Add(-15 * 24 * time.Hour)
 	repo.projects[project2.ID] = project2
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 	ctx := context.Background()
 
 	count, err := svc.CheckAndHibernate(ctx)
@@ -393,7 +410,7 @@ func TestHibernationService_PartialFailure_SaveError(t *testing.T) {
 
 	stateSvc := NewStateService(repo)
 	config := ports.NewConfig()
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 	ctx := context.Background()
 
 	count, err := svc.CheckAndHibernate(ctx)
@@ -449,7 +466,7 @@ func TestHibernationService_MultipleProjects(t *testing.T) {
 	p5.LastActivityAt = time.Now().Add(-16 * 24 * time.Hour)
 	repo.projects[p5.ID] = p5
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 	ctx := context.Background()
 
 	count, err := svc.CheckAndHibernate(ctx)
@@ -486,7 +503,7 @@ func TestHibernationService_EmptyRepository(t *testing.T) {
 	stateSvc := NewStateService(repo)
 	config := ports.NewConfig()
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 	ctx := context.Background()
 
 	count, err := svc.CheckAndHibernate(ctx)
@@ -508,7 +525,7 @@ func TestHibernationService_FindActiveError(t *testing.T) {
 	stateSvc := NewStateService(repo)
 	config := ports.NewConfig()
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 	ctx := context.Background()
 
 	count, err := svc.CheckAndHibernate(ctx)
@@ -534,6 +551,158 @@ func (m *mockHibernationRepoWithFindActiveErr) FindActive(ctx context.Context) (
 	return nil, m.findActiveErr
 }
 
+// TestHibernationService_PerProjectZeroDisables (Story 11.6 AC4)
+// Per-project custom_hibernation_days: 0 disables auto-hibernation for that project
+func TestHibernationService_PerProjectZeroDisables(t *testing.T) {
+	// Create temp vibeHome with per-project config
+	vibeHome := t.TempDir()
+	projectDir := filepath.Join(vibeHome, "test-project")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create per-project config with 0 (disable)
+	configPath := filepath.Join(projectDir, "config.yaml")
+	configContent := `custom_hibernation_days: 0
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	repo := newMockHibernationRepo()
+	stateSvc := NewStateService(repo)
+	cfg := ports.NewConfig()
+	cfg.HibernationDays = 14 // Global: 14 days
+
+	// Create project with 100 days inactivity (well over threshold)
+	project, _ := domain.NewProject("/path/to/project", "test-project")
+	project.State = domain.StateActive
+	project.LastActivityAt = time.Now().Add(-100 * 24 * time.Hour)
+	repo.projects[project.ID] = project
+
+	// Configure config to resolve project path -> directory name
+	cfg.Projects["test-project"] = ports.ProjectConfig{
+		Path:          project.Path,
+		DirectoryName: "test-project",
+	}
+
+	svc := NewHibernationService(repo, stateSvc, cfg, vibeHome)
+	ctx := context.Background()
+
+	count, err := svc.CheckAndHibernate(ctx)
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 hibernated (per-project zero disables), got %d", count)
+	}
+
+	// Verify project is still active
+	if repo.projects[project.ID].State != domain.StateActive {
+		t.Error("expected project to stay active when per-project config sets 0")
+	}
+}
+
+// TestHibernationService_PerProjectConfigLoadError_FallbackToGlobal (Story 11.6)
+// When per-project config cannot be loaded, fall back to global
+func TestHibernationService_PerProjectConfigLoadError_FallbackToGlobal(t *testing.T) {
+	// Create temp vibeHome with INVALID config
+	vibeHome := t.TempDir()
+	projectDir := filepath.Join(vibeHome, "test-project")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create invalid YAML config
+	configPath := filepath.Join(projectDir, "config.yaml")
+	invalidYAML := `custom_hibernation_days: [invalid yaml`
+	if err := os.WriteFile(configPath, []byte(invalidYAML), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	repo := newMockHibernationRepo()
+	stateSvc := NewStateService(repo)
+	cfg := ports.NewConfig()
+	cfg.HibernationDays = 14 // Global: 14 days
+
+	// Create project with 15 days inactivity (just over global threshold)
+	project, _ := domain.NewProject("/path/to/project", "test-project")
+	project.State = domain.StateActive
+	project.LastActivityAt = time.Now().Add(-15 * 24 * time.Hour)
+	repo.projects[project.ID] = project
+
+	// Configure config to resolve project path -> directory name
+	cfg.Projects["test-project"] = ports.ProjectConfig{
+		Path:          project.Path,
+		DirectoryName: "test-project",
+	}
+
+	svc := NewHibernationService(repo, stateSvc, cfg, vibeHome)
+	ctx := context.Background()
+
+	// Should NOT error - graceful fallback to global
+	count, err := svc.CheckAndHibernate(ctx)
+
+	if err != nil {
+		t.Fatalf("expected no error (graceful fallback), got %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 hibernated (using global 14-day fallback), got %d", count)
+	}
+
+	// Verify project is hibernated using global threshold
+	if repo.projects[project.ID].State != domain.StateHibernated {
+		t.Error("expected project to be hibernated using global threshold fallback")
+	}
+}
+
+// TestHibernationService_NoProjectConfigFile_UsesGlobal
+// When per-project config directory exists but no config.yaml, use global
+func TestHibernationService_NoProjectConfigFile_UsesGlobal(t *testing.T) {
+	// Create temp vibeHome with directory but NO config file
+	vibeHome := t.TempDir()
+	projectDir := filepath.Join(vibeHome, "test-project")
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Don't create config.yaml
+
+	repo := newMockHibernationRepo()
+	stateSvc := NewStateService(repo)
+	cfg := ports.NewConfig()
+	cfg.HibernationDays = 14 // Global: 14 days
+
+	// Create project with 15 days inactivity (just over global threshold)
+	project, _ := domain.NewProject("/path/to/project", "test-project")
+	project.State = domain.StateActive
+	project.LastActivityAt = time.Now().Add(-15 * 24 * time.Hour)
+	repo.projects[project.ID] = project
+
+	// Configure config to resolve project path -> directory name
+	cfg.Projects["test-project"] = ports.ProjectConfig{
+		Path:          project.Path,
+		DirectoryName: "test-project",
+	}
+
+	svc := NewHibernationService(repo, stateSvc, cfg, vibeHome)
+	ctx := context.Background()
+
+	count, err := svc.CheckAndHibernate(ctx)
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 hibernated (using global), got %d", count)
+	}
+
+	// Verify project is hibernated using global threshold
+	if repo.projects[project.ID].State != domain.StateHibernated {
+		t.Error("expected project to be hibernated using global threshold")
+	}
+}
+
 // TestHibernationService_HibernatedAtTimestamp (AC6)
 // Verifies HibernatedAt is set correctly when auto-hibernating
 func TestHibernationService_HibernatedAtTimestamp(t *testing.T) {
@@ -547,7 +716,7 @@ func TestHibernationService_HibernatedAtTimestamp(t *testing.T) {
 	project.LastActivityAt = time.Now().Add(-15 * 24 * time.Hour)
 	repo.projects[project.ID] = project
 
-	svc := NewHibernationService(repo, stateSvc, config)
+	svc := NewHibernationService(repo, stateSvc, config, "")
 	ctx := context.Background()
 
 	beforeHibernate := time.Now()

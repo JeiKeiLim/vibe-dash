@@ -175,7 +175,7 @@ func run(ctx context.Context) error {
 
 	// Story 11.2: Create StateService and HibernationService for auto-hibernation
 	stateService := services.NewStateService(coordinator)
-	hibernationSvc := services.NewHibernationService(coordinator, stateService, cfg)
+	hibernationSvc := services.NewHibernationService(coordinator, stateService, cfg, basePath)
 	cli.SetHibernationService(hibernationSvc)
 
 	// Story 11.3: Wire StateService for auto-activation on file events

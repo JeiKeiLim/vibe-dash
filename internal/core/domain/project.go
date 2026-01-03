@@ -19,10 +19,10 @@ type Project struct {
 	Confidence         Confidence   // Detection confidence level (FR12)
 	DetectionReasoning string       // Human-readable detection explanation (FR11, FR26)
 	IsFavorite         bool         // Always visible regardless of activity (FR30)
-	State          ProjectState // Active or Hibernated (FR28-33)
-	Notes          string       // User notes/memo (FR21)
-	PathMissing    bool         // True if path was inaccessible at launch (FR-validation)
-	LastActivityAt time.Time    // Last file change detected (FR34-38)
+	State              ProjectState // Active or Hibernated (FR28-33)
+	Notes              string       // User notes/memo (FR21)
+	PathMissing        bool         // True if path was inaccessible at launch (FR-validation)
+	LastActivityAt     time.Time    // Last file change detected (FR34-38)
 	HibernatedAt       *time.Time   // When project was hibernated (nil if active)
 	CreatedAt          time.Time    // When project was added
 	UpdatedAt          time.Time    // Last database update

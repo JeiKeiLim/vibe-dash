@@ -32,9 +32,11 @@ var configSetCmd = &cobra.Command{
 	Long: `Set a configuration value for a specific project.
 
 Supported keys:
+  hibernation-days     Days of inactivity before auto-hibernation (0 to disable)
   waiting-threshold    Agent waiting threshold in minutes (0 to disable)
 
 Examples:
+  vibe config set my-project hibernation-days 30
   vibe config set my-project waiting-threshold 5
   vibe config set api-service waiting-threshold 0    # Disable detection`,
 	Args: cobra.ExactArgs(3),
@@ -54,6 +56,16 @@ func runConfigSet(cmd *cobra.Command, args []string) error {
 
 	var err error
 	switch key {
+	case "hibernation-days":
+		var intVal int
+		intVal, err = strconv.Atoi(value)
+		if err != nil {
+			err = fmt.Errorf("%w: invalid value for hibernation-days: %s", domain.ErrConfigInvalid, value)
+		} else if intVal < 0 {
+			err = fmt.Errorf("%w: hibernation-days must be >= 0, got %d", domain.ErrConfigInvalid, intVal)
+		} else {
+			return setProjectHibernationDays(cmd.Context(), cmd, projectID, intVal)
+		}
 	case "waiting-threshold":
 		var intVal int
 		intVal, err = strconv.Atoi(value)
@@ -106,5 +118,38 @@ func setProjectWaitingThreshold(ctx context.Context, cmd *cobra.Command, project
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Set waiting-threshold=%d for project %s\n", threshold, projectID)
+	return nil
+}
+
+// setProjectHibernationDays updates the hibernation days for a project.
+func setProjectHibernationDays(ctx context.Context, cmd *cobra.Command, projectID string, days int) error {
+	// Get vibe home directory
+	projectDir := filepath.Join(vibeHome, projectID)
+
+	// Check if project directory exists before proceeding
+	if _, err := os.Stat(projectDir); os.IsNotExist(err) {
+		return fmt.Errorf("project directory not found: %s (expected at %s)", projectID, projectDir)
+	}
+
+	// Load existing project config (creates default if doesn't exist)
+	loader, err := config.NewProjectConfigLoader(projectDir)
+	if err != nil {
+		return fmt.Errorf("failed to access project config: %w", err)
+	}
+
+	data, err := loader.Load(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load project config: %w", err)
+	}
+
+	// Update hibernation days
+	data.CustomHibernationDays = &days
+
+	// Save back
+	if err := loader.Save(ctx, data); err != nil {
+		return fmt.Errorf("failed to save project config: %w", err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Set hibernation-days=%d for project %s\n", days, projectID)
 	return nil
 }
