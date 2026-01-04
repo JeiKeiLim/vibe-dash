@@ -80,8 +80,10 @@ jobs:
           go test -v ./... 2>&1 | tee test-output.txt
           exit_code=${PIPESTATUS[0]}
           echo "duration=$(($(date +%s) - start))" >> $GITHUB_OUTPUT
-          echo "passed=$(grep -c '^--- PASS:' test-output.txt || echo 0)" >> $GITHUB_OUTPUT
-          echo "failed=$(grep -c '^--- FAIL:' test-output.txt || echo 0)" >> $GITHUB_OUTPUT
+          passed_count=$(grep -c '^--- PASS:' test-output.txt || true)
+          failed_count=$(grep -c '^--- FAIL:' test-output.txt || true)
+          echo "passed=${passed_count:-0}" >> $GITHUB_OUTPUT
+          echo "failed=${failed_count:-0}" >> $GITHUB_OUTPUT
           exit $exit_code
 
       - name: Add unit test summary
@@ -120,8 +122,10 @@ jobs:
           go test -v -tags=integration -timeout=10m ./... 2>&1 | tee test-output.txt
           exit_code=${PIPESTATUS[0]}
           echo "duration=$(($(date +%s) - start))" >> $GITHUB_OUTPUT
-          echo "passed=$(grep -c '^--- PASS:' test-output.txt || echo 0)" >> $GITHUB_OUTPUT
-          echo "failed=$(grep -c '^--- FAIL:' test-output.txt || echo 0)" >> $GITHUB_OUTPUT
+          passed_count=$(grep -c '^--- PASS:' test-output.txt || true)
+          failed_count=$(grep -c '^--- FAIL:' test-output.txt || true)
+          echo "passed=${passed_count:-0}" >> $GITHUB_OUTPUT
+          echo "failed=${failed_count:-0}" >> $GITHUB_OUTPUT
           exit $exit_code
 
       - name: Add integration test summary
