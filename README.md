@@ -16,6 +16,14 @@ Every feature, from the initial architecture to the TUI polish, was developed th
 
 **Why build this?** I wanted hands-on experience with BMAD to understand how structured AI collaboration scales across a non-trivial project. vibe-dash became both the learning vehicle and a practical tool I use daily to monitor my other AI-assisted projects.
 
+### Development Highlights
+
+- **11 epics, 100+ stories** — Continuous iterative development, not a one-shot generation
+- **Hexagonal architecture** — Clean separation maintained throughout all development phases
+- **Test-driven** — Unit tests, integration tests, and TUI behavioral tests (Epic 9)
+- **Full transparency** — Every PRD, architecture decision, and retrospective is public
+- **Dogfooding** — vibe-dash monitors its own development
+
 If you're curious about BMAD or want to see what continuous AI-assisted development looks like in practice, explore the sprint artifacts — they tell the full story of how this codebase evolved from concept to working software.
 
 ## Features
@@ -216,7 +224,7 @@ registry.Register(mydetector.NewMyDetector())
 
 ## Architecture
 
-vibe-dash follows hexagonal architecture (ports & adapters):
+vibe-dash follows hexagonal architecture (ports & adapters), established in Epic 1 and maintained consistently through 11 epics of development:
 
 ```
 internal/
@@ -231,6 +239,8 @@ internal/
     ├── filesystem/        # OS abstraction, file watching
     └── detectors/         # BMAD, Speckit implementations
 ```
+
+This separation ensures that domain logic remains independent of infrastructure choices. New detectors, storage backends, or UI implementations can be added without modifying core business logic.
 
 ### Key Dependencies
 
