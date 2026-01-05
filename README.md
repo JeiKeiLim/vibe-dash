@@ -14,13 +14,12 @@ This project is a **real-world demonstration of the [BMAD Method](https://github
 
 Every feature, from the initial architecture to the TUI polish, was developed through BMAD's phased workflow: requirements gathering, architecture design, epic/story planning, and iterative implementation. The entire development history — PRDs, architecture docs, epics, stories, and retrospectives — lives in [`docs/sprint-artifacts/`](docs/sprint-artifacts/).
 
-**Why build this?** I wanted hands-on experience with BMAD to understand how structured AI collaboration scales across a non-trivial project. vibe-dash became both the learning vehicle and a practical tool I use daily to monitor my other AI-assisted projects.
+**Why build this?** I wanted hands-on experience with BMAD to understand how structured AI collaboration scales across a non-trivial project. Having minimal Go experience and no TUI background, this was also a test of whether AI-assisted development could bridge the gap. vibe-dash became both the learning vehicle and a practical tool I use to monitor my other AI-assisted projects.
 
 ### Development Highlights
 
-- **11 epics, 100+ stories** — Continuous iterative development, not a one-shot generation
-- **Hexagonal architecture** — Clean separation maintained throughout all development phases
-- **Test-driven** — Unit tests, integration tests, and TUI behavioral tests (Epic 9)
+- **Incremental development** — Built story by story across 100+ iterations
+- **Maintained structure** — Same patterns, conventions, and test coverage throughout
 - **Full transparency** — Every PRD, architecture decision, and retrospective is public
 - **Dogfooding** — vibe-dash monitors its own development
 
