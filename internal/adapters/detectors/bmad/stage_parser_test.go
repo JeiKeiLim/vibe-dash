@@ -1638,6 +1638,20 @@ func TestFindSprintStatusPath(t *testing.T) {
 			wantPath:  "docs/sprint-status.yaml",
 		},
 		{
+			name: "_bmad-output location: _bmad-output/implementation-artifacts/sprint-status.yaml",
+			setup: func(t *testing.T, dir string) {
+				implDir := filepath.Join(dir, "_bmad-output", "implementation-artifacts")
+				if err := os.MkdirAll(implDir, 0755); err != nil {
+					t.Fatalf("failed to create _bmad-output/implementation-artifacts: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(implDir, "sprint-status.yaml"), []byte("test"), 0644); err != nil {
+					t.Fatalf("failed to write sprint-status.yaml: %v", err)
+				}
+			},
+			wantFound: true,
+			wantPath:  "_bmad-output/implementation-artifacts/sprint-status.yaml",
+		},
+		{
 			name: "not found",
 			setup: func(t *testing.T, dir string) {
 				// Empty directory
@@ -1664,6 +1678,30 @@ func TestFindSprintStatusPath(t *testing.T) {
 			wantFound: true,
 			wantPath:  "docs/sprint-artifacts/sprint-status.yaml",
 		},
+		{
+			name: "docs takes precedence over _bmad-output",
+			setup: func(t *testing.T, dir string) {
+				// Create docs location
+				sprintDir := filepath.Join(dir, "docs", "sprint-artifacts")
+				if err := os.MkdirAll(sprintDir, 0755); err != nil {
+					t.Fatalf("failed to create sprint-artifacts: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(sprintDir, "sprint-status.yaml"), []byte("docs"), 0644); err != nil {
+					t.Fatalf("failed to write docs sprint-status.yaml: %v", err)
+				}
+
+				// Create _bmad-output location
+				implDir := filepath.Join(dir, "_bmad-output", "implementation-artifacts")
+				if err := os.MkdirAll(implDir, 0755); err != nil {
+					t.Fatalf("failed to create _bmad-output/implementation-artifacts: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(implDir, "sprint-status.yaml"), []byte("bmad-output"), 0644); err != nil {
+					t.Fatalf("failed to write _bmad-output sprint-status.yaml: %v", err)
+				}
+			},
+			wantFound: true,
+			wantPath:  "docs/sprint-artifacts/sprint-status.yaml",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1671,7 +1709,136 @@ func TestFindSprintStatusPath(t *testing.T) {
 			dir := t.TempDir()
 			tt.setup(t, dir)
 
-			got := findSprintStatusPath(dir)
+			// Test with nil config (hardcoded fallback paths)
+			got := findSprintStatusPath(dir, nil)
+
+			if tt.wantFound {
+				wantFullPath := filepath.Join(dir, tt.wantPath)
+				if got != wantFullPath {
+					t.Errorf("findSprintStatusPath() = %q, want %q", got, wantFullPath)
+				}
+			} else {
+				if got != "" {
+					t.Errorf("findSprintStatusPath() = %q, want empty string", got)
+				}
+			}
+		})
+	}
+}
+
+// TestFindSprintStatusPath_WithConfig tests config-based path resolution
+func TestFindSprintStatusPath_WithConfig(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func(t *testing.T, dir string)
+		config    *BMADConfig
+		wantFound bool
+		wantPath  string // relative to dir
+	}{
+		{
+			name: "config with sprint_artifacts path",
+			setup: func(t *testing.T, dir string) {
+				sprintDir := filepath.Join(dir, "custom", "sprint-artifacts")
+				if err := os.MkdirAll(sprintDir, 0755); err != nil {
+					t.Fatalf("failed to create custom sprint-artifacts: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(sprintDir, "sprint-status.yaml"), []byte("test"), 0644); err != nil {
+					t.Fatalf("failed to write sprint-status.yaml: %v", err)
+				}
+			},
+			config: &BMADConfig{
+				SprintArtifacts: "{project-root}/custom/sprint-artifacts",
+			},
+			wantFound: true,
+			wantPath:  "custom/sprint-artifacts/sprint-status.yaml",
+		},
+		{
+			name: "config with implementation_artifacts path",
+			setup: func(t *testing.T, dir string) {
+				implDir := filepath.Join(dir, "_output", "impl-artifacts")
+				if err := os.MkdirAll(implDir, 0755); err != nil {
+					t.Fatalf("failed to create impl-artifacts: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(implDir, "sprint-status.yaml"), []byte("test"), 0644); err != nil {
+					t.Fatalf("failed to write sprint-status.yaml: %v", err)
+				}
+			},
+			config: &BMADConfig{
+				ImplementationArtifacts: "{project-root}/_output/impl-artifacts",
+			},
+			wantFound: true,
+			wantPath:  "_output/impl-artifacts/sprint-status.yaml",
+		},
+		{
+			name: "config with output_folder - finds in implementation-artifacts subdir",
+			setup: func(t *testing.T, dir string) {
+				implDir := filepath.Join(dir, "_bmad-output", "implementation-artifacts")
+				if err := os.MkdirAll(implDir, 0755); err != nil {
+					t.Fatalf("failed to create implementation-artifacts: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(implDir, "sprint-status.yaml"), []byte("test"), 0644); err != nil {
+					t.Fatalf("failed to write sprint-status.yaml: %v", err)
+				}
+			},
+			config: &BMADConfig{
+				OutputFolder: "{project-root}/_bmad-output",
+			},
+			wantFound: true,
+			wantPath:  "_bmad-output/implementation-artifacts/sprint-status.yaml",
+		},
+		{
+			name: "sprint_artifacts takes priority over implementation_artifacts",
+			setup: func(t *testing.T, dir string) {
+				// Create both locations
+				sprintDir := filepath.Join(dir, "sprint-loc")
+				if err := os.MkdirAll(sprintDir, 0755); err != nil {
+					t.Fatalf("failed to create sprint-loc: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(sprintDir, "sprint-status.yaml"), []byte("sprint"), 0644); err != nil {
+					t.Fatalf("failed to write sprint sprint-status.yaml: %v", err)
+				}
+
+				implDir := filepath.Join(dir, "impl-loc")
+				if err := os.MkdirAll(implDir, 0755); err != nil {
+					t.Fatalf("failed to create impl-loc: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(implDir, "sprint-status.yaml"), []byte("impl"), 0644); err != nil {
+					t.Fatalf("failed to write impl sprint-status.yaml: %v", err)
+				}
+			},
+			config: &BMADConfig{
+				SprintArtifacts:         "{project-root}/sprint-loc",
+				ImplementationArtifacts: "{project-root}/impl-loc",
+			},
+			wantFound: true,
+			wantPath:  "sprint-loc/sprint-status.yaml",
+		},
+		{
+			name: "config path not found, falls back to hardcoded",
+			setup: func(t *testing.T, dir string) {
+				// Only create the hardcoded fallback location
+				sprintDir := filepath.Join(dir, "docs", "sprint-artifacts")
+				if err := os.MkdirAll(sprintDir, 0755); err != nil {
+					t.Fatalf("failed to create sprint-artifacts: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(sprintDir, "sprint-status.yaml"), []byte("fallback"), 0644); err != nil {
+					t.Fatalf("failed to write sprint-status.yaml: %v", err)
+				}
+			},
+			config: &BMADConfig{
+				SprintArtifacts: "{project-root}/nonexistent/path",
+			},
+			wantFound: true,
+			wantPath:  "docs/sprint-artifacts/sprint-status.yaml",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tt.setup(t, dir)
+
+			got := findSprintStatusPath(dir, tt.config)
 
 			if tt.wantFound {
 				wantFullPath := filepath.Join(dir, tt.wantPath)
@@ -1769,7 +1936,9 @@ func TestDetectStage_Integration(t *testing.T) {
 			tt.setup(t, dir)
 
 			d := NewBMADDetector()
-			stage, confidence, reasoning := d.detectStage(context.Background(), dir)
+			// Pass bmadDir for config-based path resolution
+			bmadDir := filepath.Join(dir, ".bmad")
+			stage, confidence, reasoning := d.detectStage(context.Background(), dir, bmadDir)
 
 			if stage != tt.wantStage {
 				t.Errorf("detectStage() stage = %v, want %v", stage, tt.wantStage)
@@ -1792,7 +1961,8 @@ func TestDetectStage_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	stage, confidence, reasoning := d.detectStage(ctx, dir)
+	bmadDir := filepath.Join(dir, ".bmad")
+	stage, confidence, reasoning := d.detectStage(ctx, dir, bmadDir)
 
 	if stage != domain.StageUnknown {
 		t.Errorf("detectStage() with cancelled context stage = %v, want StageUnknown", stage)

@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 )
@@ -148,7 +150,8 @@ func (d *BMADDetector) Detect(ctx context.Context, path string) (*domain.Detecti
 	}
 
 	// Detect stage from sprint-status.yaml or artifacts
-	stage, stageConfidence, stageReasoning := d.detectStage(ctx, path)
+	// Pass bmadDir so we can read config for artifact paths
+	stage, stageConfidence, stageReasoning := d.detectStage(ctx, path, bmadDir)
 
 	// Build combined reasoning
 	var fullReasoning string
@@ -188,4 +191,64 @@ func extractVersion(configPath string) (string, error) {
 		return "", nil // No version found, not an error
 	}
 	return string(match[1]), nil
+}
+
+// BMADConfig holds parsed BMAD configuration values relevant to stage detection.
+type BMADConfig struct {
+	OutputFolder            string `yaml:"output_folder"`
+	SprintArtifacts         string `yaml:"sprint_artifacts"`
+	ImplementationArtifacts string `yaml:"implementation_artifacts"`
+}
+
+// parseConfig reads and parses a BMAD config file to extract artifact paths.
+// Returns nil if the file cannot be read or parsed (not an error for detection).
+func parseConfig(configPath string) *BMADConfig {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil
+	}
+
+	var cfg BMADConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil
+	}
+
+	return &cfg
+}
+
+// resolveConfigPath replaces {project-root} placeholder with actual project path.
+func resolveConfigPath(configValue, projectPath string) string {
+	if configValue == "" {
+		return ""
+	}
+	return strings.ReplaceAll(configValue, "{project-root}", projectPath)
+}
+
+// findBMADConfig searches for and parses BMAD config from the marker directory.
+// Tries both core/config.yaml and bmm/config.yaml, merging values from both.
+func findBMADConfig(bmadDir string) *BMADConfig {
+	var merged BMADConfig
+
+	for _, cfgRelPath := range configPaths {
+		cfgPath := filepath.Join(bmadDir, cfgRelPath)
+		if cfg := parseConfig(cfgPath); cfg != nil {
+			// Merge: later values override earlier if non-empty
+			if cfg.OutputFolder != "" {
+				merged.OutputFolder = cfg.OutputFolder
+			}
+			if cfg.SprintArtifacts != "" {
+				merged.SprintArtifacts = cfg.SprintArtifacts
+			}
+			if cfg.ImplementationArtifacts != "" {
+				merged.ImplementationArtifacts = cfg.ImplementationArtifacts
+			}
+		}
+	}
+
+	// Return nil if nothing was found
+	if merged.OutputFolder == "" && merged.SprintArtifacts == "" && merged.ImplementationArtifacts == "" {
+		return nil
+	}
+
+	return &merged
 }

@@ -667,9 +667,58 @@ func detectStageFromArtifacts(ctx context.Context, projectPath string) (domain.S
 	return domain.StageUnknown, domain.ConfidenceUncertain, "No BMAD artifacts detected", nil
 }
 
-// findSprintStatusPath searches for sprint-status.yaml in standard locations.
-func findSprintStatusPath(projectPath string) string {
-	// Primary location: docs/sprint-artifacts/sprint-status.yaml
+// findSprintStatusPath searches for sprint-status.yaml using config-based paths first,
+// then falls back to standard locations.
+// Parameters:
+//   - projectPath: the root project directory
+//   - cfg: parsed BMAD config (may be nil)
+func findSprintStatusPath(projectPath string, cfg *BMADConfig) string {
+	// 1. Try config-based paths first (most accurate)
+	if cfg != nil {
+		// Priority 1: sprint_artifacts from config (vibe-dash style)
+		if cfg.SprintArtifacts != "" {
+			resolved := resolveConfigPath(cfg.SprintArtifacts, projectPath)
+			statusPath := filepath.Join(resolved, "sprint-status.yaml")
+			if _, err := os.Stat(statusPath); err == nil {
+				return statusPath
+			}
+		}
+
+		// Priority 2: implementation_artifacts from config (swealog style)
+		if cfg.ImplementationArtifacts != "" {
+			resolved := resolveConfigPath(cfg.ImplementationArtifacts, projectPath)
+			statusPath := filepath.Join(resolved, "sprint-status.yaml")
+			if _, err := os.Stat(statusPath); err == nil {
+				return statusPath
+			}
+		}
+
+		// Priority 3: output_folder from config with common subdirs
+		if cfg.OutputFolder != "" {
+			resolved := resolveConfigPath(cfg.OutputFolder, projectPath)
+
+			// Try output_folder/sprint-artifacts/sprint-status.yaml
+			statusPath := filepath.Join(resolved, "sprint-artifacts", "sprint-status.yaml")
+			if _, err := os.Stat(statusPath); err == nil {
+				return statusPath
+			}
+
+			// Try output_folder/implementation-artifacts/sprint-status.yaml
+			statusPath = filepath.Join(resolved, "implementation-artifacts", "sprint-status.yaml")
+			if _, err := os.Stat(statusPath); err == nil {
+				return statusPath
+			}
+
+			// Try output_folder/sprint-status.yaml (directly in output folder)
+			statusPath = filepath.Join(resolved, "sprint-status.yaml")
+			if _, err := os.Stat(statusPath); err == nil {
+				return statusPath
+			}
+		}
+	}
+
+	// 2. Fallback to hardcoded standard locations (for backwards compatibility)
+	// Primary location: docs/sprint-artifacts/sprint-status.yaml (.bmad convention)
 	primary := filepath.Join(projectPath, "docs", "sprint-artifacts", "sprint-status.yaml")
 	if _, err := os.Stat(primary); err == nil {
 		return primary
@@ -681,12 +730,22 @@ func findSprintStatusPath(projectPath string) string {
 		return alt
 	}
 
+	// _bmad convention: _bmad-output/implementation-artifacts/sprint-status.yaml
+	bmadOutput := filepath.Join(projectPath, "_bmad-output", "implementation-artifacts", "sprint-status.yaml")
+	if _, err := os.Stat(bmadOutput); err == nil {
+		return bmadOutput
+	}
+
 	return ""
 }
 
 // detectStage performs stage detection for a BMAD v6 project.
-// It first tries to parse sprint-status.yaml, then falls back to artifact detection.
-func (d *BMADDetector) detectStage(ctx context.Context, path string) (domain.Stage, domain.Confidence, string) {
+// It first tries to parse sprint-status.yaml (using config for path), then falls back to artifact detection.
+// Parameters:
+//   - ctx: context for cancellation
+//   - path: project root path
+//   - bmadDir: the BMAD marker directory (.bmad or _bmad) for reading config
+func (d *BMADDetector) detectStage(ctx context.Context, path string, bmadDir string) (domain.Stage, domain.Confidence, string) {
 	// Check context first
 	select {
 	case <-ctx.Done():
@@ -694,8 +753,14 @@ func (d *BMADDetector) detectStage(ctx context.Context, path string) (domain.Sta
 	default:
 	}
 
+	// Read BMAD config for artifact paths
+	var cfg *BMADConfig
+	if bmadDir != "" {
+		cfg = findBMADConfig(bmadDir)
+	}
+
 	// Try to find and parse sprint-status.yaml
-	statusPath := findSprintStatusPath(path)
+	statusPath := findSprintStatusPath(path, cfg)
 	if statusPath != "" {
 		status, err := parseSprintStatus(ctx, statusPath)
 		if err != nil {
