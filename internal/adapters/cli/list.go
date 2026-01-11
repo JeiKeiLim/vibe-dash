@@ -11,6 +11,7 @@ import (
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/project"
+	"github.com/JeiKeiLim/vibe-dash/internal/shared/stageformat"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/timeformat"
 )
 
@@ -106,7 +107,7 @@ func formatPlainText(cmd *cobra.Command, projects []*domain.Project) {
 			name = name[:37] + "..."
 		}
 
-		stage := p.CurrentStage.String()
+		stage := stageformat.FormatStageInfo(p)
 		lastActive := timeformat.FormatRelativeTime(p.LastActivityAt)
 
 		fmt.Fprintf(cmd.OutOrStdout(), "%-40s %-10s %12s\n", name, stage, lastActive)

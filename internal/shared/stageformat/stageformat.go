@@ -16,14 +16,14 @@ func FormatStageInfo(p *domain.Project) string {
 		return "-"
 	}
 
-	// Handle unknown/empty method first
-	if p.DetectedMethod == "" || p.DetectedMethod == "unknown" {
-		return "-"
-	}
-
 	// Handle unknown stage
 	if p.CurrentStage == domain.StageUnknown {
 		return "-"
+	}
+
+	// Handle unknown/empty method - fall back to stage string
+	if p.DetectedMethod == "" || p.DetectedMethod == "unknown" {
+		return p.CurrentStage.String()
 	}
 
 	// BMAD: Parse rich reasoning
@@ -35,7 +35,15 @@ func FormatStageInfo(p *domain.Project) string {
 		return p.CurrentStage.String()
 	}
 
-	// Speckit and others: Use CurrentStage directly
+	// Speckit: Parse spec name from reasoning
+	if p.DetectedMethod == "speckit" {
+		if result := parseSpeckitReasoning(p.DetectionReasoning, p.CurrentStage); result != "" {
+			return result
+		}
+		return p.CurrentStage.String()
+	}
+
+	// Others: Use CurrentStage directly
 	return p.CurrentStage.String()
 }
 
@@ -234,4 +242,39 @@ func abbreviateEpicStatus(status string) string {
 	default:
 		return ""
 	}
+}
+
+// parseSpeckitReasoning extracts spec name from Speckit detection reasoning.
+// Reasoning formats:
+//   - "spec.md exists, no plan.md (spec: 001-feature)"
+//   - "plan.md exists (spec: 001-feature, most recently modified)"
+//
+// Returns: "001-feature Specify"
+func parseSpeckitReasoning(reasoning string, stage domain.Stage) string {
+	// Look for "spec: " pattern in reasoning
+	const specPrefix = "spec: "
+	idx := strings.Index(reasoning, specPrefix)
+	if idx == -1 {
+		return ""
+	}
+
+	// Extract spec name after "spec: "
+	rest := reasoning[idx+len(specPrefix):]
+
+	// Find end of spec name (at ")", "," or end of string)
+	endIdx := len(rest)
+	if parenIdx := strings.Index(rest, ")"); parenIdx != -1 && parenIdx < endIdx {
+		endIdx = parenIdx
+	}
+	if commaIdx := strings.Index(rest, ","); commaIdx != -1 && commaIdx < endIdx {
+		endIdx = commaIdx
+	}
+
+	specName := strings.TrimSpace(rest[:endIdx])
+	if specName == "" {
+		return ""
+	}
+
+	// Format: "specName Stage"
+	return specName + " " + stage.String()
 }

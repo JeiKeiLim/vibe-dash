@@ -133,7 +133,7 @@ func (d *SpeckitDetector) Detect(ctx context.Context, path string) (*domain.Dete
 // sort descending so higher-numbered directories (005-*) are preferred over lower (001-*).
 func (d *SpeckitDetector) findMostRecentDir(baseDir string, dirs []os.DirEntry) (string, string) {
 	if len(dirs) == 1 {
-		return dirs[0].Name(), ""
+		return dirs[0].Name(), fmt.Sprintf("spec: %s", dirs[0].Name())
 	}
 
 	type dirMod struct {
@@ -171,7 +171,7 @@ func (d *SpeckitDetector) findMostRecentDir(baseDir string, dirs []os.DirEntry) 
 		return dirs[0].Name(), reasoning
 	}
 
-	reasoning := fmt.Sprintf("using most recently modified: %s", dirMods[0].name)
+	reasoning := fmt.Sprintf("spec: %s, most recently modified", dirMods[0].name)
 	return dirMods[0].name, reasoning
 }
 
