@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -122,6 +123,29 @@ type Model struct {
 	hibernatedList         components.ProjectListModel
 	activeSelectedIdx      int    // Preserve selection when switching views
 	justActivatedProjectID string // Track which project to select after activation (AC3)
+
+	// Story 12.1: Log viewer state
+	logReaderRegistry  ports.LogReaderRegistry
+	currentLogReader   ports.LogReader     // Active log reader for the current project
+	currentLogProject  *domain.Project     // Project whose logs are being viewed
+	showSessionPicker  bool                // Whether session picker overlay is visible
+	logSessions        []domain.LogSession // Available sessions for session picker
+	sessionPickerIndex int                 // Selected index in session picker
+
+	// Story 12.1: Text view state (for displaying jq-formatted logs)
+	textViewContent []string // Lines of text to display
+	textViewTitle   string   // Title for the text view header
+	textViewScroll  int      // Current scroll position (line offset)
+
+	// Story 12.1: Flash message state (AC8)
+	flashMessage     string
+	flashMessageTime time.Time
+
+	// Story 12.1: Live tailing state (AC3, AC4)
+	currentSessionPath string         // Path to session file being tailed
+	logAutoScroll      bool           // True = auto-scroll to latest, false = paused
+	logLastOffset      int64          // Last read offset for incremental reads
+	logTailActive      bool           // Whether tailing is active
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -281,6 +305,40 @@ type projectCorruptionMsg struct {
 	projects []string // Names of corrupted projects
 }
 
+// Story 12.1: Log session picker message types
+// logSessionsLoadedMsg signals sessions have been loaded for picker.
+type logSessionsLoadedMsg struct {
+	sessions []domain.LogSession
+	err      error
+}
+
+// textViewContentMsg signals jq-formatted content is ready to display.
+type textViewContentMsg struct {
+	title       string
+	content     string
+	sessionPath string // For live tailing (AC4)
+	fileSize    int64  // Initial file size for offset tracking
+	err         error
+}
+
+// flashMsg triggers a flash message display.
+type flashMsg struct {
+	text string
+}
+
+// clearFlashMsg clears the flash message.
+type clearFlashMsg struct{}
+
+// logTailTickMsg triggers live tailing poll for new log entries (AC4: 2s interval).
+type logTailTickMsg time.Time
+
+// logNewEntriesMsg signals new entries were found during tailing.
+type logNewEntriesMsg struct {
+	newContent string
+	newOffset  int64 // Updated file offset for next poll
+	err        error
+}
+
 // NewModel creates a new Model with default values.
 // The repository parameter is used for project persistence operations.
 func NewModel(repo ports.ProjectRepository) Model {
@@ -353,6 +411,12 @@ func (m *Model) SetHibernationService(svc ports.HibernationService) {
 // This is optional - if not set, auto-activation is disabled.
 func (m *Model) SetStateService(svc ports.StateActivator) {
 	m.stateService = svc
+}
+
+// SetLogReaderRegistry sets the log reader registry for log viewing (Story 12.1).
+// This is optional - if not set, log viewing shows "not available" message.
+func (m *Model) SetLogReaderRegistry(registry ports.LogReaderRegistry) {
+	m.logReaderRegistry = registry
 }
 
 // isProjectWaiting wraps WaitingDetector.IsWaiting for component callbacks.
@@ -507,6 +571,60 @@ func (m Model) rescheduleHibernationTimer() tea.Cmd {
 	return tea.Tick(time.Hour, func(t time.Time) tea.Msg {
 		return hibernationTickMsg(t)
 	})
+}
+
+// logTailTickCmd returns command for log tailing poll (Story 12.1, AC4: 2s interval).
+func (m Model) logTailTickCmd() tea.Cmd {
+	if !m.logTailActive {
+		return nil
+	}
+	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+		return logTailTickMsg(t)
+	})
+}
+
+// pollLogEntriesCmd creates a command to read new entries from the log file.
+func (m Model) pollLogEntriesCmd() tea.Cmd {
+	sessionPath := m.currentSessionPath
+	lastOffset := m.logLastOffset
+	return func() tea.Msg {
+		if sessionPath == "" {
+			return logNewEntriesMsg{err: fmt.Errorf("no session path")}
+		}
+
+		file, err := os.Open(sessionPath)
+		if err != nil {
+			return logNewEntriesMsg{err: err}
+		}
+		defer file.Close()
+
+		info, err := file.Stat()
+		if err != nil {
+			return logNewEntriesMsg{err: err}
+		}
+
+		// No new data
+		if info.Size() <= lastOffset {
+			return logNewEntriesMsg{newOffset: lastOffset}
+		}
+
+		// Seek to last known position
+		if _, err := file.Seek(lastOffset, 0); err != nil {
+			return logNewEntriesMsg{err: err}
+		}
+
+		// Read new content
+		newContent := make([]byte, info.Size()-lastOffset)
+		_, err = file.Read(newContent)
+		if err != nil {
+			return logNewEntriesMsg{err: err}
+		}
+
+		return logNewEntriesMsg{
+			newContent: string(newContent),
+			newOffset:  info.Size(),
+		}
+	}
 }
 
 // loadHibernatedProjectsCmd loads hibernated projects from repository (Story 11.4).
@@ -676,6 +794,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Route to validation handler when in validation mode
 		if m.viewMode == viewModeValidation {
 			return m.handleValidationKeyMsg(msg)
+		}
+		// Story 12.1: Route to text view handler when in text view mode
+		if m.viewMode == viewModeTextView {
+			return m.handleTextViewKeyMsg(msg)
+		}
+		// Story 12.1: Route to session picker handler when showing
+		if m.showSessionPicker {
+			return m.handleSessionPickerKeyMsg(msg)
 		}
 		return m.handleKeyMsg(msg)
 
@@ -1331,6 +1457,109 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return clearRemoveFeedbackMsg{}
 			}),
 		)
+
+	// Story 12.1: Log session picker message handlers
+	case logSessionsLoadedMsg:
+		if !m.showSessionPicker {
+			return m, nil // Discard - picker was closed
+		}
+		if msg.err != nil {
+			slog.Warn("failed to load log sessions", "error", msg.err)
+			m.showSessionPicker = false
+			return m, func() tea.Msg {
+				return flashMsg{text: "Failed to load sessions"}
+			}
+		}
+		m.logSessions = msg.sessions
+		if len(msg.sessions) == 0 {
+			m.showSessionPicker = false
+			return m, func() tea.Msg {
+				return flashMsg{text: "No sessions found"}
+			}
+		}
+		return m, nil
+
+	case textViewContentMsg:
+		// jq output is ready - display in text view
+		if msg.err != nil {
+			slog.Warn("failed to format log content", "error", msg.err)
+			return m, func() tea.Msg {
+				return flashMsg{text: "Failed to format logs: " + msg.err.Error()}
+			}
+		}
+		m.viewMode = viewModeTextView
+		m.textViewTitle = msg.title
+		m.textViewContent = strings.Split(msg.content, "\n")
+
+		// AC4: Store session path and offset for live tailing
+		m.currentSessionPath = msg.sessionPath
+		m.logLastOffset = msg.fileSize
+
+		// AC3: Auto-scroll to latest by default
+		contentHeight := m.height - statusBarHeight(m.height) - 2
+		maxScroll := len(m.textViewContent) - contentHeight
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		m.textViewScroll = maxScroll // Start at bottom
+		m.logAutoScroll = true       // Enable auto-scroll
+
+		// AC4: Start live tailing (2s interval)
+		m.logTailActive = true
+		return m, m.logTailTickCmd()
+
+	case logTailTickMsg:
+		// AC4: Poll for new log entries
+		if !m.logTailActive || m.viewMode != viewModeTextView || m.currentSessionPath == "" {
+			return m, nil
+		}
+		return m, tea.Batch(
+			m.pollLogEntriesCmd(),
+			m.logTailTickCmd(), // Reschedule next tick
+		)
+
+	case logNewEntriesMsg:
+		// New entries found - append to content
+		if msg.err != nil {
+			slog.Debug("log poll failed", "error", msg.err)
+			return m, nil
+		}
+
+		// Update offset for next poll
+		m.logLastOffset = msg.newOffset
+
+		if msg.newContent == "" {
+			return m, nil // No new content
+		}
+
+		// Append new lines
+		newLines := strings.Split(msg.newContent, "\n")
+		m.textViewContent = append(m.textViewContent, newLines...)
+
+		// AC3: Auto-scroll to latest if enabled
+		if m.logAutoScroll {
+			contentHeight := m.height - statusBarHeight(m.height) - 2
+			maxScroll := len(m.textViewContent) - contentHeight
+			if maxScroll < 0 {
+				maxScroll = 0
+			}
+			m.textViewScroll = maxScroll
+		}
+		return m, nil
+
+	case flashMsg:
+		// AC8: Show flash message for no-logs case
+		m.flashMessage = msg.text
+		m.flashMessageTime = time.Now()
+		m.statusBar.SetRefreshComplete(msg.text)
+		return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg { // AC8: 2 seconds
+			return clearFlashMsg{}
+		})
+
+	case clearFlashMsg:
+		m.flashMessage = ""
+		m.statusBar.SetRefreshComplete("")
+		return m, nil
 	}
 
 	return m, nil
@@ -1514,6 +1743,12 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.viewMode = viewModeHibernated
 		m.statusBar.SetInHibernatedView(true)
 		return m, m.loadHibernatedProjectsCmd()
+	case KeyShiftEnter: // Shift+Enter
+		// Story 12.1: Show session picker before opening logs
+		if m.viewMode == viewModeNormal && len(m.projects) > 0 {
+			return m.handleShiftEnterForSessionPicker()
+		}
+		return m, nil
 	case "enter":
 		// Story 11.4: Wake hibernated project (AC3)
 		if m.viewMode == viewModeHibernated && len(m.hibernatedProjects) > 0 {
@@ -1523,7 +1758,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		// No-op in normal view (project list handles Enter for expand/collapse if needed)
+		// Story 12.1: Open most recent log session with jq
+		if m.viewMode == viewModeNormal {
+			return m.handleEnterForLogs()
+		}
 		return m, nil
 	case KeyDetail:
 		// Story 11.4: Detail panel works in hibernated view too (AC9)
@@ -1828,6 +2066,27 @@ func (m Model) View() string {
 		return renderConfirmRemoveDialog(projectName, m.width, m.height)
 	}
 
+	// Story 12.1: Render text view (full screen log display)
+	if m.viewMode == viewModeTextView {
+		return m.renderTextView()
+	}
+
+	// Story 12.1: Render session picker overlay
+	if m.showSessionPicker {
+		effectiveWidth := m.width
+		if m.isWideWidth() {
+			effectiveWidth = m.maxContentWidth
+		}
+		contentHeight := m.height - statusBarHeight(m.height)
+		pickerContent := m.renderSessionPicker(effectiveWidth, contentHeight)
+		statusBar := m.statusBar.View()
+		content := lipgloss.JoinVertical(lipgloss.Left, pickerContent, statusBar)
+		if m.isWideWidth() {
+			return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Top, content)
+		}
+		return content
+	}
+
 	// Story 11.4: Render hibernated view (AC6)
 	if m.viewMode == viewModeHibernated {
 		contentHeight := m.height - statusBarHeight(m.height)
@@ -2112,4 +2371,443 @@ func (m Model) findProjectByPath(eventPath string) *domain.Project {
 		}
 	}
 	return nil
+}
+
+// Story 12.1: Log viewer methods (spawns jq external tool)
+
+// handleEnterForLogs handles Enter key to open most recent log session with jq (AC1).
+func (m Model) handleEnterForLogs() (tea.Model, tea.Cmd) {
+	if len(m.projects) == 0 {
+		return m, nil
+	}
+
+	selected := m.projectList.SelectedProject()
+	if selected == nil {
+		return m, nil
+	}
+
+	// Check if log reader registry is available
+	if m.logReaderRegistry == nil {
+		return m, func() tea.Msg {
+			return flashMsg{text: "Log viewing not available"}
+		}
+	}
+
+	// Get a reader for this project
+	ctx := context.Background()
+	reader := m.logReaderRegistry.GetReader(ctx, selected.Path)
+	if reader == nil {
+		// AC8: No logs exist for this project - show flash message
+		return m, func() tea.Msg {
+			return flashMsg{text: "No Claude Code logs for this project"}
+		}
+	}
+
+	// List sessions to find most recent
+	sessions, err := reader.ListSessions(ctx, selected.Path)
+	if err != nil || len(sessions) == 0 {
+		return m, func() tea.Msg {
+			return flashMsg{text: "No sessions found for this project"}
+		}
+	}
+
+	// Store project and reader for S key session picker (AC6)
+	m.currentLogProject = selected
+	m.currentLogReader = reader
+	m.logSessions = sessions
+
+	// Sessions are sorted newest-first, so first one is most recent
+	mostRecent := sessions[0]
+	return m, m.openLogWithJqCmd(mostRecent.Path)
+}
+
+// handleShiftEnterForSessionPicker handles Shift+Enter to show session picker (AC6).
+// Can be called from normal view (Shift+Enter) or from text view (S key).
+func (m Model) handleShiftEnterForSessionPicker() (tea.Model, tea.Cmd) {
+	// If already in text view with a project, reuse current context
+	if m.currentLogProject != nil && m.currentLogReader != nil {
+		m.showSessionPicker = true
+		m.sessionPickerIndex = 0
+		// Use cached sessions if available, otherwise reload
+		if len(m.logSessions) > 0 {
+			return m, nil
+		}
+		return m, m.loadLogSessionsCmd(m.currentLogProject.Path)
+	}
+
+	// Normal view: get selected project
+	if len(m.projects) == 0 {
+		return m, nil
+	}
+
+	selected := m.projectList.SelectedProject()
+	if selected == nil {
+		return m, nil
+	}
+
+	// Check if log reader registry is available
+	if m.logReaderRegistry == nil {
+		return m, func() tea.Msg {
+			return flashMsg{text: "Log viewing not available"}
+		}
+	}
+
+	// Get a reader for this project
+	ctx := context.Background()
+	reader := m.logReaderRegistry.GetReader(ctx, selected.Path)
+	if reader == nil {
+		// AC8: No logs exist for this project - show flash message
+		return m, func() tea.Msg {
+			return flashMsg{text: "No Claude Code logs for this project"}
+		}
+	}
+
+	// Store state for session picker
+	m.currentLogReader = reader
+	m.currentLogProject = selected
+	m.showSessionPicker = true
+	m.sessionPickerIndex = 0
+	m.logSessions = nil // Clear previous sessions
+
+	// Load sessions asynchronously
+	return m, m.loadLogSessionsCmd(selected.Path)
+}
+
+// openLogWithJqCmd creates a command to format and display log content.
+// Pipeline priority: cclv (primary) -> jq (secondary) -> raw (fallback)
+func (m Model) openLogWithJqCmd(sessionPath string) tea.Cmd {
+	return func() tea.Msg {
+		// Extract session name from path for title
+		title := filepath.Base(sessionPath)
+		if len(title) > 40 {
+			title = title[:37] + "..."
+		}
+
+		// Get initial file size for offset tracking (AC4: live tailing)
+		info, statErr := os.Stat(sessionPath)
+		var fileSize int64
+		if statErr == nil {
+			fileSize = info.Size()
+		}
+
+		// Primary: Try cclv (Claude Code Log Viewer) first
+		cmd := exec.Command("cclv", sessionPath)
+		output, err := cmd.Output()
+		if err == nil {
+			return textViewContentMsg{
+				title:       title,
+				content:     string(output),
+				sessionPath: sessionPath,
+				fileSize:    fileSize,
+			}
+		}
+		slog.Debug("cclv not available, trying jq", "error", err)
+
+		// Secondary: Try jq for pretty-printing
+		cmd = exec.Command("jq", ".", sessionPath)
+		output, err = cmd.Output()
+		if err == nil {
+			return textViewContentMsg{
+				title:       title + " (jq)",
+				content:     string(output),
+				sessionPath: sessionPath,
+				fileSize:    fileSize,
+			}
+		}
+		slog.Debug("jq not available, falling back to raw display", "error", err)
+
+		// Fallback: read raw JSONL file (AC2: display raw JSON entries)
+		rawContent, readErr := os.ReadFile(sessionPath)
+		if readErr != nil {
+			return textViewContentMsg{
+				err: fmt.Errorf("failed to read log file: %w", readErr),
+			}
+		}
+
+		return textViewContentMsg{
+			title:       title + " (raw)",
+			content:     string(rawContent),
+			sessionPath: sessionPath,
+			fileSize:    fileSize,
+		}
+	}
+}
+
+// loadLogSessionsCmd creates a command to load available log sessions.
+func (m Model) loadLogSessionsCmd(projectPath string) tea.Cmd {
+	return func() tea.Msg {
+		if m.currentLogReader == nil {
+			return logSessionsLoadedMsg{err: fmt.Errorf("no log reader available")}
+		}
+		ctx := context.Background()
+		sessions, err := m.currentLogReader.ListSessions(ctx, projectPath)
+		return logSessionsLoadedMsg{sessions: sessions, err: err}
+	}
+}
+
+// handleSessionPickerKeyMsg handles keyboard input in session picker overlay.
+func (m Model) handleSessionPickerKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case KeyEscape:
+		m.showSessionPicker = false
+		m.currentLogReader = nil
+		m.currentLogProject = nil
+		return m, nil
+
+	case KeyDown, KeyDownArrow:
+		if m.sessionPickerIndex < len(m.logSessions)-1 {
+			m.sessionPickerIndex++
+		}
+		return m, nil
+
+	case KeyUp, KeyUpArrow:
+		if m.sessionPickerIndex > 0 {
+			m.sessionPickerIndex--
+		}
+		return m, nil
+
+	case "enter":
+		// Select session and spawn jq
+		if m.sessionPickerIndex < len(m.logSessions) {
+			selected := m.logSessions[m.sessionPickerIndex]
+			m.showSessionPicker = false
+			m.currentLogReader = nil
+			m.currentLogProject = nil
+			return m, m.openLogWithJqCmd(selected.Path)
+		}
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// renderSessionPicker renders the session picker overlay.
+func (m Model) renderSessionPicker(width, height int) string {
+	if len(m.logSessions) == 0 {
+		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, "No sessions available")
+	}
+
+	// Calculate max visible sessions based on height
+	// Reserve: title(1) + blank(1) + footer(1) + blank(1) + border(2) + padding(2) = 8 lines
+	maxVisible := height - 8
+	if maxVisible < 3 {
+		maxVisible = 3
+	}
+	if maxVisible > len(m.logSessions) {
+		maxVisible = len(m.logSessions)
+	}
+
+	// Calculate scroll window
+	startIdx := 0
+	if m.sessionPickerIndex >= maxVisible {
+		startIdx = m.sessionPickerIndex - maxVisible + 1
+	}
+	endIdx := startIdx + maxVisible
+	if endIdx > len(m.logSessions) {
+		endIdx = len(m.logSessions)
+		startIdx = endIdx - maxVisible
+		if startIdx < 0 {
+			startIdx = 0
+		}
+	}
+
+	var lines []string
+	lines = append(lines, "Select Session:")
+	lines = append(lines, "")
+
+	for i := startIdx; i < endIdx; i++ {
+		session := m.logSessions[i]
+		prefix := "  "
+		if i == m.sessionPickerIndex {
+			prefix = "> "
+		}
+
+		// Format: "> session-id  timestamp  (N entries)"
+		displayID := session.ID
+		if len(displayID) > 16 {
+			displayID = displayID[:16] + "..."
+		}
+
+		timestamp := session.StartTime.Format("2006-01-02 15:04")
+		entryInfo := fmt.Sprintf("(%d entries)", session.EntryCount)
+
+		line := fmt.Sprintf("%s%s  %s  %s", prefix, displayID, timestamp, entryInfo)
+		lines = append(lines, line)
+	}
+
+	// Show scroll indicator if needed
+	if len(m.logSessions) > maxVisible {
+		lines = append(lines, fmt.Sprintf("  (%d/%d)", m.sessionPickerIndex+1, len(m.logSessions)))
+	}
+
+	lines = append(lines, "")
+	lines = append(lines, "[Enter] Select  [Esc] Cancel")
+
+	content := strings.Join(lines, "\n")
+
+	// Center the picker
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("39")).
+		Padding(1, 2).
+		Render(content)
+
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
+}
+
+// handleTextViewKeyMsg handles keyboard input in text view mode.
+func (m Model) handleTextViewKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	contentHeight := m.height - statusBarHeight(m.height) - 2 // -2 for header/footer
+	maxScroll := len(m.textViewContent) - contentHeight
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+
+	switch msg.String() {
+	case KeyEscape, KeyQuit:
+		// Return to normal view and stop tailing
+		m.viewMode = viewModeNormal
+		m.textViewContent = nil
+		m.textViewTitle = ""
+		m.textViewScroll = 0
+		m.currentLogProject = nil
+		m.currentLogReader = nil
+		m.logSessions = nil
+		m.logTailActive = false // Stop tailing
+		m.currentSessionPath = ""
+		m.logAutoScroll = false
+		return m, nil
+
+	case KeyForceQuit:
+		// Exit completely
+		if m.watchCancel != nil {
+			m.watchCancel()
+		}
+		if m.fileWatcher != nil {
+			m.fileWatcher.Close()
+		}
+		return m, tea.Quit
+
+	case KeyDown, KeyDownArrow:
+		// AC3: Manual scroll pauses auto-scroll
+		m.logAutoScroll = false
+		if m.textViewScroll < maxScroll {
+			m.textViewScroll++
+		}
+		return m, nil
+
+	case KeyUp, KeyUpArrow:
+		// AC3: Manual scroll pauses auto-scroll
+		m.logAutoScroll = false
+		if m.textViewScroll > 0 {
+			m.textViewScroll--
+		}
+		return m, nil
+
+	case "g": // Jump to top
+		m.logAutoScroll = false // Pause auto-scroll
+		m.textViewScroll = 0
+		return m, nil
+
+	case KeyLogJumpEnd: // AC3: Jump to end and resume auto-scroll
+		m.textViewScroll = maxScroll
+		m.logAutoScroll = true // Resume auto-scroll
+		return m, nil
+
+	case KeyLogSession: // AC6: Open session picker from log view
+		if m.currentLogProject != nil {
+			return m.handleShiftEnterForSessionPicker()
+		}
+		return m, nil
+
+	case " ", "pgdown": // Page down
+		m.logAutoScroll = false // Pause auto-scroll
+		m.textViewScroll += contentHeight
+		if m.textViewScroll > maxScroll {
+			m.textViewScroll = maxScroll
+		}
+		return m, nil
+
+	case "b", "pgup": // Page up
+		m.logAutoScroll = false // Pause auto-scroll
+		m.textViewScroll -= contentHeight
+		if m.textViewScroll < 0 {
+			m.textViewScroll = 0
+		}
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// renderTextView renders the scrollable text view.
+func (m Model) renderTextView() string {
+	effectiveWidth := m.width
+	if m.isWideWidth() {
+		effectiveWidth = m.maxContentWidth
+	}
+	contentHeight := m.height - statusBarHeight(m.height) - 2 // -2 for header/footer
+
+	// Header
+	header := lipgloss.NewStyle().
+		Bold(true).
+		Background(lipgloss.Color("236")).
+		Foreground(lipgloss.Color("255")).
+		Width(effectiveWidth).
+		Render(" " + m.textViewTitle)
+
+	// Content with scroll
+	var visibleLines []string
+	startLine := m.textViewScroll
+	endLine := startLine + contentHeight
+	if endLine > len(m.textViewContent) {
+		endLine = len(m.textViewContent)
+	}
+
+	for i := startLine; i < endLine; i++ {
+		line := m.textViewContent[i]
+		// Truncate long lines to fit width
+		if len(line) > effectiveWidth {
+			line = line[:effectiveWidth-3] + "..."
+		}
+		visibleLines = append(visibleLines, line)
+	}
+
+	// Pad to fill height
+	for len(visibleLines) < contentHeight {
+		visibleLines = append(visibleLines, "")
+	}
+
+	contentStr := strings.Join(visibleLines, "\n")
+
+	// Footer with keybindings and scroll position
+	maxScroll := len(m.textViewContent) - contentHeight
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	scrollPercent := 0
+	if maxScroll > 0 {
+		scrollPercent = (m.textViewScroll * 100) / maxScroll
+	} else if len(m.textViewContent) <= contentHeight {
+		scrollPercent = 100
+	}
+
+	footerText := fmt.Sprintf(" [j/k] Scroll  [g/G] Top/Bottom  [Space/b] Page  [Esc] Exit  %d%% ", scrollPercent)
+	footer := lipgloss.NewStyle().
+		Background(lipgloss.Color("236")).
+		Foreground(lipgloss.Color("244")).
+		Width(effectiveWidth).
+		Render(footerText)
+
+	// Combine
+	textContent := lipgloss.JoinVertical(lipgloss.Left, header, contentStr, footer)
+
+	// Add status bar
+	statusBar := m.statusBar.View()
+	combined := lipgloss.JoinVertical(lipgloss.Left, textContent, statusBar)
+
+	if m.isWideWidth() {
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Top, combined)
+	}
+	return combined
 }

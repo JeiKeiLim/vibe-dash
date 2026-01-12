@@ -18,6 +18,7 @@ const (
 	viewModeNormal viewMode = iota
 	viewModeValidation
 	viewModeHibernated // Story 11.4: Hibernated projects view
+	viewModeTextView   // Story 12.1: Scrollable text view for logs
 )
 
 // InvalidProject represents a project with an inaccessible path

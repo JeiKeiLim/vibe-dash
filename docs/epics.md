@@ -3488,3 +3488,113 @@ Epic 9 (Scalable Watching)
 **Priority:** High (blocks reliable 20+ project support)
 **Can Run In Parallel With:** None (foundational infrastructure change)
 
+---
+
+## Epic 12: Agentic Tool Log Viewing
+
+**User Value:** View Claude Code (and future agentic tool) session logs directly from vibe-dash TUI without manual path navigation.
+
+**Business Context:** When monitoring multiple AI-assisted projects, manually checking Claude Code logs is tedious. The path mapping (`/path/to/project` → `~/.claude/projects/-path-to-project/`) requires mental effort. Integrating log viewing into vibe-dash provides instant access and complements the existing "Agent Waiting" detection feature.
+
+**Technical Context:** Follows the `MethodDetector` adapter pattern for extensibility. The `LogReader` port interface enables future support for other agentic tools (Cursor, Aider, Windsurf).
+
+**Scope:**
+- Claude Code log viewer (MVP)
+- Raw JSON display (user's separate CLI handles formatting)
+- Live tailing with auto-scroll
+- Session switching
+
+**Out of Scope (Deferred):**
+- Pretty formatting (handled by user's log viewer CLI)
+- Other agentic tool adapters
+- Entry type filtering
+
+---
+
+### Story 12.1: Claude Code Log Viewer
+
+**As a** developer monitoring multiple AI-assisted projects,
+**I want** to view Claude Code session logs directly from the vibe-dash TUI,
+**So that** I can quickly check what Claude is doing without manually navigating to log files.
+
+**Acceptance Criteria:**
+
+```gherkin
+Scenario: Enter on project opens log view
+  Given a project with Claude Code logs at ~/.claude/projects/{path-with-dashes}/
+  When I press Enter on the project in normal view
+  Then the TUI switches to full-screen log view
+  And shows the latest session's log entries
+
+Scenario: Live tailing updates
+  Given I am viewing a Claude Code session
+  When Claude writes new entries to the log file
+  Then the log view updates within 2 seconds
+  And auto-scrolls to show the latest entry
+
+Scenario: Manual scroll pauses auto-scroll
+  Given I am viewing a Claude Code session with auto-scroll
+  When I press k or up arrow to scroll up
+  Then auto-scroll pauses
+  And I can read earlier entries without interruption
+
+Scenario: Resume auto-scroll with G
+  Given auto-scroll is paused
+  When I press G
+  Then the view jumps to the latest entry
+  And auto-scroll resumes
+
+Scenario: Session switching
+  Given I am viewing a Claude Code session
+  When I press S
+  Then a session picker overlay appears
+  And shows all available sessions sorted by recency
+  And each session shows: truncated ID, start time, entry count, summary
+
+Scenario: No logs graceful handling
+  Given a project without Claude Code logs
+  When I press Enter on the project
+  Then a flash message "No Claude Code logs for this project" appears
+  And the message clears after 2 seconds
+
+Scenario: LogReader follows MethodDetector pattern
+  Given the architecture uses hexagonal patterns
+  When LogReader port is implemented
+  Then it has CanRead(), Tool(), ListSessions(), TailSession() methods
+  And follows the same adapter/registry pattern as MethodDetector
+```
+
+**Technical Notes:**
+- Path mapping: `/Users/foo/bar` → `-Users-foo-bar`
+- Log location: `~/.claude/projects/{path-with-dashes}/*.jsonl`
+- Entry types: `summary`, `user`, `assistant`, `system`, `file-history-snapshot`
+- Use polling-based live tail (1-2s interval) - boring technology that works
+
+**Architecture References:**
+- [Source: internal/core/ports/detector.go] - MethodDetector pattern to follow
+- [Source: internal/adapters/detectors/registry.go] - Registry pattern
+- [Source: internal/adapters/tui/validation.go:15-21] - viewMode enum pattern
+
+**Prerequisites:** None (can start immediately)
+
+---
+
+**Future Enhancement: Log-Based Agent Waiting Detection**
+
+The log viewing infrastructure could enhance the existing agent waiting detection (FR34-38). Instead of relying solely on file inactivity heuristics, we could detect waiting state with higher accuracy by analyzing log entries:
+
+- `AskUserQuestion` tool call → **Certain** waiting
+- Assistant message ends with `?` → **Likely** waiting
+- `tool_use` with no `tool_result` → **Likely** pending approval
+
+This creates a synergy between Epic 4 (Agent Waiting) and Epic 12 (Log Viewing). Deferred to future story after Story 12.1 proves the infrastructure.
+
+---
+
+**Epic 12 Complete**
+
+**Stories Created:** 1 (MVP scope)
+**FR Impact:** New functionality - complements FR34-38 (Agent Monitoring)
+**Technical Context:** LogReader adapter pattern, JSONL parsing, TUI view mode
+**Extensibility:** Pattern enables future Cursor/Aider/Windsurf adapters + enhanced waiting detection
+

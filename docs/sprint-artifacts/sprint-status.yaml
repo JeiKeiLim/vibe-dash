@@ -306,3 +306,11 @@ development_status:
   11-6-hibernation-threshold-configuration: done
   11-7-tui-manual-state-toggle: done
   epic-11-retrospective: completed
+
+  # Epic 12: Agentic Tool Log Viewing - POST-MVP
+  # Created 2026-01-12 from party mode requirements session
+  # Purpose: View Claude Code (and future agentic tool) logs directly from TUI
+  # Pattern: LogReader adapter follows MethodDetector pattern for extensibility
+  # 2026-01-12: Story 12-1 complete - Claude Code log viewer implemented
+  epic-12: in-progress
+  12-1-claude-code-log-viewer: done

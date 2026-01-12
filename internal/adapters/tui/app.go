@@ -20,8 +20,9 @@ import (
 // The config parameter is used for help overlay display (Story 8.7) - nil-safe.
 // The hibernationService parameter is optional - if nil, auto-hibernation is disabled (Story 11.2).
 // The stateService parameter is optional - if nil, auto-activation is disabled (Story 11.3).
+// The logReaderRegistry parameter is optional - if nil, log viewing is disabled (Story 12.1).
 // Note: Config passed as parameter to avoid cli→tui→cli import cycle.
-func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detector, waitingDetector ports.WaitingDetector, fileWatcher ports.FileWatcher, detailLayout string, config *ports.Config, hibernationService ports.HibernationService, stateService ports.StateActivator) error {
+func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detector, waitingDetector ports.WaitingDetector, fileWatcher ports.FileWatcher, detailLayout string, config *ports.Config, hibernationService ports.HibernationService, stateService ports.StateActivator, logReaderRegistry ports.LogReaderRegistry) error {
 	// Story 8.9: Initialize emoji fallback system BEFORE TUI renders
 	var useEmoji *bool
 	if config != nil {
@@ -52,6 +53,10 @@ func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detec
 	// Story 11.3: Wire state service for auto-activation on file events
 	if stateService != nil {
 		m.SetStateService(stateService)
+	}
+	// Story 12.1: Wire log reader registry for log viewing
+	if logReaderRegistry != nil {
+		m.SetLogReaderRegistry(logReaderRegistry)
 	}
 
 	p := tea.NewProgram(

@@ -26,6 +26,11 @@ const (
 	// Views
 	KeyHibernated  = "h"
 	KeyStateToggle = "H" // Story 11.7: Manual state toggle (uppercase H)
+
+	// Log Session (Story 12.1)
+	KeyLogSession   = "S" // Session picker in log view (AC6)
+	KeyLogJumpEnd   = "G" // Jump to end, resume auto-scroll (AC3)
+	KeyShiftEnter   = "shift+enter" // Open session picker from project list
 )
 
 // KeyBindings holds the current key bindings for the TUI.
@@ -54,6 +59,11 @@ type KeyBindings struct {
 	// Views
 	Hibernated  string
 	StateToggle string // Story 11.7: Manual state toggle
+
+	// Log Session (Story 12.1)
+	LogSession  string
+	LogJumpEnd  string
+	ShiftEnter  string
 }
 
 // DefaultKeyBindings returns the default key bindings.
@@ -82,5 +92,10 @@ func DefaultKeyBindings() KeyBindings {
 		// Views
 		Hibernated:  KeyHibernated,
 		StateToggle: KeyStateToggle, // Story 11.7
+
+		// Log Session (Story 12.1)
+		LogSession: KeyLogSession,
+		LogJumpEnd: KeyLogJumpEnd,
+		ShiftEnter: KeyShiftEnter,
 	}
 }

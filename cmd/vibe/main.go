@@ -14,6 +14,7 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/detectors/bmad"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/detectors/speckit"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/filesystem"
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/logreaders"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence"
 	"github.com/JeiKeiLim/vibe-dash/internal/config"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/services"
@@ -184,6 +185,13 @@ func run(ctx context.Context) error {
 	slog.Debug("hibernation service initialized",
 		"global_hibernation_days", cfg.HibernationDays,
 	)
+
+	// Story 12.1: Initialize log reader registry for Claude Code log viewing
+	logReaderReg := logreaders.NewRegistry()
+	logReaderReg.Register(logreaders.NewClaudeCodeReader())
+	cli.SetLogReaderRegistry(logReaderReg)
+
+	slog.Debug("log reader registry initialized", "readers", len(logReaderReg.Readers()))
 
 	return cli.Execute(ctx)
 }

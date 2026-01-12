@@ -22,6 +22,9 @@ var hibernationService ports.HibernationService
 // stateService handles state activation for auto-activation on file events (Story 11.3).
 var stateService ports.StateActivator
 
+// logReaderRegistry handles log reading for Claude Code logs (Story 12.1).
+var logReaderRegistry ports.LogReaderRegistry
+
 // SetDirectoryManager sets the directory manager for CLI commands.
 func SetDirectoryManager(dm ports.DirectoryManager) {
 	directoryManager = dm
@@ -75,4 +78,9 @@ func SetHibernationService(svc ports.HibernationService) {
 // SetStateService sets the state service for auto-activation (Story 11.3).
 func SetStateService(svc ports.StateActivator) {
 	stateService = svc
+}
+
+// SetLogReaderRegistry sets the log reader registry for log viewing (Story 12.1).
+func SetLogReaderRegistry(registry ports.LogReaderRegistry) {
+	logReaderRegistry = registry
 }

@@ -1,0 +1,6 @@
+{"type":"user","timestamp":"2026-01-12T08:00:00Z","sessionId":"abc-123-def","message":{"role":"user","content":"Hello, can you help me with a Go project?"}}
+{"type":"assistant","timestamp":"2026-01-12T08:00:05Z","sessionId":"abc-123-def","message":{"role":"assistant","content":"Of course! I'd be happy to help with your Go project. What do you need assistance with?"}}
+{"type":"user","timestamp":"2026-01-12T08:01:00Z","sessionId":"abc-123-def","message":{"role":"user","content":"I need to implement a file watcher"}}
+{"type":"assistant","timestamp":"2026-01-12T08:01:10Z","sessionId":"abc-123-def","message":{"role":"assistant","content":"Great! For file watching in Go, I recommend using the fsnotify package.","toolCalls":[{"type":"tool_use","name":"Read","input":{"path":"main.go"}}]}}
+{"type":"file-history-snapshot","messageId":"snap-001","snapshot":{"main.go":{"content":"package main"}}}
+{"type":"summary","timestamp":"2026-01-12T08:05:00Z","sessionId":"abc-123-def","summary":"User asked about implementing a file watcher in Go. Recommended fsnotify package."}

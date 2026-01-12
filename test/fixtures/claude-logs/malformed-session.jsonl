@@ -1,0 +1,7 @@
+{"type":"user","timestamp":"2026-01-12T09:00:00Z","sessionId":"bad-123","message":{"role":"user","content":"First valid entry"}}
+not valid json at all
+{"type":"assistant","timestamp":"2026-01-12T09:00:05Z","sessionId":"bad-123","message":{"role":"assistant","content":"Second valid entry"}}
+{incomplete json without closing brace
+{"type":"system","timestamp":"2026-01-12T09:00:10Z","sessionId":"bad-123"}
+{"malformed": "missing type field but still valid JSON"}
+{"type":"user","timestamp":"2026-01-12T09:01:00Z","sessionId":"bad-123","message":{"role":"user","content":"Third valid entry"}}
