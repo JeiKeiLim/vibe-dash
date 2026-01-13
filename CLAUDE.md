@@ -4,6 +4,8 @@
 
 vdash (vibe-dash) is a terminal dashboard for tracking AI-assisted coding projects. Built with Go, Bubble Tea TUI, and SQLite.
 
+**Note:** The binary was renamed from `vibe` to `vdash` in v0.1.0. Old design docs (`docs/prd.md`, `docs/project-context.md`) still reference `vibe` as historical artifacts. See `docs/IMPROVEMENTS.md` for details.
+
 ## Release Workflow
 
 When asked to create a release tag (e.g., "create release tag v0.2.0"):

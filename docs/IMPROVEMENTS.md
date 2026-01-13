@@ -36,3 +36,25 @@ func setupVersion() {
 If we rename the binary in the future, only `RootCmd.Use` needs to change instead of searching/replacing across many files.
 
 ---
+
+## Historical Note: Binary Renamed from `vibe` to `vdash`
+
+**Date**: 2026-01-13 (v0.1.0 release)
+
+The binary was renamed from `vibe` to `vdash` to avoid confusion and provide a more distinctive name.
+
+**What was updated:**
+- All user-visible CLI help text, examples, and error messages
+- Build scripts (Makefile, GitHub Actions)
+- Integration tests
+- README and CLAUDE.md
+
+**What was NOT updated (intentionally):**
+- Internal design docs (`docs/prd.md`, `docs/project-context.md`) - left as historical artifacts
+- Internal variable names (`vibeHome`) - no user impact
+- Comments referencing the original design
+- Temp directory names in tests
+
+If you see `vibe` in older docs, it refers to this project before the rename.
+
+---
