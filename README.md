@@ -42,13 +42,30 @@ If you're curious about BMAD or want to see what continuous AI-assisted developm
 **Download from Releases (Recommended)**
 
 ```bash
-# Download the latest release for your platform
-# Visit: https://github.com/JeiKeiLim/vibe-dash/releases
+# macOS ARM64 (Apple Silicon)
+curl -Lo vdash.tar.gz https://github.com/JeiKeiLim/vibe-dash/releases/latest/download/vdash_darwin_arm64.tar.gz
+tar -xzf vdash.tar.gz && rm vdash.tar.gz
+mkdir -p ~/.local/bin && mv vdash ~/.local/bin/
 
-# Example for macOS ARM64:
-curl -LO https://github.com/JeiKeiLim/vibe-dash/releases/latest/download/vdash_darwin_arm64.tar.gz
-tar -xzf vdash_darwin_arm64.tar.gz
-mv vdash /usr/local/bin/
+# macOS Intel
+curl -Lo vdash.tar.gz https://github.com/JeiKeiLim/vibe-dash/releases/latest/download/vdash_darwin_amd64.tar.gz
+tar -xzf vdash.tar.gz && rm vdash.tar.gz
+mkdir -p ~/.local/bin && mv vdash ~/.local/bin/
+
+# Linux x86_64
+curl -Lo vdash.tar.gz https://github.com/JeiKeiLim/vibe-dash/releases/latest/download/vdash_linux_amd64.tar.gz
+tar -xzf vdash.tar.gz && rm vdash.tar.gz
+mkdir -p ~/.local/bin && mv vdash ~/.local/bin/
+
+# Linux ARM64
+curl -Lo vdash.tar.gz https://github.com/JeiKeiLim/vibe-dash/releases/latest/download/vdash_linux_arm64.tar.gz
+tar -xzf vdash.tar.gz && rm vdash.tar.gz
+mkdir -p ~/.local/bin && mv vdash ~/.local/bin/
+```
+
+Make sure `~/.local/bin` is in your PATH (add to `~/.bashrc` or `~/.zshrc`):
+```bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 **Build from Source**

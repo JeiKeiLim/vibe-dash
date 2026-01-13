@@ -61,11 +61,10 @@ jobs:
           fi
 
           go build -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
-            -o vdash_${{ matrix.goos }}_${{ matrix.goarch }} ./cmd/vdash
+            -o vdash ./cmd/vdash
 
-          # Create archive
-          tar -czvf vdash_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz \
-            vdash_${{ matrix.goos }}_${{ matrix.goarch }} README.md
+          # Create archive (no version in filename for /latest/download/ URL compatibility)
+          tar -czvf vdash_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz vdash README.md
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
