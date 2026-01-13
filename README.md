@@ -30,6 +30,7 @@ If you're curious about BMAD or want to see what continuous AI-assisted developm
 - **Multi-Project Dashboard** — Track all your AI coding projects from one terminal
 - **Real-time Monitoring** — File watcher detects changes and updates the dashboard automatically
 - **Agent Waiting Detection** — Know instantly when your AI coding agent needs input
+- **Claude Code Log Viewer** — View and tail Claude Code session logs directly from the dashboard
 - **Methodology Support** — Built-in support for BMAD and Speckit workflows
 - **Project Hibernation** — Auto-hibernate inactive projects; auto-activate on file changes
 - **Favorites & Notes** — Star important projects and add personal notes
@@ -137,6 +138,8 @@ Press `?` in the dashboard to see all shortcuts.
 ### Actions
 | Key | Action |
 |-----|--------|
+| `Enter` | View Claude Code logs |
+| `L` | Select session log |
 | `d` | Toggle detail panel |
 | `f` | Toggle favorite |
 | `n` | Edit notes |
@@ -154,6 +157,23 @@ Press `?` in the dashboard to see all shortcuts.
 | `Esc` | Cancel/close dialogs |
 
 ![Help Overlay](docs/screenshots/help.png)
+
+## Claude Code Log Viewer
+
+vdash can display Claude Code session logs for projects that use [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Press `Enter` on any project to view its latest session log, or press `L` to select from available sessions.
+
+### Log Viewer Tools
+
+The log viewer uses external tools for rendering (in order of preference):
+
+1. **[cclv](https://github.com/JeiKeiLim/claude-code-log-viewer-cli)** (Recommended) — TUI for browsing Claude Code logs with vim-style navigation, message filtering, and collapsible thinking/tool blocks
+2. **jq** — JSON processor, provides basic formatting
+3. **Raw file** — Falls back to displaying raw JSONL if no tools are available
+
+For the best experience, install cclv:
+```bash
+go install github.com/JeiKeiLim/claude-code-log-viewer-cli/cmd/cclv@latest
+```
 
 ## CLI Commands
 
