@@ -78,6 +78,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get tag message
+        id: tag
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          # Get the tag message (empty for lightweight tags)
+          TAG_MESSAGE=$(git tag -l --format='%(contents)' "$TAG_NAME" | head -c 10000)
+
+          # Check if we have a meaningful message
+          if [ -n "$TAG_MESSAGE" ] && [ "$TAG_MESSAGE" != "$TAG_NAME" ]; then
+            echo "has_message=true" >> $GITHUB_OUTPUT
+            echo "message<<EOF" >> $GITHUB_OUTPUT
+            echo "$TAG_MESSAGE" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "has_message=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -91,7 +110,21 @@ jobs:
           sha256sum *.tar.gz > checksums.txt
           cat checksums.txt
 
-      - name: Create Release
+      - name: Create Release (with custom notes)
+        if: steps.tag.outputs.has_message == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          body: ${{ steps.tag.outputs.message }}
+          files: |
+            dist/*.tar.gz
+            dist/checksums.txt
+          draft: false
+          prerelease: ${{ contains(github.ref, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release (auto-generated notes)
+        if: steps.tag.outputs.has_message != 'true'
         uses: softprops/action-gh-release@v1
         with:
           files: |
