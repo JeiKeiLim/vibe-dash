@@ -1342,9 +1342,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.projects) > 0 {
 			var warning string
 			if len(msg.projects) == 1 {
-				warning = fmt.Sprintf("%s %s: corrupted (vibe reset %s)", emoji.Warning(), msg.projects[0], msg.projects[0])
+				warning = fmt.Sprintf("%s %s: corrupted (vdash reset %s)", emoji.Warning(), msg.projects[0], msg.projects[0])
 			} else {
-				warning = fmt.Sprintf("%s %d projects corrupted (vibe reset --all)", emoji.Warning(), len(msg.projects))
+				warning = fmt.Sprintf("%s %d projects corrupted (vdash reset --all)", emoji.Warning(), len(msg.projects))
 			}
 			m.statusBar.SetWatcherWarning(warning)
 		}

@@ -274,7 +274,7 @@ func TestFramework_FullWorkflow(t *testing.T) {
 		func(bts []byte) bool {
 			return bytes.Contains(bts, []byte("VIBE DASHBOARD")) ||
 				bytes.Contains(bts, []byte("Welcome")) ||
-				bytes.Contains(bts, []byte("vibe"))
+				bytes.Contains(bts, []byte("vdash"))
 		},
 		teatest.WithDuration(3*time.Second),
 		teatest.WithCheckInterval(50*time.Millisecond),
@@ -334,7 +334,7 @@ func TestFramework_DeterministicOutput(t *testing.T) {
 			func(bts []byte) bool {
 				return bytes.Contains(bts, []byte("VIBE DASHBOARD")) ||
 					bytes.Contains(bts, []byte("Welcome")) ||
-					bytes.Contains(bts, []byte("vibe"))
+					bytes.Contains(bts, []byte("vdash"))
 			},
 			teatest.WithDuration(3*time.Second),
 			teatest.WithCheckInterval(50*time.Millisecond),

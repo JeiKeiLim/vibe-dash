@@ -210,7 +210,7 @@ func TestModel_View_EmptyView(t *testing.T) {
 	expectedStrings := []string{
 		"VIBE DASHBOARD",
 		"Welcome to Vibe Dashboard",
-		"vibe add",
+		"vdash add",
 		"[?] for help",
 		"[q] to quit",
 	}

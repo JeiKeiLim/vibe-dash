@@ -427,8 +427,8 @@ func TestModel_ProjectCorruptionMsg_SingleProject(t *testing.T) {
 	if !strings.Contains(view, "my-project") {
 		t.Errorf("expected status bar to mention project name, got: %s", view)
 	}
-	if !strings.Contains(view, "vibe reset") {
-		t.Errorf("expected status bar to suggest 'vibe reset', got: %s", view)
+	if !strings.Contains(view, "vdash reset") {
+		t.Errorf("expected status bar to suggest 'vdash reset', got: %s", view)
 	}
 }
 
@@ -461,8 +461,8 @@ func TestModel_ProjectCorruptionMsg_MultipleProjects(t *testing.T) {
 	if !strings.Contains(view, "corrupted") {
 		t.Errorf("expected status bar to show 'corrupted', got: %s", view)
 	}
-	if !strings.Contains(view, "vibe reset --all") {
-		t.Errorf("expected status bar to suggest 'vibe reset --all', got: %s", view)
+	if !strings.Contains(view, "vdash reset --all") {
+		t.Errorf("expected status bar to suggest 'vdash reset --all', got: %s", view)
 	}
 }
 
