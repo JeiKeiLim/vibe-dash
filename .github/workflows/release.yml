@@ -81,6 +81,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Fetch tags (for annotated tag messages)
+        run: git fetch --tags --force
+
       - name: Get tag message
         id: tag
         run: |

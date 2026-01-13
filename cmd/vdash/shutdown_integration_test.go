@@ -13,30 +13,30 @@ import (
 )
 
 // Integration tests for graceful shutdown (Story 7.7)
-// Run with: go test -tags=integration ./cmd/vibe/...
+// Run with: go test -tags=integration ./cmd/vdash/...
 //
 // These tests require the binary to be built first:
 //   make build
 // Or the tests will build it themselves.
 
-// getVibeBinary returns the path to the vibe binary, building if necessary.
-func getVibeBinary(t *testing.T) string {
+// getVdashBinary returns the path to the vdash binary, building if necessary.
+func getVdashBinary(t *testing.T) string {
 	t.Helper()
 
 	// Try to find existing binary
 	projectRoot := findProjectRoot(t)
-	binaryPath := filepath.Join(projectRoot, "bin", "vibe")
+	binaryPath := filepath.Join(projectRoot, "bin", "vdash")
 
 	if _, err := os.Stat(binaryPath); err == nil {
 		return binaryPath
 	}
 
 	// Build the binary
-	t.Log("Building vibe binary for integration tests...")
-	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/vibe")
+	t.Log("Building vdash binary for integration tests...")
+	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/vdash")
 	cmd.Dir = projectRoot
 	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("Failed to build vibe binary: %v\nOutput: %s", err, output)
+		t.Fatalf("Failed to build vdash binary: %v\nOutput: %s", err, output)
 	}
 
 	return binaryPath
@@ -67,7 +67,7 @@ func findProjectRoot(t *testing.T) string {
 // TestIntegration_GracefulShutdown_SIGINT tests clean exit on Ctrl+C (SIGINT).
 // AC1, AC2, AC6: Shutdown signal, timeout respected, exit code 0.
 func TestIntegration_GracefulShutdown_SIGINT(t *testing.T) {
-	binary := getVibeBinary(t)
+	binary := getVdashBinary(t)
 
 	// Create a temporary config directory to avoid touching user config
 	tmpDir := t.TempDir()
@@ -80,7 +80,7 @@ func TestIntegration_GracefulShutdown_SIGINT(t *testing.T) {
 	cmd.Env = append(os.Environ(), "HOME="+tmpDir)
 
 	if err := cmd.Start(); err != nil {
-		t.Fatalf("Failed to start vibe: %v", err)
+		t.Fatalf("Failed to start vdash: %v", err)
 	}
 
 	// Give it time to start
@@ -112,7 +112,7 @@ func TestIntegration_GracefulShutdown_SIGINT(t *testing.T) {
 // TestIntegration_GracefulShutdown_SIGTERM tests clean exit on SIGTERM.
 // AC1, AC2, AC6: SIGTERM handled same as SIGINT.
 func TestIntegration_GracefulShutdown_SIGTERM(t *testing.T) {
-	binary := getVibeBinary(t)
+	binary := getVdashBinary(t)
 
 	tmpDir := t.TempDir()
 
@@ -123,7 +123,7 @@ func TestIntegration_GracefulShutdown_SIGTERM(t *testing.T) {
 	cmd.Env = append(os.Environ(), "HOME="+tmpDir)
 
 	if err := cmd.Start(); err != nil {
-		t.Fatalf("Failed to start vibe: %v", err)
+		t.Fatalf("Failed to start vdash: %v", err)
 	}
 
 	time.Sleep(100 * time.Millisecond)
@@ -148,7 +148,7 @@ func TestIntegration_GracefulShutdown_SIGTERM(t *testing.T) {
 // TestIntegration_RapidDoubleSignal tests AC8: force exit on repeated signal.
 // AC8: Given shutdown in progress, when second signal received, exit immediately with code 1.
 func TestIntegration_RapidDoubleSignal(t *testing.T) {
-	binary := getVibeBinary(t)
+	binary := getVdashBinary(t)
 
 	tmpDir := t.TempDir()
 
@@ -160,7 +160,7 @@ func TestIntegration_RapidDoubleSignal(t *testing.T) {
 	cmd.Env = append(os.Environ(), "HOME="+tmpDir)
 
 	if err := cmd.Start(); err != nil {
-		t.Fatalf("Failed to start vibe: %v", err)
+		t.Fatalf("Failed to start vdash: %v", err)
 	}
 
 	// Give it time to start
@@ -209,7 +209,7 @@ func TestIntegration_ShutdownTimeoutValue(t *testing.T) {
 // TestIntegration_VersionCommand_ExitsCleanly tests that simple commands exit cleanly.
 // AC6: Exit code 0 for normal completion.
 func TestIntegration_VersionCommand_ExitsCleanly(t *testing.T) {
-	binary := getVibeBinary(t)
+	binary := getVdashBinary(t)
 
 	cmd := exec.Command(binary, "--version")
 	output, err := cmd.CombinedOutput()
@@ -227,7 +227,7 @@ func TestIntegration_VersionCommand_ExitsCleanly(t *testing.T) {
 // TestIntegration_HelpCommand_ExitsCleanly tests that help command exits cleanly.
 // AC6: Exit code 0 for normal completion.
 func TestIntegration_HelpCommand_ExitsCleanly(t *testing.T) {
-	binary := getVibeBinary(t)
+	binary := getVdashBinary(t)
 
 	cmd := exec.Command(binary, "--help")
 	output, err := cmd.CombinedOutput()
