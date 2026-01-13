@@ -71,7 +71,7 @@ func TestPathToClaudeDir(t *testing.T) {
 func containsPath(fullPath, segment string) bool {
 	return filepath.Dir(fullPath) != fullPath &&
 		(filepath.Base(filepath.Dir(fullPath)) == "projects" ||
-		 containsPath(filepath.Dir(fullPath), segment))
+			containsPath(filepath.Dir(fullPath), segment))
 }
 
 func TestClaudeCodeReader_CanRead(t *testing.T) {
@@ -242,7 +242,7 @@ func TestClaudeCodeReader_TailSession_ReceivesNewEntries(t *testing.T) {
 		}
 		defer f.Close()
 		newEntry := `{"type":"assistant","timestamp":"2026-01-12T10:00:05Z","sessionId":"tail-123"}`
-		f.WriteString(newEntry + "\n")
+		_, _ = f.WriteString(newEntry + "\n")
 	}()
 
 	// Wait for new entry (with timeout)
@@ -265,10 +265,10 @@ func TestClaudeCodeReader_ParseLogEntry(t *testing.T) {
 	reader := NewClaudeCodeReader()
 
 	tests := []struct {
-		name       string
-		line       string
-		wantType   string
-		wantErr    bool
+		name     string
+		line     string
+		wantType string
+		wantErr  bool
 	}{
 		{
 			name:     "user message",

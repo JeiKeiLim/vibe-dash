@@ -142,10 +142,10 @@ type Model struct {
 	flashMessageTime time.Time
 
 	// Story 12.1: Live tailing state (AC3, AC4)
-	currentSessionPath string         // Path to session file being tailed
-	logAutoScroll      bool           // True = auto-scroll to latest, false = paused
-	logLastOffset      int64          // Last read offset for incremental reads
-	logTailActive      bool           // Whether tailing is active
+	currentSessionPath string // Path to session file being tailed
+	logAutoScroll      bool   // True = auto-scroll to latest, false = paused
+	logLastOffset      int64  // Last read offset for incremental reads
+	logTailActive      bool   // Whether tailing is active
 }
 
 // resizeTickMsg is used for resize debouncing.

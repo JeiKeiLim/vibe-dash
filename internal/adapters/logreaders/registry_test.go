@@ -68,15 +68,15 @@ func TestRegistryRegister(t *testing.T) {
 
 func TestRegistryGetReader(t *testing.T) {
 	tests := []struct {
-		name        string
-		readers     []*mockLogReader
-		wantReader  string
-		wantNil     bool
+		name       string
+		readers    []*mockLogReader
+		wantReader string
+		wantNil    bool
 	}{
 		{
-			name:       "no readers registered",
-			readers:    nil,
-			wantNil:    true,
+			name:    "no readers registered",
+			readers: nil,
+			wantNil: true,
 		},
 		{
 			name: "first matching reader returned",
