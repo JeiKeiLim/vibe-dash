@@ -93,7 +93,7 @@ func wrapDBErrorForProject(err error, dbPath string) error {
 		strings.Contains(errStr, "disk i/o error") ||
 		strings.Contains(errStr, "database disk image is malformed") ||
 		strings.Contains(errStr, "file is not a database") {
-		return fmt.Errorf("%w: %v. Recovery: delete %s and re-add project via 'vibe add <path>'",
+		return fmt.Errorf("%w: %v. Recovery: delete %s and re-add project via 'vdash add <path>'",
 			ErrDatabaseCorrupted, err, dbPath)
 	}
 	return err
