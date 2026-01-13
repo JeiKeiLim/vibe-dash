@@ -17,15 +17,15 @@ This command produces NO output - it communicates only through exit codes:
   Exit 2 = project not found
 
 Examples:
-  vibe exists client-alpha              # By name
-  vibe exists "My Cool App"             # By display name
-  vibe exists /home/user/project        # By path
+  vdash exists client-alpha              # By name
+  vdash exists "My Cool App"             # By display name
+  vdash exists /home/user/project        # By path
 
 Scripting usage:
-  if vibe exists my-project; then
+  if vdash exists my-project; then
     echo "Already tracked"
   else
-    vibe add .
+    vdash add .
   fi`,
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: projectCompletionFunc,

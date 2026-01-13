@@ -39,6 +39,20 @@ If you're curious about BMAD or want to see what continuous AI-assisted developm
 
 ### Installation
 
+**Download from Releases (Recommended)**
+
+```bash
+# Download the latest release for your platform
+# Visit: https://github.com/JeiKeiLim/vibe-dash/releases
+
+# Example for macOS ARM64:
+curl -LO https://github.com/JeiKeiLim/vibe-dash/releases/latest/download/vdash_darwin_arm64.tar.gz
+tar -xzf vdash_darwin_arm64.tar.gz
+mv vdash /usr/local/bin/
+```
+
+**Build from Source**
+
 ```bash
 # Clone the repository
 git clone https://github.com/JeiKeiLim/vibe-dash.git
@@ -46,28 +60,28 @@ cd vibe-dash
 
 # Build and install
 make build
-make install  # Installs to ~/go/bin/vibe
+make install  # Installs to ~/go/bin/vdash
 ```
 
 ### Requirements
 
-- Go 1.24 or later
+- Go 1.24 or later (for building from source)
 - CGO enabled (required for SQLite)
 
 ### Add Your First Project
 
 ```bash
 # Add current directory
-cd your-project && vibe add .
+cd your-project && vdash add .
 
 # Or specify a path
-vibe add /path/to/project --name "My Project"
+vdash add /path/to/project --name "My Project"
 ```
 
 ### Launch the Dashboard
 
 ```bash
-vibe
+vdash
 ```
 
 ![Welcome Screen](docs/screenshots/welcome.png)
@@ -127,22 +141,23 @@ Press `?` in the dashboard to see all shortcuts.
 ## CLI Commands
 
 ```bash
-vibe                      # Launch interactive dashboard
-vibe add [path]           # Add project to tracking
-vibe list                 # List all tracked projects
-vibe status <name>        # Show project status
-vibe remove <name>        # Remove from tracking
-vibe hibernate <name>     # Mark project as dormant
-vibe activate <name>      # Reactivate hibernated project
-vibe favorite <name>      # Toggle favorite status
-vibe note <name> [note]   # View or set project notes
-vibe rename <name> [new]  # Set or clear display name
-vibe refresh              # Refresh detection for all projects
-vibe config               # Manage configuration
-vibe reset                # Reset project database
+vdash                      # Launch interactive dashboard
+vdash add [path]           # Add project to tracking
+vdash list                 # List all tracked projects
+vdash status <name>        # Show project status
+vdash remove <name>        # Remove from tracking
+vdash hibernate <name>     # Mark project as dormant
+vdash activate <name>      # Reactivate hibernated project
+vdash favorite <name>      # Toggle favorite status
+vdash note <name> [note]   # View or set project notes
+vdash rename <name> [new]  # Set or clear display name
+vdash refresh              # Refresh detection for all projects
+vdash config               # Manage configuration
+vdash reset                # Reset project database
+vdash --version            # Show version information
 ```
 
-Use `vibe [command] --help` for detailed command options.
+Use `vdash [command] --help` for detailed command options.
 
 ### Global Flags
 
@@ -215,7 +230,7 @@ type MethodDetector interface {
 }
 ```
 
-Register in `cmd/vibe/main.go`:
+Register in `cmd/vdash/main.go`:
 
 ```go
 registry.Register(mydetector.NewMyDetector())
@@ -275,7 +290,7 @@ make clean
 
 ```
 .
-├── cmd/vibe/              # Application entry point
+├── cmd/vdash/             # Application entry point
 ├── internal/              # Private application code
 ├── test/fixtures/         # Test fixture projects
 ├── docs/                  # Documentation and sprint artifacts

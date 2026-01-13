@@ -25,9 +25,9 @@ Projects can be identified by name, display name, or path.
 Favorite projects cannot be hibernated (remove favorite first).
 
 Examples:
-  vibe hibernate my-project             # By name
-  vibe hibernate /home/user/my-project  # By path
-  vibe hibernate "My Cool App"          # By display name`,
+  vdash hibernate my-project             # By name
+  vdash hibernate /home/user/my-project  # By path
+  vdash hibernate "My Cool App"          # By display name`,
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: projectCompletionFunc,
 		RunE:              runHibernate,
@@ -83,7 +83,7 @@ func runHibernate(cmd *cobra.Command, args []string) error {
 			cmd.SilenceErrors = true
 			cmd.SilenceUsage = true
 			fmt.Fprintf(cmd.OutOrStdout(), "Cannot hibernate favorite project: %s\n", identifier)
-			fmt.Fprintf(cmd.OutOrStdout(), "Remove favorite status first with: vibe favorite %s --off\n", identifier)
+			fmt.Fprintf(cmd.OutOrStdout(), "Remove favorite status first with: vdash favorite %s --off\n", identifier)
 			return err
 		}
 		return fmt.Errorf("failed to hibernate project: %w", err)

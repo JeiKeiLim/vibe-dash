@@ -24,9 +24,9 @@ Activated projects:
 Projects can be identified by name, display name, or path.
 
 Examples:
-  vibe activate my-project             # By name
-  vibe activate /home/user/my-project  # By path
-  vibe activate "My Cool App"          # By display name`,
+  vdash activate my-project             # By name
+  vdash activate /home/user/my-project  # By path
+  vdash activate "My Cool App"          # By display name`,
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: projectCompletionFunc,
 		RunE:              runActivate,

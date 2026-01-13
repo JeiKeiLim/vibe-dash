@@ -36,9 +36,9 @@ Supported keys:
   waiting-threshold    Agent waiting threshold in minutes (0 to disable)
 
 Examples:
-  vibe config set my-project hibernation-days 30
-  vibe config set my-project waiting-threshold 5
-  vibe config set api-service waiting-threshold 0    # Disable detection`,
+  vdash config set my-project hibernation-days 30
+  vdash config set my-project waiting-threshold 5
+  vdash config set api-service waiting-threshold 0    # Disable detection`,
 	Args: cobra.ExactArgs(3),
 	RunE: runConfigSet,
 }

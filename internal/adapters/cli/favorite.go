@@ -33,8 +33,8 @@ Favorited projects:
   - Never auto-hibernate (always visible)
 
 Examples:
-  vibe favorite my-project       # Toggle favorite status
-  vibe favorite my-project --off # Remove favorite status`,
+  vdash favorite my-project       # Toggle favorite status
+  vdash favorite my-project --off # Remove favorite status`,
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: projectCompletionFunc,
 		RunE:              runFavorite,

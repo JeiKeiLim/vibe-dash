@@ -22,8 +22,8 @@ recreated fresh on next access. This is useful for recovering from database
 corruption or clearing cached detection state.
 
 Examples:
-  vibe reset my-project --confirm     # Reset single project
-  vibe reset --all --confirm          # Reset all project databases`,
+  vdash reset my-project --confirm     # Reset single project
+  vdash reset --all --confirm          # Reset all project databases`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: runReset,
 	}

@@ -39,8 +39,8 @@ Shows project name, workflow stage, and time since last activity.
 Use --json for machine-readable output.
 
 Examples:
-  vibe list           # Plain text output
-  vibe list --json    # JSON output for scripting`,
+  vdash list           # Plain text output
+  vdash list --json    # JSON output for scripting`,
 		Args: cobra.NoArgs,
 		RunE: runList,
 	}
@@ -88,7 +88,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 
 	// Plain text output
 	if len(projects) == 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "No projects tracked. Run 'vibe add .' to add one.\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "No projects tracked. Run 'vdash add .' to add one.\n")
 		return nil
 	}
 

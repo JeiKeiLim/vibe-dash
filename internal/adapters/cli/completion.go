@@ -11,18 +11,18 @@ func newCompletionCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "completion [bash|zsh|fish|powershell]",
 		Short: "Generate shell completion scripts",
-		Long: `Generate shell completion scripts for vibe.
+		Long: `Generate shell completion scripts for vdash.
 
 To load completions:
 
 Bash:
-  $ source <(vibe completion bash)
+  $ source <(vdash completion bash)
 
   # To load completions for each session, execute once:
   # Linux:
-  $ vibe completion bash > /etc/bash_completion.d/vibe
+  $ vdash completion bash > /etc/bash_completion.d/vdash
   # macOS:
-  $ vibe completion bash > $(brew --prefix)/etc/bash_completion.d/vibe
+  $ vdash completion bash > $(brew --prefix)/etc/bash_completion.d/vdash
 
 Zsh:
   # If shell completion is not already enabled in your environment,
@@ -30,21 +30,21 @@ Zsh:
   $ echo "autoload -U compinit; compinit" >> ~/.zshrc
 
   # To load completions for each session, execute once:
-  $ vibe completion zsh > "${fpath[1]}/_vibe"
+  $ vdash completion zsh > "${fpath[1]}/_vdash"
 
   # You will need to start a new shell for this setup to take effect.
 
 Fish:
-  $ vibe completion fish | source
+  $ vdash completion fish | source
 
   # To load completions for each session, execute once:
-  $ vibe completion fish > ~/.config/fish/completions/vibe.fish
+  $ vdash completion fish > ~/.config/fish/completions/vdash.fish
 
 PowerShell:
-  PS> vibe completion powershell | Out-String | Invoke-Expression
+  PS> vdash completion powershell | Out-String | Invoke-Expression
 
   # To load completions for every new session, run:
-  PS> vibe completion powershell > vibe.ps1
+  PS> vdash completion powershell > vdash.ps1
   # and source this file from your PowerShell profile.
 `,
 		Args:      cobra.ExactArgs(1),

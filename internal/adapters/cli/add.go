@@ -82,9 +82,9 @@ If no path is provided, the current directory is used.
 The path is resolved to its canonical form (following symlinks).
 
 Examples:
-  vibe add .                  # Add current directory
-  vibe add /path/to/project   # Add specific path
-  vibe add . --name "My App"  # Add with custom display name`,
+  vdash add .                  # Add current directory
+  vdash add /path/to/project   # Add specific path
+  vdash add . --name "My App"  # Add with custom display name`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: runAdd,
 	}
@@ -237,7 +237,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 // This avoids state contamination between tests.
 func NewRootCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "vibe",
+		Use:   "vdash",
 		Short: "CLI dashboard for vibe coding projects",
 	}
 }

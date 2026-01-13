@@ -7,18 +7,18 @@ SHELL := /bin/bash
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-LDFLAGS = -ldflags "-X github.com/JeiKeiLim/vibe-dash/internal/adapters/cli.Version=$(VERSION) \
-                    -X github.com/JeiKeiLim/vibe-dash/internal/adapters/cli.Commit=$(COMMIT) \
-                    -X github.com/JeiKeiLim/vibe-dash/internal/adapters/cli.BuildDate=$(BUILD_DATE)"
+LDFLAGS = -ldflags "-X main.version=$(VERSION) \
+                    -X main.commit=$(COMMIT) \
+                    -X main.date=$(BUILD_DATE)"
 
 # CGO_ENABLED=1 required for go-sqlite3
 build:
 	@set -o pipefail; \
 	start=$$(date +%s); \
-	CGO_ENABLED=1 go build $(LDFLAGS) -o bin/vibe ./cmd/vibe; \
+	CGO_ENABLED=1 go build $(LDFLAGS) -o bin/vdash ./cmd/vdash; \
 	exit_code=$$?; \
 	end=$$(date +%s); \
-	. scripts/summary.sh && print_build_summary $$exit_code $$((end-start)) bin/vibe $(VERSION); \
+	. scripts/summary.sh && print_build_summary $$exit_code $$((end-start)) bin/vdash $(VERSION); \
 	exit $$exit_code
 
 test:
@@ -62,13 +62,13 @@ check-fmt:
 	@test -z "$$($(shell go env GOPATH)/bin/goimports -l .)" || (echo "Run 'make fmt' to fix formatting" && exit 1)
 
 run: build
-	./bin/vibe
+	./bin/vdash
 
 clean:
 	rm -rf bin/
 
 install:
-	CGO_ENABLED=1 go install $(LDFLAGS) ./cmd/vibe
+	CGO_ENABLED=1 go install $(LDFLAGS) ./cmd/vdash
 
 # Detection accuracy testing (95% threshold - launch blocker)
 test-accuracy:

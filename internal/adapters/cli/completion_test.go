@@ -117,9 +117,9 @@ func TestCompletionCmd_Bash(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify bash-specific patterns (Story 6.6 Dev Notes: contains `_vibe` function pattern)
-	if !strings.Contains(output, "_vibe") {
-		t.Error("bash completion script should contain '_vibe' function")
+	// Verify bash-specific patterns (Story 6.6 Dev Notes: contains `_vdash` function pattern)
+	if !strings.Contains(output, "_vdash") {
+		t.Error("bash completion script should contain '_vdash' function")
 	}
 	if !strings.Contains(output, "COMPREPLY") {
 		t.Error("bash completion script should contain 'COMPREPLY'")
@@ -148,9 +148,9 @@ func TestCompletionCmd_Fish(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify fish-specific patterns (Story 6.6 Dev Notes: contains `complete -c vibe` pattern)
-	if !strings.Contains(output, "complete -c vibe") {
-		t.Error("fish completion script should contain 'complete -c vibe'")
+	// Verify fish-specific patterns (Story 6.6 Dev Notes: contains `complete -c vdash` pattern)
+	if !strings.Contains(output, "complete -c vdash") {
+		t.Error("fish completion script should contain 'complete -c vdash'")
 	}
 }
 
@@ -218,7 +218,7 @@ func TestCompletionCmd_HelpText(t *testing.T) {
 	if !strings.Contains(output, "powershell") {
 		t.Error("help text should mention powershell")
 	}
-	if !strings.Contains(output, "source <(vibe completion bash)") {
+	if !strings.Contains(output, "source <(vdash completion bash)") {
 		t.Error("help text should contain bash installation instructions")
 	}
 }

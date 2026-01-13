@@ -21,9 +21,9 @@ If note-text is provided, sets the project note.
 If no note-text is provided, displays the current note.
 
 Examples:
-  vibe note my-project "Waiting on API specs"   # Set note
-  vibe note my-project ""                        # Clear note
-  vibe note my-project                           # View current note`,
+  vdash note my-project "Waiting on API specs"   # Set note
+  vdash note my-project ""                        # Clear note
+  vdash note my-project                           # View current note`,
 		Args:              cobra.RangeArgs(1, 2),
 		ValidArgsFunction: projectCompletionFunc,
 		RunE:              runNote,

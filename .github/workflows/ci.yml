@@ -158,10 +158,13 @@ jobs:
         id: build
         run: |
           start=$(date +%s)
-          CGO_ENABLED=1 go build -ldflags "-X github.com/JeiKeiLim/vibe-dash/internal/adapters/cli.Version=$(git describe --tags --always --dirty 2>/dev/null || echo 'dev')" -o bin/vibe ./cmd/vibe
+          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo 'dev')
+          COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo 'none')
+          DATE=$(date -u +%Y-%m-%d)
+          CGO_ENABLED=1 go build -ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" -o bin/vdash ./cmd/vdash
           exit_code=$?
           echo "duration=$(($(date +%s) - start))" >> $GITHUB_OUTPUT
-          echo "version=$(./bin/vibe --version 2>/dev/null | head -1 || echo 'dev')" >> $GITHUB_OUTPUT
+          echo "version=$(./bin/vdash --version 2>/dev/null | head -1 || echo 'dev')" >> $GITHUB_OUTPUT
           exit $exit_code
 
       - name: Add build summary
@@ -171,7 +174,7 @@ jobs:
             echo "### Build :white_check_mark:" >> $GITHUB_STEP_SUMMARY
             echo "- **Status**: PASS" >> $GITHUB_STEP_SUMMARY
             echo "- **Duration**: ${{ steps.build.outputs.duration }}s" >> $GITHUB_STEP_SUMMARY
-            echo "- **Binary**: bin/vibe" >> $GITHUB_STEP_SUMMARY
+            echo "- **Binary**: bin/vdash" >> $GITHUB_STEP_SUMMARY
             echo "- **Version**: ${{ steps.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           else
             echo "### Build :x:" >> $GITHUB_STEP_SUMMARY

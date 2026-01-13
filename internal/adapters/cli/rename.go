@@ -30,9 +30,9 @@ Use --clear to remove the display name.
 Passing an empty string "" also clears the display name.
 
 Examples:
-  vibe rename api-service "Client A API"  # Set display name
-  vibe rename api-service --clear          # Clear display name
-  vibe rename api-service ""               # Clear display name (alternative)`,
+  vdash rename api-service "Client A API"  # Set display name
+  vdash rename api-service --clear          # Clear display name
+  vdash rename api-service ""               # Clear display name (alternative)`,
 		Args:              cobra.RangeArgs(1, 2),
 		ValidArgsFunction: projectCompletionFunc,
 		RunE:              runRename,

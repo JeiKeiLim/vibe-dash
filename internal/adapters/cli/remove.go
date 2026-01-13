@@ -36,9 +36,9 @@ By default, confirmation is required before removal.
 Use --force to skip confirmation.
 
 Examples:
-  vibe remove client-alpha          # Remove with confirmation
-  vibe remove client-alpha --force  # Remove immediately
-  vibe remove "My Project"          # Remove by display name`,
+  vdash remove client-alpha          # Remove with confirmation
+  vdash remove client-alpha --force  # Remove immediately
+  vdash remove "My Project"          # Remove by display name`,
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: projectCompletionFunc,
 		RunE:              runRemove,

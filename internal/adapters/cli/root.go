@@ -9,16 +9,16 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui"
 )
 
-// RootCmd is the root command for the vibe CLI.
+// RootCmd is the root command for the vdash CLI.
 var RootCmd = &cobra.Command{
-	Use:   "vibe",
+	Use:   "vdash",
 	Short: "CLI dashboard for vibe coding projects",
-	Long: `vibe-dash is a CLI dashboard for vibe coding projects.
+	Long: `vdash (vibe-dash) is a CLI dashboard for vibe coding projects.
 
 Track AI-assisted coding project stages, detect when agents are waiting
 for input, and manage your workflow across multiple projects.
 
-Run 'vibe' with no arguments to launch the interactive dashboard.
+Run 'vdash' with no arguments to launch the interactive dashboard.
 
 Exit Codes:
   0  Success
@@ -26,6 +26,7 @@ Exit Codes:
   2  Project not found
   3  Configuration invalid
   4  Detection failed`,
+	Version: "dev", // Set properly via init()
 	Run: func(cmd *cobra.Command, args []string) {
 		slog.Info("vibe-dash starting")
 
@@ -46,6 +47,7 @@ Exit Codes:
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // It accepts a context for graceful shutdown support.
+// Note: Version is configured via SetVersion() which calls setupVersion().
 func Execute(ctx context.Context) error {
 	return RootCmd.ExecuteContext(ctx)
 }

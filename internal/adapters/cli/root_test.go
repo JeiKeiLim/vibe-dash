@@ -72,8 +72,8 @@ func TestRootCmd_LongDescription(t *testing.T) {
 
 func TestRootCmd_UsageLinePresent(t *testing.T) {
 	// The Use field should be set
-	if RootCmd.Use != "vibe" {
-		t.Errorf("RootCmd.Use should be 'vibe', got: %s", RootCmd.Use)
+	if RootCmd.Use != "vdash" {
+		t.Errorf("RootCmd.Use should be 'vdash', got: %s", RootCmd.Use)
 	}
 }
 

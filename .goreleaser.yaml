@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: vdash
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: vdash
+    main: ./cmd/vdash
+    binary: vdash
+    env:
+      - CGO_ENABLED=1
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.ShortCommit}}
+      - -X main.date={{.Date}}
+    # Single OS/arch per goreleaser run - matrix handles cross-platform
+    goos:
+      - "{{ .Env.GOOS }}"
+    goarch:
+      - "{{ .Env.GOARCH }}"
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: JeiKeiLim
+    name: vibe-dash
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"

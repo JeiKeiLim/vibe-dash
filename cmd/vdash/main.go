@@ -20,6 +20,13 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/core/services"
 )
 
+// Version info - set by goreleaser via ldflags
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 // configPathAdapter implements ports.ProjectPathLookup for DirectoryManager.
 type configPathAdapter struct {
 	loader *config.ViperLoader
@@ -79,6 +86,9 @@ func main() {
 }
 
 func run(ctx context.Context) error {
+	// Set version info for CLI
+	cli.SetVersion(version, commit, date)
+
 	// Load config (always succeeds, may log warnings for graceful degradation)
 	loader := config.NewViperLoader("")
 	cfg, _ := loader.Load(ctx) // Intentionally ignore error - graceful degradation

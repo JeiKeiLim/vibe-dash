@@ -2,6 +2,21 @@ package cli
 
 import "github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 
+// Version info - set from main.go
+var (
+	appVersion = "dev"
+	appCommit  = "none"
+	appDate    = "unknown"
+)
+
+// SetVersion sets the version info for the CLI and configures the version template.
+func SetVersion(version, commit, date string) {
+	appVersion = version
+	appCommit = commit
+	appDate = date
+	setupVersion() // Configure cobra version template
+}
+
 // directoryManager handles project directory operations (delete).
 var directoryManager ports.DirectoryManager
 

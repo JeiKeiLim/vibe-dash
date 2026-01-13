@@ -45,14 +45,14 @@ func newStatusCmd() *cobra.Command {
 		Long: `Show detailed status of a specific project or all projects.
 
 Use a project name, display name, or path to identify the project.
-Use --all to show all projects (same as 'vibe list').
+Use --all to show all projects (same as 'vdash list').
 
 Examples:
-  vibe status client-alpha          # By name
-  vibe status "My Cool App"         # By display name
-  vibe status /home/user/project    # By path
-  vibe status client-alpha --json   # JSON output
-  vibe status --all                 # All projects`,
+  vdash status client-alpha          # By name
+  vdash status "My Cool App"         # By display name
+  vdash status /home/user/project    # By path
+  vdash status client-alpha --json   # JSON output
+  vdash status --all                 # All projects`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: projectCompletionFunc,
 		RunE:              runStatus,
@@ -143,7 +143,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 		// Plain text output
 		if len(projects) == 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "No projects tracked. Run 'vibe add .' to add one.\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "No projects tracked. Run 'vdash add .' to add one.\n")
 			return nil
 		}
 
