@@ -312,5 +312,7 @@ development_status:
   # Purpose: View Claude Code (and future agentic tool) logs directly from TUI
   # Pattern: LogReader adapter follows MethodDetector pattern for extensibility
   # 2026-01-12: Story 12-1 complete - Claude Code log viewer implemented
+  # 2026-01-14: Story 12-2 created - Log viewer polish (L key, vim nav, search, ANSI)
   epic-12: in-progress
   12-1-claude-code-log-viewer: done
+  12-2-log-viewer-polish: review

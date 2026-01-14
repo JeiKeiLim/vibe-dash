@@ -43,6 +43,7 @@ func NewProjectListModel(projects []*domain.Project, width, height int) ProjectL
 	// Configure keymap
 	l.KeyMap = list.DefaultKeyMap()
 	l.KeyMap.ForceQuit.Unbind() // We handle quit ourselves
+	l.KeyMap.Filter.Unbind()    // Disable '/' filter key (conflicts with search in text view)
 
 	// Select first item if available
 	if len(items) > 0 {

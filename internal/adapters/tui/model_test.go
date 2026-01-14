@@ -3891,3 +3891,550 @@ func TestHelpOverlay_ContainsStateToggleKeybinding_AC6(t *testing.T) {
 		t.Error("H keybinding should appear after 'x' and before 'a' in Actions section")
 	}
 }
+
+// Story 12.2 AC4: Unit tests for ANSI-aware string functions
+
+func TestStripANSI(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"plain text", "hello world", "hello world"},
+		{"red text", "\x1b[31mred\x1b[0m", "red"},
+		{"bold text", "\x1b[1mbold\x1b[0m", "bold"},
+		{"multiple colors", "\x1b[31mred\x1b[0m \x1b[32mgreen\x1b[0m", "red green"},
+		{"empty string", "", ""},
+		{"only escape", "\x1b[0m", ""},
+		{"nested styles", "\x1b[1;31;44mbold red on blue\x1b[0m", "bold red on blue"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := stripANSI(tc.input)
+			if result != tc.expected {
+				t.Errorf("stripANSI(%q) = %q, want %q", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestVisibleWidth(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected int
+	}{
+		{"plain ascii", "hello", 5},
+		{"with color", "\x1b[31mhello\x1b[0m", 5},
+		{"empty", "", 0},
+		{"wide chars (CJK)", "你好", 4}, // Each CJK char is 2 cells wide
+		{"mixed", "\x1b[31m你好\x1b[0m world", 10},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := visibleWidth(tc.input)
+			if result != tc.expected {
+				t.Errorf("visibleWidth(%q) = %d, want %d", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestTruncateToWidth(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		width    int
+		expected string
+	}{
+		{"no truncation needed", "hello", 10, "hello"},
+		{"exact width", "hello", 5, "hello"},
+		{"needs truncation", "hello world", 8, "hello..."},
+		{"with color no truncation", "\x1b[31mhello\x1b[0m", 10, "\x1b[31mhello\x1b[0m"},
+		{"zero width", "hello", 0, ""},
+		{"negative width", "hello", -1, ""},
+		{"very short", "hello", 4, "h..."},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := truncateToWidth(tc.input, tc.width)
+			// For truncated strings, verify the suffix
+			inputVisibleWidth := visibleWidth(tc.input)
+			if tc.width >= 4 && inputVisibleWidth > tc.width {
+				if !strings.HasSuffix(result, "...") {
+					t.Errorf("truncateToWidth(%q, %d) should end with '...', got %q", tc.input, tc.width, result)
+				}
+			} else if tc.expected != "" {
+				if result != tc.expected {
+					t.Errorf("truncateToWidth(%q, %d) = %q, want %q", tc.input, tc.width, result, tc.expected)
+				}
+			}
+		})
+	}
+}
+
+func TestFindMatches(t *testing.T) {
+	m := NewModel(nil)
+	m.textViewContent = []string{
+		"line one",
+		"line two with error",
+		"another line",
+		"ERROR in this line",
+		"final line",
+	}
+
+	tests := []struct {
+		name     string
+		query    string
+		expected []int
+	}{
+		{"find error case insensitive", "error", []int{1, 3}},
+		{"find line", "line", []int{0, 1, 2, 3, 4}},
+		{"no match", "xyz", nil},
+		{"empty query", "", nil},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := m.findMatches(tc.query)
+			if len(result) != len(tc.expected) {
+				t.Errorf("findMatches(%q) returned %d matches, want %d", tc.query, len(result), len(tc.expected))
+				return
+			}
+			for i, v := range result {
+				if v != tc.expected[i] {
+					t.Errorf("findMatches(%q)[%d] = %d, want %d", tc.query, i, v, tc.expected[i])
+				}
+			}
+		})
+	}
+}
+
+// Story 12.2 AC2: Test Ctrl+D half-page down scroll
+func TestTextView_CtrlD_HalfPageDown(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeTextView
+	m.textViewContent = make([]string, 100) // 100 lines of content
+	for i := range m.textViewContent {
+		m.textViewContent[i] = fmt.Sprintf("Line %d", i)
+	}
+	m.textViewScroll = 0
+
+	// Press Ctrl+D
+	msg := tea.KeyMsg{Type: tea.KeyCtrlD}
+	result, _ := m.Update(msg)
+	m = result.(Model)
+
+	// Should scroll down by half page
+	contentHeight := m.height - 4 // Approximate content area
+	expectedScroll := contentHeight / 2
+	if m.textViewScroll < expectedScroll-5 || m.textViewScroll > expectedScroll+5 {
+		t.Errorf("Ctrl+D should scroll by ~half page, got %d (expected ~%d)", m.textViewScroll, expectedScroll)
+	}
+
+	// Auto-scroll should be paused
+	if m.logAutoScroll {
+		t.Error("Ctrl+D should pause auto-scroll")
+	}
+}
+
+// Story 12.2 AC2: Test Ctrl+U half-page up scroll
+func TestTextView_CtrlU_HalfPageUp(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeTextView
+	m.textViewContent = make([]string, 100)
+	for i := range m.textViewContent {
+		m.textViewContent[i] = fmt.Sprintf("Line %d", i)
+	}
+	m.textViewScroll = 50 // Start scrolled down
+
+	// Press Ctrl+U
+	msg := tea.KeyMsg{Type: tea.KeyCtrlU}
+	result, _ := m.Update(msg)
+	m = result.(Model)
+
+	// Should scroll up by half page
+	contentHeight := m.height - 4
+	expectedScroll := 50 - contentHeight/2
+	if m.textViewScroll < expectedScroll-5 || m.textViewScroll > expectedScroll+5 {
+		t.Errorf("Ctrl+U should scroll up by ~half page, got %d (expected ~%d)", m.textViewScroll, expectedScroll)
+	}
+}
+
+// Story 12.2 AC2: Test double-g (gg) jumps to top
+func TestTextView_DoubleG_JumpsToTop(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeTextView
+	m.textViewContent = make([]string, 100)
+	m.textViewScroll = 50
+
+	// First 'g'
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}}
+	result, _ := m.Update(msg)
+	m = result.(Model)
+
+	// Should not jump yet
+	if m.textViewScroll != 50 {
+		t.Errorf("First 'g' should not scroll, got %d", m.textViewScroll)
+	}
+	if m.lastKeyPress != "g" {
+		t.Error("First 'g' should set lastKeyPress to 'g'")
+	}
+
+	// Second 'g' within timeout
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	// Should jump to top
+	if m.textViewScroll != 0 {
+		t.Errorf("Double 'g' should jump to top, got scroll=%d", m.textViewScroll)
+	}
+	if m.lastKeyPress != "" {
+		t.Error("Double 'g' should reset lastKeyPress")
+	}
+}
+
+// Story 12.2 AC2: Test other keys reset gg detection
+func TestTextView_OtherKey_ResetsGGDetection(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeTextView
+	m.textViewContent = make([]string, 100)
+	m.textViewScroll = 50
+	m.lastKeyPress = "g" // Simulate first 'g' pressed
+
+	// Press 'j' (scroll down) - should reset gg detection
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	result, _ := m.Update(msg)
+	m = result.(Model)
+
+	if m.lastKeyPress != "" {
+		t.Error("Navigation key should reset lastKeyPress for gg detection")
+	}
+}
+
+// Story 12.2 AC3: Test '/' enters search mode
+func TestTextView_Slash_EntersSearchMode(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeTextView
+	m.textViewContent = []string{"line one", "line two"}
+	m.searchMode = false
+
+	// Press '/'
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}}
+	result, _ := m.Update(msg)
+	m = result.(Model)
+
+	if !m.searchMode {
+		t.Error("'/' should enter search mode")
+	}
+	if m.searchInput != "" {
+		t.Error("searchInput should be empty on entering search mode")
+	}
+}
+
+// Story 12.2 AC3: Test search mode typing
+func TestTextView_SearchMode_Typing(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeTextView
+	m.textViewContent = []string{"line one", "line two"}
+	m.searchMode = true
+	m.searchInput = ""
+
+	// Type 'e'
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}}
+	result, _ := m.Update(msg)
+	m = result.(Model)
+
+	if m.searchInput != "e" {
+		t.Errorf("Typing in search mode should update searchInput, got %q", m.searchInput)
+	}
+}
+
+// Story 12.2 AC3: Test search mode backspace
+func TestTextView_SearchMode_Backspace(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeTextView
+	m.textViewContent = []string{"line one", "line two"}
+	m.searchMode = true
+	m.searchInput = "error"
+
+	// Press backspace
+	msg := tea.KeyMsg{Type: tea.KeyBackspace}
+	result, _ := m.Update(msg)
+	m = result.(Model)
+
+	if m.searchInput != "erro" {
+		t.Errorf("Backspace should delete last char, got %q", m.searchInput)
+	}
+}
+
+// Story 12.2 AC3: Test Escape exits search mode
+func TestTextView_SearchMode_EscapeExits(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeTextView
+	m.textViewContent = []string{"line one", "line two"}
+	m.searchMode = true
+	m.searchInput = "test"
+	m.searchMatches = []int{0, 1}
+
+	// Press Escape
+	msg := tea.KeyMsg{Type: tea.KeyEscape}
+	result, _ := m.Update(msg)
+	m = result.(Model)
+
+	if m.searchMode {
+		t.Error("Escape should exit search mode")
+	}
+	if m.searchInput != "" {
+		t.Error("Escape should clear searchInput")
+	}
+	if m.searchMatches != nil {
+		t.Error("Escape should clear searchMatches")
+	}
+}
+
+// Story 12.2 AC3: Test 'n' navigation to next match
+func TestTextView_SearchMode_NextMatch(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeTextView
+	m.textViewContent = []string{"error here", "no match", "another error", "still nothing"}
+	m.searchMatches = []int{0, 2} // Matches at lines 0 and 2
+	m.searchIndex = 0
+
+	// Press 'n' for next match
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
+	result, _ := m.Update(msg)
+	m = result.(Model)
+
+	if m.searchIndex != 1 {
+		t.Errorf("'n' should move to next match, got index %d", m.searchIndex)
+	}
+
+	// Press 'n' again - should wrap to first
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	if m.searchIndex != 0 {
+		t.Errorf("'n' should wrap to first match, got index %d", m.searchIndex)
+	}
+}
+
+// Story 12.2 AC3: Test 'N' navigation to previous match
+func TestTextView_SearchMode_PrevMatch(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeTextView
+	m.textViewContent = []string{"error here", "no match", "another error", "still nothing"}
+	m.searchMatches = []int{0, 2}
+	m.searchIndex = 1
+
+	// Press 'N' for previous match
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}}
+	result, _ := m.Update(msg)
+	m = result.(Model)
+
+	if m.searchIndex != 0 {
+		t.Errorf("'N' should move to previous match, got index %d", m.searchIndex)
+	}
+
+	// Press 'N' again - should wrap to last
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	if m.searchIndex != 1 {
+		t.Errorf("'N' should wrap to last match, got index %d", m.searchIndex)
+	}
+}
+
+// Story 12.2 AC1: Test 'L' key case-insensitive (lowercase)
+func TestModel_LKey_Lowercase_OpensSessionPicker(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeNormal
+	projects := []*domain.Project{{ID: "1", Path: "/test"}}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, m.width, m.height)
+
+	// Test lowercase 'l'
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}
+	_, cmd := m.Update(msg)
+
+	// Should trigger a command (session picker logic - even if it's a flash message)
+	if cmd == nil {
+		t.Error("'l' key should trigger session picker command")
+	}
+}
+
+// Story 12.2 AC1: Test 'L' key case-insensitive (uppercase)
+func TestModel_LKey_Uppercase_OpensSessionPicker(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeNormal
+	projects := []*domain.Project{{ID: "1", Path: "/test"}}
+	m.projects = projects
+	m.projectList = components.NewProjectListModel(projects, m.width, m.height)
+
+	// Test uppercase 'L'
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'L'}}
+	_, cmd := m.Update(msg)
+
+	// Should trigger a command (session picker logic - even if it's a flash message)
+	if cmd == nil {
+		t.Error("'L' key should trigger session picker command")
+	}
+}
+
+// Story 12.2: Test help overlay contains new shortcuts
+func TestHelpOverlay_ContainsStory12_2_Shortcuts(t *testing.T) {
+	help := renderHelpOverlay(80, 40, nil)
+
+	shortcuts := []string{
+		"gg",     // Double-g for jump to top
+		"Ctrl+D", // Half-page down
+		"Ctrl+U", // Half-page up
+		"/",      // Search
+		"n/N",    // Next/prev match
+	}
+
+	for _, shortcut := range shortcuts {
+		if !strings.Contains(help, shortcut) {
+			t.Errorf("Help overlay should contain %q shortcut", shortcut)
+		}
+	}
+}
+
+// Story 12.2 AC3: Test typing shortcut keys in search mode adds them to input
+func TestTextView_SearchMode_TypingShortcutKeys(t *testing.T) {
+	// Keys that are shortcuts but should be typeable in search mode
+	shortcutKeys := []struct {
+		key      rune
+		expected string
+	}{
+		{'n', "n"},
+		{'N', "N"},
+		{'g', "g"},
+		{'G', "G"},
+		{'S', "S"},
+		{'b', "b"},
+		{'j', "j"},
+		{'k', "k"},
+		{' ', " "},
+	}
+
+	for _, tc := range shortcutKeys {
+		t.Run(fmt.Sprintf("key_%c", tc.key), func(t *testing.T) {
+			m := NewModel(nil)
+			m.ready = true
+			m.width = 80
+			m.height = 40
+			m.viewMode = viewModeTextView
+			m.textViewContent = []string{"line one", "line two"}
+			m.searchMode = true
+			m.searchInput = ""
+
+			// Type the shortcut key
+			msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{tc.key}}
+			result, _ := m.Update(msg)
+			m = result.(Model)
+
+			if m.searchInput != tc.expected {
+				t.Errorf("Typing %q in search mode should add to searchInput, got %q", tc.expected, m.searchInput)
+			}
+		})
+	}
+}
+
+// Story 12.2 AC3: Test typing "none" in search mode
+func TestTextView_SearchMode_TypingNone(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeTextView
+	m.textViewContent = []string{"line one", "none here", "line two"}
+	m.searchMode = true
+	m.searchInput = ""
+
+	// Type "none" character by character
+	for _, c := range "none" {
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{c}}
+		result, _ := m.Update(msg)
+		m = result.(Model)
+	}
+
+	if m.searchInput != "none" {
+		t.Errorf("Should be able to type 'none' in search mode, got %q", m.searchInput)
+	}
+}
+
+// Story 12.2 AC3: Test Enter exits search input mode so n/N can navigate
+func TestTextView_SearchMode_EnterExitsInputMode(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.viewMode = viewModeTextView
+	m.textViewContent = []string{"error here", "no match", "another error", "still nothing"}
+	m.searchMode = true
+	m.searchInput = "error"
+
+	// Press Enter to execute search
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	result, _ := m.Update(msg)
+	m = result.(Model)
+
+	// searchMode should be false after Enter
+	if m.searchMode {
+		t.Error("searchMode should be false after pressing Enter")
+	}
+
+	// Should have matches
+	if len(m.searchMatches) != 2 {
+		t.Errorf("Should have 2 matches, got %d", len(m.searchMatches))
+	}
+
+	// Now 'n' should navigate, not type
+	msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	if m.searchIndex != 1 {
+		t.Errorf("'n' should navigate to next match after Enter, got index %d", m.searchIndex)
+	}
+}

@@ -15,6 +15,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/filesystem"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/components"
@@ -23,6 +25,9 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/project"
 )
+
+// Story 12.2 AC2: Timeout for double-key detection (e.g., 'gg' for jump to top)
+const ggTimeoutMs = 500
 
 // Model represents the main TUI application state.
 type Model struct {
@@ -146,6 +151,17 @@ type Model struct {
 	logAutoScroll      bool   // True = auto-scroll to latest, false = paused
 	logLastOffset      int64  // Last read offset for incremental reads
 	logTailActive      bool   // Whether tailing is active
+
+	// Story 12.2 AC2: Double-key detection for 'gg' jump to top
+	lastKeyPress string    // Last key pressed in text view
+	lastKeyTime  time.Time // Time of last key press
+
+	// Story 12.2 AC3: Search state for log viewer
+	searchMode    bool   // Whether search mode is active
+	searchQuery   string // Current search query (after Enter)
+	searchInput   string // Text being typed (before Enter)
+	searchIndex   int    // Current match index (0-based)
+	searchMatches []int  // Line numbers with matches
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -1836,6 +1852,13 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.stateToggleCmd(selected.ID, project.EffectiveName(selected), true)
+
+	case KeyLogOpenView, "L":
+		// Story 12.2 AC1: 'L' key opens session picker from project list (case-insensitive)
+		if m.viewMode == viewModeNormal && len(m.projects) > 0 {
+			return m.handleShiftEnterForSessionPicker()
+		}
+		return m, nil
 	}
 
 	// Story 11.4: Forward key messages to hibernated list when in hibernated view (AC8)
@@ -2418,7 +2441,7 @@ func (m Model) handleEnterForLogs() (tea.Model, tea.Cmd) {
 
 	// Sessions are sorted newest-first, so first one is most recent
 	mostRecent := sessions[0]
-	return m, m.openLogWithJqCmd(mostRecent.Path)
+	return m, m.openLogWithJqCmd(mostRecent.Path, project.EffectiveName(selected))
 }
 
 // handleShiftEnterForSessionPicker handles Shift+Enter to show session picker (AC6).
@@ -2475,13 +2498,15 @@ func (m Model) handleShiftEnterForSessionPicker() (tea.Model, tea.Cmd) {
 
 // openLogWithJqCmd creates a command to format and display log content.
 // Pipeline priority: cclv (primary) -> jq (secondary) -> raw (fallback)
-func (m Model) openLogWithJqCmd(sessionPath string) tea.Cmd {
+func (m Model) openLogWithJqCmd(sessionPath, projectName string) tea.Cmd {
 	return func() tea.Msg {
 		// Extract session name from path for title
-		title := filepath.Base(sessionPath)
-		if len(title) > 40 {
-			title = title[:37] + "..."
+		sessionName := filepath.Base(sessionPath)
+		if len(sessionName) > 40 {
+			sessionName = sessionName[:37] + "..."
 		}
+		// Include project name in title: "ProjectName - session.jsonl"
+		title := projectName + " - " + sessionName
 
 		// Get initial file size for offset tracking (AC4: live tailing)
 		info, statErr := os.Stat(sessionPath)
@@ -2490,8 +2515,8 @@ func (m Model) openLogWithJqCmd(sessionPath string) tea.Cmd {
 			fileSize = info.Size()
 		}
 
-		// Primary: Try cclv (Claude Code Log Viewer) first
-		cmd := exec.Command("cclv", sessionPath)
+		// Primary: Try cclv (Claude Code Log Viewer) first with color support for pipeline
+		cmd := exec.Command("cclv", "--color=always", sessionPath)
 		output, err := cmd.Output()
 		if err == nil {
 			return textViewContentMsg{
@@ -2570,10 +2595,15 @@ func (m Model) handleSessionPickerKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Select session and spawn jq
 		if m.sessionPickerIndex < len(m.logSessions) {
 			selected := m.logSessions[m.sessionPickerIndex]
+			// Capture project name before resetting (for title display)
+			projectName := ""
+			if m.currentLogProject != nil {
+				projectName = project.EffectiveName(m.currentLogProject)
+			}
 			m.showSessionPicker = false
 			m.currentLogReader = nil
 			m.currentLogProject = nil
-			return m, m.openLogWithJqCmd(selected.Path)
+			return m, m.openLogWithJqCmd(selected.Path, projectName)
 		}
 		return m, nil
 	}
@@ -2665,6 +2695,15 @@ func (m Model) handleTextViewKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case KeyEscape, KeyQuit:
+		// Story 12.2 AC3: If in search mode, exit search mode first
+		if m.searchMode {
+			m.searchMode = false
+			m.searchInput = ""
+			m.searchQuery = ""
+			m.searchIndex = 0
+			m.searchMatches = nil
+			return m, nil
+		}
 		// Return to normal view and stop tailing
 		m.viewMode = viewModeNormal
 		m.textViewContent = nil
@@ -2676,9 +2715,26 @@ func (m Model) handleTextViewKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.logTailActive = false // Stop tailing
 		m.currentSessionPath = ""
 		m.logAutoScroll = false
+		// Story 12.2 AC2: Reset double-key detection state
+		m.lastKeyPress = ""
+		// Story 12.2 AC3: Reset search state
+		m.searchMode = false
+		m.searchQuery = ""
+		m.searchInput = ""
+		m.searchIndex = 0
+		m.searchMatches = nil
 		return m, nil
 
 	case KeyForceQuit:
+		// Story 12.2 AC3: In search mode, Ctrl+C exits search instead of quitting
+		if m.searchMode {
+			m.searchMode = false
+			m.searchInput = ""
+			m.searchQuery = ""
+			m.searchIndex = 0
+			m.searchMatches = nil
+			return m, nil
+		}
 		// Exit completely
 		if m.watchCancel != nil {
 			m.watchCancel()
@@ -2688,56 +2744,333 @@ func (m Model) handleTextViewKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Quit
 
-	case KeyDown, KeyDownArrow:
-		// AC3: Manual scroll pauses auto-scroll
+	case KeyDown: // 'j' - scroll down (but typeable in search mode)
+		// If actively typing in search mode, add to input
+		if m.searchMode {
+			m.searchInput += "j"
+			return m, nil
+		}
 		m.logAutoScroll = false
+		m.lastKeyPress = "" // Reset gg detection
 		if m.textViewScroll < maxScroll {
 			m.textViewScroll++
 		}
 		return m, nil
 
-	case KeyUp, KeyUpArrow:
-		// AC3: Manual scroll pauses auto-scroll
+	case KeyDownArrow: // Arrow down - always scroll
 		m.logAutoScroll = false
+		m.lastKeyPress = "" // Reset gg detection
+		if m.textViewScroll < maxScroll {
+			m.textViewScroll++
+		}
+		return m, nil
+
+	case KeyUp: // 'k' - scroll up (but typeable in search mode)
+		// If actively typing in search mode, add to input
+		if m.searchMode {
+			m.searchInput += "k"
+			return m, nil
+		}
+		m.logAutoScroll = false
+		m.lastKeyPress = "" // Reset gg detection
 		if m.textViewScroll > 0 {
 			m.textViewScroll--
 		}
 		return m, nil
 
-	case "g": // Jump to top
-		m.logAutoScroll = false // Pause auto-scroll
-		m.textViewScroll = 0
+	case KeyUpArrow: // Arrow up - always scroll
+		m.logAutoScroll = false
+		m.lastKeyPress = "" // Reset gg detection
+		if m.textViewScroll > 0 {
+			m.textViewScroll--
+		}
 		return m, nil
 
-	case KeyLogJumpEnd: // AC3: Jump to end and resume auto-scroll
+	case "ctrl+d": // Story 12.2 AC2: Half-page down
+		m.logAutoScroll = false // Pause auto-scroll
+		m.lastKeyPress = ""     // Reset gg detection
+		halfPage := contentHeight / 2
+		m.textViewScroll += halfPage
+		if m.textViewScroll > maxScroll {
+			m.textViewScroll = maxScroll
+		}
+		return m, nil
+
+	case "ctrl+u": // Story 12.2 AC2: Half-page up
+		m.logAutoScroll = false // Pause auto-scroll
+		m.lastKeyPress = ""     // Reset gg detection
+		halfPage := contentHeight / 2
+		m.textViewScroll -= halfPage
+		if m.textViewScroll < 0 {
+			m.textViewScroll = 0
+		}
+		return m, nil
+
+	case "g": // Story 12.2 AC2: Double 'g' jumps to top (vim-standard)
+		// If actively typing in search mode, add to input instead of navigation
+		if m.searchMode {
+			m.searchInput += "g"
+			return m, nil
+		}
+		now := time.Now()
+		// Check if this is the second 'g' within timeout
+		if m.lastKeyPress == "g" && now.Sub(m.lastKeyTime).Milliseconds() <= ggTimeoutMs {
+			m.logAutoScroll = false // Pause auto-scroll
+			m.textViewScroll = 0
+			m.lastKeyPress = "" // Reset
+			return m, nil
+		}
+		// First 'g' - record and wait for second
+		m.lastKeyPress = "g"
+		m.lastKeyTime = now
+		return m, nil
+
+	case KeyLogJumpEnd: // AC3: Jump to end and resume auto-scroll (G)
+		// If actively typing in search mode, add to input instead of navigation
+		if m.searchMode {
+			m.searchInput += "G"
+			return m, nil
+		}
 		m.textViewScroll = maxScroll
 		m.logAutoScroll = true // Resume auto-scroll
+		m.lastKeyPress = ""    // Reset gg detection
 		return m, nil
 
-	case KeyLogSession: // AC6: Open session picker from log view
+	case KeyLogSession: // AC6: Open session picker from log view (S)
+		// If actively typing in search mode, add to input instead of action
+		if m.searchMode {
+			m.searchInput += "S"
+			return m, nil
+		}
+		m.lastKeyPress = "" // Reset gg detection
 		if m.currentLogProject != nil {
 			return m.handleShiftEnterForSessionPicker()
 		}
 		return m, nil
 
-	case " ", "pgdown": // Page down
+	case " ": // Space - page down (but typeable in search mode)
+		// If actively typing in search mode, add to input
+		if m.searchMode {
+			m.searchInput += " "
+			return m, nil
+		}
 		m.logAutoScroll = false // Pause auto-scroll
+		m.lastKeyPress = ""     // Reset gg detection
 		m.textViewScroll += contentHeight
 		if m.textViewScroll > maxScroll {
 			m.textViewScroll = maxScroll
 		}
 		return m, nil
 
-	case "b", "pgup": // Page up
+	case "pgdown": // Page down (not typeable, keep as-is)
 		m.logAutoScroll = false // Pause auto-scroll
+		m.lastKeyPress = ""     // Reset gg detection
+		m.textViewScroll += contentHeight
+		if m.textViewScroll > maxScroll {
+			m.textViewScroll = maxScroll
+		}
+		return m, nil
+
+	case "b": // Page up (but typeable in search mode)
+		// If actively typing in search mode, add to input
+		if m.searchMode {
+			m.searchInput += "b"
+			return m, nil
+		}
+		m.logAutoScroll = false // Pause auto-scroll
+		m.lastKeyPress = ""     // Reset gg detection
 		m.textViewScroll -= contentHeight
 		if m.textViewScroll < 0 {
 			m.textViewScroll = 0
 		}
 		return m, nil
+
+	case "pgup": // Page up (not typeable, keep as-is)
+		m.logAutoScroll = false // Pause auto-scroll
+		m.lastKeyPress = ""     // Reset gg detection
+		m.textViewScroll -= contentHeight
+		if m.textViewScroll < 0 {
+			m.textViewScroll = 0
+		}
+		return m, nil
+
+	case "/": // Story 12.2 AC3: Enter search mode
+		if !m.searchMode {
+			m.searchMode = true
+			m.searchInput = ""
+			m.searchQuery = ""
+			m.searchMatches = nil
+			m.searchIndex = 0
+		}
+		return m, nil
+
+	case "n": // Story 12.2 AC3: Next match
+		// If actively typing in search mode, add to input instead of navigating
+		if m.searchMode {
+			m.searchInput += "n"
+			return m, nil
+		}
+		if len(m.searchMatches) > 0 {
+			m.searchIndex = (m.searchIndex + 1) % len(m.searchMatches)
+			m.textViewScroll = m.searchMatches[m.searchIndex]
+			// Center the match if possible
+			if m.textViewScroll > contentHeight/2 {
+				m.textViewScroll -= contentHeight / 2
+			} else {
+				m.textViewScroll = 0
+			}
+			m.logAutoScroll = false
+		}
+		return m, nil
+
+	case "N": // Story 12.2 AC3: Previous match
+		// If actively typing in search mode, add to input instead of navigating
+		if m.searchMode {
+			m.searchInput += "N"
+			return m, nil
+		}
+		if len(m.searchMatches) > 0 {
+			m.searchIndex--
+			if m.searchIndex < 0 {
+				m.searchIndex = len(m.searchMatches) - 1
+			}
+			m.textViewScroll = m.searchMatches[m.searchIndex]
+			// Center the match if possible
+			if m.textViewScroll > contentHeight/2 {
+				m.textViewScroll -= contentHeight / 2
+			} else {
+				m.textViewScroll = 0
+			}
+			m.logAutoScroll = false
+		}
+		return m, nil
+
+	case "enter": // Story 12.2 AC3: Execute search
+		if m.searchMode && m.searchInput != "" {
+			m.searchQuery = m.searchInput
+			m.searchMatches = m.findMatches(m.searchQuery)
+			m.searchIndex = 0
+			m.searchMode = false // Exit input mode so n/N can navigate
+			if len(m.searchMatches) > 0 {
+				// Jump to first match
+				m.textViewScroll = m.searchMatches[0]
+				if m.textViewScroll > contentHeight/2 {
+					m.textViewScroll -= contentHeight / 2
+				} else {
+					m.textViewScroll = 0
+				}
+			} else {
+				// Story 12.2 AC3: Show "Pattern not found" flash message
+				return m, func() tea.Msg {
+					return flashMsg{text: "Pattern not found"}
+				}
+			}
+			m.logAutoScroll = false
+		}
+		return m, nil
+
+	case "backspace": // Story 12.2 AC3: Delete character in search input
+		if m.searchMode && len(m.searchInput) > 0 {
+			m.searchInput = m.searchInput[:len(m.searchInput)-1]
+		}
+		return m, nil
+	}
+
+	// Story 12.2 AC3: Handle typing in search mode
+	if m.searchMode {
+		// Accept printable characters
+		if msg.Type == tea.KeyRunes {
+			m.searchInput += string(msg.Runes)
+			return m, nil
+		}
 	}
 
 	return m, nil
+}
+
+// findMatches returns line numbers containing the search query (case-insensitive).
+func (m Model) findMatches(query string) []int {
+	if query == "" {
+		return nil
+	}
+	lowerQuery := strings.ToLower(query)
+	var matches []int
+	for i, line := range m.textViewContent {
+		if strings.Contains(strings.ToLower(line), lowerQuery) {
+			matches = append(matches, i)
+		}
+	}
+	return matches
+}
+
+// Story 12.2 AC4: ANSI-aware string utilities for proper truncation
+
+// stripANSI removes ANSI escape sequences from a string.
+// Used for calculating visual width without color codes.
+func stripANSI(s string) string {
+	return ansi.Strip(s)
+}
+
+// visibleWidth returns the display width of a string excluding ANSI codes.
+// Uses runewidth to handle wide characters (CJK, etc.) correctly.
+func visibleWidth(s string) int {
+	return runewidth.StringWidth(stripANSI(s))
+}
+
+// truncateToWidth truncates a string to fit within the given visual width,
+// preserving ANSI escape sequences and adding "..." suffix.
+// This ensures colored output is truncated correctly without breaking colors.
+func truncateToWidth(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if visibleWidth(s) <= width {
+		return s
+	}
+
+	// We need to truncate while preserving ANSI sequences
+	// Track visual width as we iterate through the string
+	var result strings.Builder
+	visualWidth := 0
+	inEscapeSeq := false
+	escapeSeq := strings.Builder{}
+
+	for _, r := range s {
+		if inEscapeSeq {
+			escapeSeq.WriteRune(r)
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				// End of escape sequence
+				result.WriteString(escapeSeq.String())
+				escapeSeq.Reset()
+				inEscapeSeq = false
+			}
+			continue
+		}
+
+		if r == '\x1b' {
+			// Start of escape sequence
+			inEscapeSeq = true
+			escapeSeq.WriteRune(r)
+			continue
+		}
+
+		// Regular character - check width
+		charWidth := runewidth.RuneWidth(r)
+		if visualWidth+charWidth > width-3 { // -3 for "..."
+			result.WriteString("...")
+			// Append any pending ANSI reset to preserve terminal state
+			return result.String()
+		}
+		result.WriteRune(r)
+		visualWidth += charWidth
+	}
+
+	// If we're still in an escape sequence, flush it
+	if inEscapeSeq {
+		result.WriteString(escapeSeq.String())
+	}
+
+	return result.String()
 }
 
 // renderTextView renders the scrollable text view.
@@ -2764,11 +3097,20 @@ func (m Model) renderTextView() string {
 		endLine = len(m.textViewContent)
 	}
 
+	// Story 12.2 AC3: Highlight style for current match
+	highlightStyle := lipgloss.NewStyle().Reverse(true)
+
 	for i := startLine; i < endLine; i++ {
 		line := m.textViewContent[i]
-		// Truncate long lines to fit width
-		if len(line) > effectiveWidth {
-			line = line[:effectiveWidth-3] + "..."
+		// Story 12.2 AC4: Truncate using visual width (handles ANSI codes correctly)
+		if visibleWidth(line) > effectiveWidth {
+			line = truncateToWidth(line, effectiveWidth)
+		}
+		// Story 12.2 AC3: Highlight current match line
+		if len(m.searchMatches) > 0 && m.searchIndex < len(m.searchMatches) {
+			if i == m.searchMatches[m.searchIndex] {
+				line = highlightStyle.Render(line)
+			}
 		}
 		visibleLines = append(visibleLines, line)
 	}
@@ -2792,7 +3134,31 @@ func (m Model) renderTextView() string {
 		scrollPercent = 100
 	}
 
-	footerText := fmt.Sprintf(" [j/k] Scroll  [g/G] Top/Bottom  [Space/b] Page  [Esc] Exit  %d%% ", scrollPercent)
+	// Story 12.2 AC3: Show search footer when in search mode
+	var footerText string
+	if m.searchMode {
+		// Search mode footer with input and match counter
+		matchCounter := "0/0"
+		if len(m.searchMatches) > 0 {
+			matchCounter = fmt.Sprintf("%d/%d", m.searchIndex+1, len(m.searchMatches))
+		}
+		searchDisplay := m.searchInput
+		// Truncate query if too long
+		maxQueryLen := effectiveWidth - 40 // Reserve space for controls
+		if maxQueryLen < 10 {
+			maxQueryLen = 10
+		}
+		if len(searchDisplay) > maxQueryLen {
+			searchDisplay = searchDisplay[:maxQueryLen-3] + "..."
+		}
+		footerText = fmt.Sprintf(" /%s_  [n/N] Next/Prev  %s  %d%%", searchDisplay, matchCounter, scrollPercent)
+	} else if len(m.searchMatches) > 0 {
+		// Have search results but not in input mode
+		matchCounter := fmt.Sprintf("%d/%d", m.searchIndex+1, len(m.searchMatches))
+		footerText = fmt.Sprintf(" [/] Search  [n/N] %s  [Esc] Clear  %d%%", matchCounter, scrollPercent)
+	} else {
+		footerText = fmt.Sprintf(" [j/k] Scroll  [gg/G] Top/Bottom  [/] Search  [Esc] Exit  %d%% ", scrollPercent)
+	}
 	footer := lipgloss.NewStyle().
 		Background(lipgloss.Color("236")).
 		Foreground(lipgloss.Color("244")).

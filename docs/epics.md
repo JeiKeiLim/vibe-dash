@@ -3591,9 +3591,59 @@ This creates a synergy between Epic 4 (Agent Waiting) and Epic 12 (Log Viewing).
 
 ---
 
-**Epic 12 Complete**
+### Story 12.2: Log Viewer Polish
 
-**Stories Created:** 1 (MVP scope)
+**As a** developer using the log viewer,
+**I want** improved keyboard navigation and visual feedback,
+**So that** I can efficiently navigate, search, and read logs with familiar vim-style controls.
+
+**Acceptance Criteria:**
+
+```gherkin
+Scenario: 'L' key opens session selector (bug fix)
+  Given I am viewing the project list
+  When I press 'L'
+  Then the session picker overlay appears
+  And help overlay shows 'L' as shortcut
+
+Scenario: Half-page navigation with Ctrl+U/D
+  Given I am in log viewer mode
+  When I press Ctrl+D or Ctrl+U
+  Then the view scrolls half a page down/up
+
+Scenario: Double 'g' jumps to top (vim-standard)
+  Given I am in log viewer mode
+  When I press 'g' twice within 500ms
+  Then the view jumps to the first line
+
+Scenario: Search mode with '/'
+  Given I am in log viewer mode
+  When I press '/'
+  Then search input appears
+  And 'n'/'N' navigate matches
+  And match counter shows (e.g., "3/15")
+
+Scenario: ANSI colors preserved
+  Given cclv outputs ANSI color codes
+  When I view the log
+  Then colors are rendered correctly
+  And long lines truncate without breaking colors
+```
+
+**Technical Notes:**
+- 'L' key missing from keys.go - add and wire to session picker
+- Implement gg detection with timer state (500ms threshold)
+- Search: ~100-150 lines (state, UI, matching)
+- ANSI: Add go-runewidth dependency for visual width calculation
+- Files: keys.go, model.go, views.go
+
+**Prerequisites:** Story 12.1 (Claude Code Log Viewer)
+
+---
+
+**Epic 12 In Progress**
+
+**Stories Created:** 2
 **FR Impact:** New functionality - complements FR34-38 (Agent Monitoring)
 **Technical Context:** LogReader adapter pattern, JSONL parsing, TUI view mode
 **Extensibility:** Pattern enables future Cursor/Aider/Windsurf adapters + enhanced waiting detection
