@@ -24,8 +24,8 @@
 # - Dev moves story to 'review', dev reviews, then Dev moves to 'done'
 
 generated: 2025-12-12
-updated: 2026-01-03
-updated_by: SM Bob - Epic 11 retrospective completed
+updated: 2026-01-16
+updated_by: PM John - Phase 2 epics 13-16 added (from epics-phase2.md)
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -313,6 +313,61 @@ development_status:
   # Pattern: LogReader adapter follows MethodDetector pattern for extensibility
   # 2026-01-12: Story 12-1 complete - Claude Code log viewer implemented
   # 2026-01-14: Story 12-2 created - Log viewer polish (L key, vim nav, search, ANSI)
-  epic-12: in-progress
+  epic-12: done
   12-1-claude-code-log-viewer: done
-  12-2-log-viewer-polish: review
+  12-2-log-viewer-polish: done
+
+  # ═══════════════════════════════════════════════════════════
+  # PHASE 2 - Active Collaboration Partner
+  # Focus: "Where am I?" → "What needs me now?"
+  # Created: 2026-01-16 from prd-phase2.md and epics-phase2.md
+  # ═══════════════════════════════════════════════════════════
+
+  # Epic 13: Dynamic Binary Name Polish - PHASE 2 (Quick Win)
+  # FR Coverage: FR-P2-19, FR-P2-20
+  # Use os.Args[0] for dynamic binary name in errors and version output
+  epic-13: backlog
+  13-1-create-binary-name-resolution-utility: backlog
+  13-2-update-version-command-to-use-dynamic-name: backlog
+  13-3-update-error-messages-to-use-dynamic-name: backlog
+  epic-13-retrospective: optional
+
+  # Epic 14: Methodology Switching Detection - PHASE 2 (Bug Fix)
+  # FR Coverage: FR-P2-7, FR-P2-8, FR-P2-9, FR-P2-10, FR-P2-11
+  # Fix first-match-wins bug, implement most-recent-artifact-wins
+  epic-14: backlog
+  14-1-implement-detectwithcoexistence-registry-method: backlog
+  14-2-add-artifact-timestamp-to-detection-results: backlog
+  14-3-implement-most-recent-artifact-wins-selection: backlog
+  14-4-implement-coexistence-warning-for-tie-breaker: backlog
+  14-5-update-tui-to-display-methodology-coexistence: backlog
+  epic-14-retrospective: optional
+
+  # Epic 15: Sub-1-Minute Agent Detection - PHASE 2 (Core Feature, THE Killer Feature)
+  # FR Coverage: FR-P2-1, FR-P2-2, FR-P2-3, FR-P2-4, FR-P2-5, FR-P2-6
+  # Parse Claude Code JSONL logs for instant agent state detection
+  # Detection: stop_reason: "end_turn" → WAITING, "tool_use" → WORKING
+  # 2026-01-16: Story 15-1 drafted - Interface and types foundation
+  epic-15: in-progress
+  15-1-define-agentactivitydetector-interface-and-types: done
+  15-2-implement-claude-code-project-path-matcher: backlog
+  15-3-implement-claude-code-jsonl-log-parser: backlog
+  15-4-implement-agent-state-detection-logic: backlog
+  15-5-implement-generic-file-activity-fallback-detector: backlog
+  15-6-integrate-agent-detection-into-tui-dashboard: backlog
+  15-7-display-confidence-level-in-detail-panel: backlog
+  epic-15-retrospective: optional
+
+  # Epic 16: Progress Metrics & Stats View - PHASE 2 (Experimental, Should Ship)
+  # FR Coverage: FR-P2-12, FR-P2-13, FR-P2-14, FR-P2-15, FR-P2-16, FR-P2-17, FR-P2-18
+  # Separate database (metrics.db), cleanly removable if unproven
+  # Isolation Principle: Won't break core if removed
+  epic-16: backlog
+  16-1-create-metrics-database-schema-and-adapter: backlog
+  16-2-implement-stage-transition-event-recording: backlog
+  16-3-create-stats-view-tui-component: backlog
+  16-4-implement-activity-sparklines: backlog
+  16-5-implement-time-per-stage-breakdown: backlog
+  16-6-add-date-range-selector: backlog
+  16-7-wire-stats-view-into-dashboard: backlog
+  epic-16-retrospective: optional

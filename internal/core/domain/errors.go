@@ -14,4 +14,5 @@ var (
 	ErrCollisionUnresolvable   = errors.New("directory name collision unresolvable after max depth")
 	ErrInvalidStateTransition  = errors.New("invalid state transition")
 	ErrFavoriteCannotHibernate = errors.New("favorite projects cannot be hibernated")
+	ErrInvalidAgentStatus      = errors.New("invalid agent status")
 )

@@ -229,6 +229,74 @@ This section:
 
 ---
 
+## Phase 2 Additions
+
+### Agent Detection Interface
+
+**New Port:**
+- Location: `internal/core/ports/agent_activity_detector.go`
+- Interface: `AgentActivityDetector` with `Detect(ctx, projectPath) (AgentState, error)`
+
+**New Adapters:**
+- `internal/adapters/agentdetectors/claude_code.go` - JSONL log parsing (high confidence)
+- `internal/adapters/agentdetectors/generic.go` - File activity fallback (10-min threshold)
+
+**Detection Logic:**
+```
+assistant + stop_reason: "end_turn"  → WAITING FOR USER
+assistant + stop_reason: "tool_use"  → WORKING
+```
+
+**Log Location:** `~/.claude/projects/{project-hash}/*.jsonl`
+
+### Methodology Coexistence
+
+**Registry Enhancement:**
+- New method: `DetectWithCoexistence(ctx, path) ([]*DetectionResult, error)`
+- Runs ALL detectors (not first-match-wins)
+- Compares artifact timestamps
+- Returns single result if >1 hour difference, otherwise returns all with warning
+
+**Timestamp Sources:**
+- Speckit: mtime of most recent spec folder
+- BMAD: mtime of `sprint-status.yaml`, `config.yaml`, or `implementation-artifacts/`
+
+### Progress Metrics (Experimental - Tier 2)
+
+**Isolation Principle:** Metrics feature is cleanly removable if unproven.
+
+**Separate Database:** `~/.vibe-dash/metrics.db` (not in `state.db`)
+
+**New Packages:**
+- `internal/adapters/metrics/` - Event collection
+- `internal/adapters/persistence/metrics/` - metrics.db access
+- `internal/adapters/tui/statsview/` - Dedicated TUI view
+
+**Schema Addition:**
+```sql
+CREATE TABLE stage_transitions (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    from_stage TEXT NOT NULL,
+    to_stage TEXT NOT NULL,
+    transitioned_at TEXT NOT NULL,
+    FOREIGN KEY(project_id) REFERENCES projects(id)
+);
+```
+
+**TUI Entry:** `'s'` key from Dashboard → Stats View → `Esc`/`'q'` back
+
+### Phase 2 NFRs
+
+| Requirement | Target |
+|-------------|--------|
+| Agent detection latency | < 1 second |
+| Claude Code log parsing | Tail-optimized (last N entries) |
+| Stats View render | < 500ms for 1 year of data |
+| Metrics DB growth | < 20MB/year |
+
+---
+
 ## Post-MVP References
 
 ### BMAD Progress Dashboard
