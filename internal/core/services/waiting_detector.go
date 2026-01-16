@@ -67,3 +67,19 @@ func (d *WaitingDetector) WaitingDuration(ctx context.Context, project *domain.P
 	}
 	return d.now().Sub(project.LastActivityAt)
 }
+
+// AgentState returns the full agent detection state.
+// Story 15.7: This legacy service uses file-activity based detection,
+// so it returns ConfidenceUncertain. Used for interface compliance.
+func (d *WaitingDetector) AgentState(ctx context.Context, project *domain.Project) domain.AgentState {
+	if project == nil || project.State == domain.StateHibernated {
+		return domain.NewAgentState("", domain.AgentUnknown, 0, domain.ConfidenceUncertain)
+	}
+
+	if d.IsWaiting(ctx, project) {
+		duration := d.now().Sub(project.LastActivityAt)
+		return domain.NewAgentState("Generic", domain.AgentWaitingForUser, duration, domain.ConfidenceUncertain)
+	}
+
+	return domain.NewAgentState("Generic", domain.AgentUnknown, 0, domain.ConfidenceUncertain)
+}

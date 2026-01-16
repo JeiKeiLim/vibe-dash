@@ -17,4 +17,8 @@ type WaitingDetector interface {
 	// WaitingDuration returns how long the project has been waiting.
 	// Returns 0 if project is not waiting.
 	WaitingDuration(ctx context.Context, project *domain.Project) time.Duration
+
+	// AgentState returns the full agent detection state including confidence and tool.
+	// Story 15.7: Enables detail panel to display confidence level.
+	AgentState(ctx context.Context, project *domain.Project) domain.AgentState
 }

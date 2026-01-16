@@ -973,8 +973,10 @@ func TestModel_Update_TickMsg_DoesNotAffectRefreshing(t *testing.T) {
 type mockWaitingDetector struct {
 	isWaitingFunc      func(p *domain.Project) bool
 	durationFunc       func(p *domain.Project) time.Duration
+	agentStateFunc     func(p *domain.Project) domain.AgentState // Story 15.7
 	isWaitingCalls     int
 	waitingDurCalls    int
+	agentStateCalls    int // Story 15.7
 	lastCheckedProject *domain.Project
 }
 
@@ -993,6 +995,16 @@ func (m *mockWaitingDetector) WaitingDuration(ctx context.Context, p *domain.Pro
 		return m.durationFunc(p)
 	}
 	return 0
+}
+
+// AgentState implements ports.WaitingDetector.
+// Story 15.7: Required for interface compliance.
+func (m *mockWaitingDetector) AgentState(ctx context.Context, p *domain.Project) domain.AgentState {
+	m.agentStateCalls++
+	if m.agentStateFunc != nil {
+		return m.agentStateFunc(p)
+	}
+	return domain.AgentState{}
 }
 
 func TestModel_SetWaitingDetector(t *testing.T) {
@@ -1083,6 +1095,53 @@ func TestModel_GetWaitingDuration_WithDetector(t *testing.T) {
 	}
 	if mock.waitingDurCalls != 1 {
 		t.Errorf("expected 1 WaitingDuration call, got %d", mock.waitingDurCalls)
+	}
+}
+
+// Story 15.7: Test getAgentState helper method
+func TestModel_GetAgentState_WithNilDetector(t *testing.T) {
+	m := NewModel(nil)
+	// No detector set
+
+	project := &domain.Project{ID: "test", Name: "test"}
+	result := m.getAgentState(project)
+
+	// Should return empty state when detector is nil
+	if result.Status != domain.AgentUnknown {
+		t.Errorf("getAgentState should return AgentUnknown when detector is nil, got %v", result.Status)
+	}
+	if result.Tool != "" {
+		t.Errorf("getAgentState should return empty Tool when detector is nil, got %q", result.Tool)
+	}
+}
+
+// Story 15.7: Test getAgentState with detector returning state
+func TestModel_GetAgentState_WithDetector(t *testing.T) {
+	m := NewModel(nil)
+	mock := &mockWaitingDetector{
+		agentStateFunc: func(p *domain.Project) domain.AgentState {
+			if p.ID == "waiting-project" {
+				return domain.NewAgentState("Claude Code", domain.AgentWaitingForUser, 2*time.Hour, domain.ConfidenceCertain)
+			}
+			return domain.AgentState{}
+		},
+	}
+	m.SetWaitingDetector(mock)
+
+	project := &domain.Project{ID: "waiting-project", Name: "waiting"}
+	result := m.getAgentState(project)
+
+	if result.Status != domain.AgentWaitingForUser {
+		t.Errorf("getAgentState should return WaitingForUser, got %v", result.Status)
+	}
+	if result.Tool != "Claude Code" {
+		t.Errorf("getAgentState should return 'Claude Code' tool, got %q", result.Tool)
+	}
+	if result.Confidence != domain.ConfidenceCertain {
+		t.Errorf("getAgentState should return ConfidenceCertain, got %v", result.Confidence)
+	}
+	if mock.agentStateCalls != 1 {
+		t.Errorf("expected 1 AgentState call, got %d", mock.agentStateCalls)
 	}
 }
 

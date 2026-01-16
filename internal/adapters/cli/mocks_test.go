@@ -49,6 +49,7 @@ func ClearMockDirectoryManager() {
 type MockWaitingDetector struct {
 	isWaiting       bool
 	waitingDuration time.Duration
+	agentState      domain.AgentState // Story 15.7: Configurable agent state
 }
 
 func (m *MockWaitingDetector) IsWaiting(_ context.Context, _ *domain.Project) bool {
@@ -57,4 +58,10 @@ func (m *MockWaitingDetector) IsWaiting(_ context.Context, _ *domain.Project) bo
 
 func (m *MockWaitingDetector) WaitingDuration(_ context.Context, _ *domain.Project) time.Duration {
 	return m.waitingDuration
+}
+
+// AgentState implements ports.WaitingDetector.
+// Story 15.7: Returns configurable agent state for testing.
+func (m *MockWaitingDetector) AgentState(_ context.Context, _ *domain.Project) domain.AgentState {
+	return m.agentState
 }

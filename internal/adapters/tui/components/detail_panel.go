@@ -18,13 +18,14 @@ const labelWidth = 12
 
 // DetailPanelModel displays detailed information about a selected project.
 type DetailPanelModel struct {
-	project        *domain.Project
-	width          int
-	height         int
-	visible        bool
-	waitingChecker WaitingChecker        // nil = no waiting display (Story 4.5)
-	durationGetter WaitingDurationGetter // nil = no duration display (Story 4.5)
-	isHorizontal   bool                  // Story 8.12: Use horizontal border style when true
+	project          *domain.Project
+	width            int
+	height           int
+	visible          bool
+	waitingChecker   WaitingChecker        // nil = no waiting display (Story 4.5)
+	durationGetter   WaitingDurationGetter // nil = no duration display (Story 4.5)
+	isHorizontal     bool                  // Story 8.12: Use horizontal border style when true
+	agentStateGetter AgentStateGetter      // Story 15.7: Full agent state for confidence display
 }
 
 // NewDetailPanelModel creates a new DetailPanelModel with the given dimensions.
@@ -42,6 +43,12 @@ func NewDetailPanelModel(width, height int) DetailPanelModel {
 func (m *DetailPanelModel) SetWaitingCallbacks(checker WaitingChecker, getter WaitingDurationGetter) {
 	m.waitingChecker = checker
 	m.durationGetter = getter
+}
+
+// SetAgentStateCallback sets the agent state retrieval callback.
+// Story 15.7: Enables confidence level display in detail panel.
+func (m *DetailPanelModel) SetAgentStateCallback(getter AgentStateGetter) {
+	m.agentStateGetter = getter
 }
 
 // SetProject updates the displayed project.
@@ -173,8 +180,15 @@ func (m DetailPanelModel) renderProject() string {
 	lastActive := timeformat.FormatRelativeTime(p.LastActivityAt)
 	lines = append(lines, formatField("Last Active", lastActive))
 
-	// Waiting status (Story 4.5, Story 8.9: emoji fallback) - only shown when project is waiting
-	if m.waitingChecker != nil && m.waitingChecker(p) {
+	// Waiting status with confidence (Story 15.7)
+	if m.agentStateGetter != nil {
+		state := m.agentStateGetter(p)
+		if state.IsWaiting() {
+			styledWaiting := formatAgentStatusWithConfidence(state)
+			lines = append(lines, formatField("Waiting", styledWaiting))
+		}
+	} else if m.waitingChecker != nil && m.waitingChecker(p) {
+		// Fallback: existing behavior without confidence (backward compatibility)
 		duration := time.Duration(0)
 		if m.durationGetter != nil {
 			duration = m.durationGetter(p)
@@ -208,4 +222,50 @@ func formatField(label, value string) string {
 		Width(labelWidth).
 		Render(label + ":")
 	return paddedLabel + " " + value
+}
+
+// confidenceToText converts Confidence enum to display text.
+// Story 15.7: ConfidenceLikely included for future extensibility.
+func confidenceToText(c domain.Confidence) string {
+	switch c {
+	case domain.ConfidenceCertain:
+		return "High confidence"
+	case domain.ConfidenceLikely:
+		return "Medium confidence" // Future extensibility
+	default:
+		return "Low confidence"
+	}
+}
+
+// toolToSourceText converts detector tool name to user-friendly source text.
+// Story 15.7: Maps tool names to human-readable detection source.
+func toolToSourceText(tool string) string {
+	switch tool {
+	case "Claude Code":
+		return "Claude Code logs"
+	case "Generic":
+		return "file activity"
+	default:
+		return tool
+	}
+}
+
+// formatAgentStatusWithConfidence formats agent status with confidence info.
+// Story 15.7: Only called when state.IsWaiting() is true.
+func formatAgentStatusWithConfidence(state domain.AgentState) string {
+	durationText := timeformat.FormatWaitingDuration(state.Duration, true)
+	confidenceText := confidenceToText(state.Confidence)
+	sourceText := toolToSourceText(state.Tool)
+
+	// Format: "⏸️ Xh Ym (High confidence - Claude Code logs)"
+	statusPart := fmt.Sprintf("%s %s", emoji.Waiting(), durationText)
+	confPart := fmt.Sprintf("(%s - %s)", confidenceText, sourceText)
+
+	// Apply dim styling for uncertain confidence
+	if state.Confidence == domain.ConfidenceUncertain {
+		confPart = styles.DimStyle.Render(confPart)
+	}
+
+	styledStatus := styles.WaitingStyle.Render(statusPart)
+	return fmt.Sprintf("%s %s", styledStatus, confPart)
 }

@@ -56,6 +56,11 @@ type WaitingChecker func(p *domain.Project) bool
 // Used by components to get waiting duration without importing ports.
 type WaitingDurationGetter func(p *domain.Project) time.Duration
 
+// AgentStateGetter returns the full agent detection state for a project.
+// Story 15.7: Used by detail panel to display confidence level and detection source.
+// Note: Does not take context parameter - caller captures context via closure.
+type AgentStateGetter func(p *domain.Project) domain.AgentState
+
 // ProjectItemDelegate is a custom delegate for rendering project rows.
 type ProjectItemDelegate struct {
 	width          int

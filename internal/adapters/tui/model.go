@@ -455,6 +455,16 @@ func (m Model) getWaitingDuration(p *domain.Project) time.Duration {
 	return m.waitingDetector.WaitingDuration(context.Background(), p)
 }
 
+// getAgentState wraps WaitingDetector.AgentState for component callbacks.
+// Uses context.Background() since Bubble Tea Render() doesn't provide ctx.
+// Story 15.7: Returns empty state if detector is nil.
+func (m Model) getAgentState(p *domain.Project) domain.AgentState {
+	if m.waitingDetector == nil {
+		return domain.AgentState{}
+	}
+	return m.waitingDetector.AgentState(context.Background(), p)
+}
+
 // shouldShowDetailPanelByDefault returns true if detail panel should be open by default
 // based on terminal height. Per AC7: >= HeightThresholdTall (35) rows = open, otherwise closed.
 func shouldShowDetailPanelByDefault(height int) bool {
@@ -875,6 +885,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.detailPanel.SetProject(m.projectList.SelectedProject())
 				m.detailPanel.SetVisible(m.showDetailPanel)
 				m.detailPanel.SetWaitingCallbacks(m.isProjectWaiting, m.getWaitingDuration)
+				m.detailPanel.SetAgentStateCallback(m.getAgentState) // Story 15.7
 
 				// Update status bar counts
 				active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)
@@ -1023,6 +1034,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Story 4.5: Wire waiting callbacks to detail panel
 			m.detailPanel.SetWaitingCallbacks(m.isProjectWaiting, m.getWaitingDuration)
+			m.detailPanel.SetAgentStateCallback(m.getAgentState) // Story 15.7
 
 			// Update status bar counts (Story 3.4, 4.5)
 			active, hibernated, waiting := components.CalculateCountsWithWaiting(m.projects, m.isProjectWaiting)

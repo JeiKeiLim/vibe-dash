@@ -373,3 +373,301 @@ func TestDetailPanel_SetHorizontalMode(t *testing.T) {
 		t.Error("panel should be in vertical mode after SetHorizontalMode(false)")
 	}
 }
+
+// ============================================================================
+// Story 15.7: Confidence Level Tests
+// ============================================================================
+
+func TestConfidenceToText(t *testing.T) {
+	tests := []struct {
+		name       string
+		confidence domain.Confidence
+		expected   string
+	}{
+		{"certain", domain.ConfidenceCertain, "High confidence"},
+		{"likely", domain.ConfidenceLikely, "Medium confidence"},
+		{"uncertain", domain.ConfidenceUncertain, "Low confidence"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := confidenceToText(tt.confidence)
+			if result != tt.expected {
+				t.Errorf("confidenceToText(%v) = %q, want %q", tt.confidence, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestToolToSourceText(t *testing.T) {
+	tests := []struct {
+		name     string
+		tool     string
+		expected string
+	}{
+		{"claude code", "Claude Code", "Claude Code logs"},
+		{"generic", "Generic", "file activity"},
+		{"unknown tool", "SomeOtherTool", "SomeOtherTool"},
+		{"empty tool", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := toolToSourceText(tt.tool)
+			if result != tt.expected {
+				t.Errorf("toolToSourceText(%q) = %q, want %q", tt.tool, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatAgentStatusWithConfidence(t *testing.T) {
+	tests := []struct {
+		name             string
+		state            domain.AgentState
+		expectedContains []string
+	}{
+		{
+			name: "high confidence claude code",
+			state: domain.NewAgentState("Claude Code", domain.AgentWaitingForUser,
+				2*time.Hour+15*time.Minute, domain.ConfidenceCertain),
+			expectedContains: []string{"2h 15m", "High confidence", "Claude Code logs"},
+		},
+		{
+			name: "low confidence generic",
+			state: domain.NewAgentState("Generic", domain.AgentWaitingForUser,
+				30*time.Minute, domain.ConfidenceUncertain),
+			expectedContains: []string{"30m", "Low confidence", "file activity"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatAgentStatusWithConfidence(tt.state)
+			for _, expected := range tt.expectedContains {
+				if !strings.Contains(result, expected) {
+					t.Errorf("formatAgentStatusWithConfidence result should contain %q, got:\n%s", expected, result)
+				}
+			}
+		})
+	}
+}
+
+func TestDetailPanel_View_AgentStateGetter_HighConfidence(t *testing.T) {
+	project := &domain.Project{
+		ID:             "abc123",
+		Name:           "claude-project",
+		Path:           "/home/user/test",
+		DetectedMethod: "speckit",
+		CurrentStage:   domain.StageImplement,
+		CreatedAt:      time.Now(),
+		LastActivityAt: time.Now().Add(-2 * time.Hour),
+	}
+
+	// Create agent state getter that returns waiting with high confidence
+	agentStateGetter := func(p *domain.Project) domain.AgentState {
+		return domain.NewAgentState("Claude Code", domain.AgentWaitingForUser,
+			2*time.Hour+15*time.Minute, domain.ConfidenceCertain)
+	}
+
+	panel := NewDetailPanelModel(80, 20)
+	panel.SetProject(project)
+	panel.SetAgentStateCallback(agentStateGetter)
+	panel.SetVisible(true)
+
+	view := panel.View()
+
+	// Should contain waiting status with confidence info
+	if !strings.Contains(view, "Waiting") {
+		t.Errorf("view should contain 'Waiting' field, got:\n%s", view)
+	}
+	if !strings.Contains(view, "High confidence") {
+		t.Errorf("view should contain 'High confidence', got:\n%s", view)
+	}
+	if !strings.Contains(view, "Claude Code logs") {
+		t.Errorf("view should contain 'Claude Code logs', got:\n%s", view)
+	}
+}
+
+func TestDetailPanel_View_AgentStateGetter_LowConfidence(t *testing.T) {
+	project := &domain.Project{
+		ID:             "abc123",
+		Name:           "generic-project",
+		Path:           "/home/user/test",
+		DetectedMethod: "speckit",
+		CurrentStage:   domain.StageImplement,
+		CreatedAt:      time.Now(),
+		LastActivityAt: time.Now().Add(-30 * time.Minute),
+	}
+
+	// Create agent state getter that returns waiting with low confidence
+	agentStateGetter := func(p *domain.Project) domain.AgentState {
+		return domain.NewAgentState("Generic", domain.AgentWaitingForUser,
+			30*time.Minute, domain.ConfidenceUncertain)
+	}
+
+	panel := NewDetailPanelModel(80, 20)
+	panel.SetProject(project)
+	panel.SetAgentStateCallback(agentStateGetter)
+	panel.SetVisible(true)
+
+	view := panel.View()
+
+	// Should contain waiting status with confidence info
+	if !strings.Contains(view, "Waiting") {
+		t.Errorf("view should contain 'Waiting' field, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Low confidence") {
+		t.Errorf("view should contain 'Low confidence', got:\n%s", view)
+	}
+	if !strings.Contains(view, "file activity") {
+		t.Errorf("view should contain 'file activity', got:\n%s", view)
+	}
+}
+
+func TestDetailPanel_View_AgentStateGetter_NotWaiting(t *testing.T) {
+	project := &domain.Project{
+		ID:             "abc123",
+		Name:           "working-project",
+		Path:           "/home/user/test",
+		DetectedMethod: "speckit",
+		CurrentStage:   domain.StageImplement,
+		CreatedAt:      time.Now(),
+		LastActivityAt: time.Now(),
+	}
+
+	// Create agent state getter that returns working (not waiting)
+	agentStateGetter := func(p *domain.Project) domain.AgentState {
+		return domain.NewAgentState("Claude Code", domain.AgentWorking,
+			5*time.Minute, domain.ConfidenceCertain)
+	}
+
+	panel := NewDetailPanelModel(80, 20)
+	panel.SetProject(project)
+	panel.SetAgentStateCallback(agentStateGetter)
+	panel.SetVisible(true)
+
+	view := panel.View()
+
+	// Should NOT contain Waiting field when agent is not waiting
+	if strings.Contains(view, "Waiting:") {
+		t.Errorf("view should NOT contain 'Waiting:' when agent is not waiting, got:\n%s", view)
+	}
+}
+
+// Story 15.7 AC6: AgentInactive should NOT display confidence in detail panel
+func TestDetailPanel_View_AgentStateGetter_Inactive(t *testing.T) {
+	project := &domain.Project{
+		ID:             "abc123",
+		Name:           "inactive-project",
+		Path:           "/home/user/test",
+		DetectedMethod: "speckit",
+		CurrentStage:   domain.StageImplement,
+		CreatedAt:      time.Now(),
+		LastActivityAt: time.Now().Add(-24 * time.Hour),
+	}
+
+	// Create agent state getter that returns Inactive
+	agentStateGetter := func(p *domain.Project) domain.AgentState {
+		return domain.NewAgentState("Generic", domain.AgentInactive,
+			24*time.Hour, domain.ConfidenceUncertain)
+	}
+
+	panel := NewDetailPanelModel(80, 20)
+	panel.SetProject(project)
+	panel.SetAgentStateCallback(agentStateGetter)
+	panel.SetVisible(true)
+
+	view := panel.View()
+
+	// Should NOT contain Waiting field when agent is inactive
+	if strings.Contains(view, "Waiting:") {
+		t.Errorf("view should NOT contain 'Waiting:' when agent is Inactive, got:\n%s", view)
+	}
+}
+
+// Story 15.7 AC6: AgentUnknown should NOT display confidence in detail panel
+func TestDetailPanel_View_AgentStateGetter_Unknown(t *testing.T) {
+	project := &domain.Project{
+		ID:             "abc123",
+		Name:           "unknown-project",
+		Path:           "/home/user/test",
+		DetectedMethod: "speckit",
+		CurrentStage:   domain.StageImplement,
+		CreatedAt:      time.Now(),
+		LastActivityAt: time.Now(),
+	}
+
+	// Create agent state getter that returns Unknown
+	agentStateGetter := func(p *domain.Project) domain.AgentState {
+		return domain.NewAgentState("", domain.AgentUnknown,
+			0, domain.ConfidenceUncertain)
+	}
+
+	panel := NewDetailPanelModel(80, 20)
+	panel.SetProject(project)
+	panel.SetAgentStateCallback(agentStateGetter)
+	panel.SetVisible(true)
+
+	view := panel.View()
+
+	// Should NOT contain Waiting field when agent is unknown
+	if strings.Contains(view, "Waiting:") {
+		t.Errorf("view should NOT contain 'Waiting:' when agent is Unknown, got:\n%s", view)
+	}
+}
+
+func TestDetailPanel_View_AgentStateGetter_NilFallback(t *testing.T) {
+	project := &domain.Project{
+		ID:             "abc123",
+		Name:           "fallback-project",
+		Path:           "/home/user/test",
+		DetectedMethod: "speckit",
+		CurrentStage:   domain.StageImplement,
+		CreatedAt:      time.Now(),
+		LastActivityAt: time.Now().Add(-2 * time.Hour),
+	}
+
+	// Create panel with only waitingChecker (no agentStateGetter) - should use fallback
+	checker := func(p *domain.Project) bool { return true }
+	getter := func(p *domain.Project) time.Duration { return 2*time.Hour + 15*time.Minute }
+
+	panel := NewDetailPanelModel(80, 20)
+	panel.SetProject(project)
+	panel.SetWaitingCallbacks(checker, getter) // Old API, no agentStateGetter
+	panel.SetVisible(true)
+
+	view := panel.View()
+
+	// Should contain waiting status but NO confidence info (fallback behavior)
+	if !strings.Contains(view, "Waiting") {
+		t.Errorf("view should contain 'Waiting' field with fallback, got:\n%s", view)
+	}
+	if !strings.Contains(view, "2h 15m") {
+		t.Errorf("view should contain duration '2h 15m' with fallback, got:\n%s", view)
+	}
+	// Should NOT contain confidence text (fallback doesn't show it)
+	if strings.Contains(view, "High confidence") || strings.Contains(view, "Low confidence") {
+		t.Errorf("fallback view should NOT contain confidence text, got:\n%s", view)
+	}
+}
+
+func TestDetailPanel_SetAgentStateCallback(t *testing.T) {
+	panel := NewDetailPanelModel(60, 20)
+
+	// Default should be nil
+	if panel.agentStateGetter != nil {
+		t.Error("panel should have nil agentStateGetter by default")
+	}
+
+	// Set callback
+	getter := func(p *domain.Project) domain.AgentState {
+		return domain.NewAgentState("Claude Code", domain.AgentWaitingForUser,
+			time.Hour, domain.ConfidenceCertain)
+	}
+	panel.SetAgentStateCallback(getter)
+
+	if panel.agentStateGetter == nil {
+		t.Error("panel should have agentStateGetter after SetAgentStateCallback")
+	}
+}

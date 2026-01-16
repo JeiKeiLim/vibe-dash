@@ -89,6 +89,15 @@ func (a *AgentWaitingAdapter) detectWithCache(ctx context.Context, projectPath s
 	return state
 }
 
+// AgentState returns the full agent detection state including confidence and tool.
+// Story 15.7: Enables detail panel to display confidence level.
+func (a *AgentWaitingAdapter) AgentState(ctx context.Context, project *domain.Project) domain.AgentState {
+	if project == nil || project.State == domain.StateHibernated {
+		return domain.NewAgentState("", domain.AgentUnknown, 0, domain.ConfidenceUncertain)
+	}
+	return a.detectWithCache(ctx, project.Path)
+}
+
 // ClearCache clears all cached entries (for testing).
 func (a *AgentWaitingAdapter) ClearCache() {
 	a.mu.Lock()

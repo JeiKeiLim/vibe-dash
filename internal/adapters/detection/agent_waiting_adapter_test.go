@@ -326,6 +326,91 @@ func TestAgentWaitingAdapter_ClearCache(t *testing.T) {
 	}
 }
 
+func TestAgentWaitingAdapter_AgentState(t *testing.T) {
+	tests := []struct {
+		name           string
+		project        *domain.Project
+		claudeState    domain.AgentState
+		wantStatus     domain.AgentStatus
+		wantTool       string
+		wantConfidence domain.Confidence
+	}{
+		{
+			name:           "nil project returns empty state",
+			project:        nil,
+			wantStatus:     domain.AgentUnknown,
+			wantTool:       "",
+			wantConfidence: domain.ConfidenceUncertain,
+		},
+		{
+			name: "hibernated project returns empty state",
+			project: &domain.Project{
+				Path:  "/test/path",
+				State: domain.StateHibernated,
+			},
+			claudeState: domain.NewAgentState("Claude Code", domain.AgentWaitingForUser,
+				2*time.Hour, domain.ConfidenceCertain),
+			wantStatus:     domain.AgentUnknown,
+			wantTool:       "",
+			wantConfidence: domain.ConfidenceUncertain,
+		},
+		{
+			name: "active project returns full state",
+			project: &domain.Project{
+				Path:  "/test/path",
+				State: domain.StateActive,
+			},
+			claudeState: domain.NewAgentState("Claude Code", domain.AgentWaitingForUser,
+				2*time.Hour, domain.ConfidenceCertain),
+			wantStatus:     domain.AgentWaitingForUser,
+			wantTool:       "Claude Code",
+			wantConfidence: domain.ConfidenceCertain,
+		},
+		{
+			name: "working state returns correct tool and confidence",
+			project: &domain.Project{
+				Path:  "/test/path",
+				State: domain.StateActive,
+			},
+			claudeState: domain.NewAgentState("Claude Code", domain.AgentWorking,
+				5*time.Minute, domain.ConfidenceCertain),
+			wantStatus:     domain.AgentWorking,
+			wantTool:       "Claude Code",
+			wantConfidence: domain.ConfidenceCertain,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			claudeMock := &mockDetector{
+				name:  "Claude Code",
+				state: tt.claudeState,
+			}
+			genericMock := &mockDetector{
+				name:  "Generic",
+				state: domain.NewAgentState("Generic", domain.AgentUnknown, 0, domain.ConfidenceUncertain),
+			}
+
+			svc := NewAgentDetectionService(
+				WithClaudeDetector(claudeMock),
+				WithGenericDetector(genericMock),
+			)
+			adapter := NewAgentWaitingAdapter(svc)
+
+			got := adapter.AgentState(context.Background(), tt.project)
+			if got.Status != tt.wantStatus {
+				t.Errorf("AgentState().Status = %v, want %v", got.Status, tt.wantStatus)
+			}
+			if got.Tool != tt.wantTool {
+				t.Errorf("AgentState().Tool = %v, want %v", got.Tool, tt.wantTool)
+			}
+			if got.Confidence != tt.wantConfidence {
+				t.Errorf("AgentState().Confidence = %v, want %v", got.Confidence, tt.wantConfidence)
+			}
+		})
+	}
+}
+
 func TestAgentWaitingAdapter_InterfaceCompliance(t *testing.T) {
 	svc := NewAgentDetectionService()
 	adapter := NewAgentWaitingAdapter(svc)
@@ -344,4 +429,7 @@ func TestAgentWaitingAdapter_InterfaceCompliance(t *testing.T) {
 
 	// WaitingDuration should not panic
 	_ = adapter.WaitingDuration(context.Background(), project)
+
+	// AgentState should not panic (Story 15.7)
+	_ = adapter.AgentState(context.Background(), project)
 }
