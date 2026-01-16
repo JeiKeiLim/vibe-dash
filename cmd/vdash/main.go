@@ -206,6 +206,9 @@ func run(ctx context.Context) error {
 	metricsRecorder := metrics.NewMetricsRecorder(metricsRepo)
 	cli.SetMetricsRecorder(metricsRecorder)
 
+	// Story 16.4: Wire metrics reader to TUI for stats view sparklines
+	cli.SetMetricsReader(metricsRepo)
+
 	// Flush pending metrics on shutdown (before coordinator.Close)
 	defer func() {
 		metricsRecorder.Flush(context.Background())

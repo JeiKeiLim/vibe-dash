@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestNewMetricsRepository(t *testing.T) {
@@ -309,5 +310,244 @@ func TestIndexes(t *testing.T) {
 	}
 	if !indexNames["idx_stage_transitions_time"] {
 		t.Error("expected idx_stage_transitions_time index to exist")
+	}
+}
+
+// Story 16.4: Tests for GetTransitionsByProject with time filter
+
+func TestGetTransitionsByProject_EmptyResult(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "metrics.db")
+	repo := NewMetricsRepository(dbPath)
+	ctx := context.Background()
+
+	// Record a transition to initialize the DB
+	_ = repo.RecordTransition(ctx, "other-proj", "plan", "tasks")
+
+	// Query a different project
+	since := time.Now().Add(-24 * time.Hour)
+	result := repo.GetTransitionsByProject(ctx, "nonexistent-proj", since)
+
+	if result == nil {
+		t.Error("expected empty slice, got nil")
+	}
+	if len(result) != 0 {
+		t.Errorf("expected 0 transitions, got %d", len(result))
+	}
+}
+
+func TestGetTransitionsByProject_WithTransitions(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "metrics.db")
+	repo := NewMetricsRepository(dbPath)
+	ctx := context.Background()
+
+	// Record multiple transitions for a project
+	_ = repo.RecordTransition(ctx, "proj-1", "", "plan")
+	_ = repo.RecordTransition(ctx, "proj-1", "plan", "tasks")
+	_ = repo.RecordTransition(ctx, "proj-1", "tasks", "code")
+	_ = repo.RecordTransition(ctx, "proj-2", "", "plan") // Different project
+
+	// Query proj-1 transitions
+	since := time.Now().Add(-24 * time.Hour)
+	result := repo.GetTransitionsByProject(ctx, "proj-1", since)
+
+	if len(result) != 3 {
+		t.Fatalf("expected 3 transitions for proj-1, got %d", len(result))
+	}
+
+	// Verify results are in chronological order (ASC)
+	for i, tr := range result {
+		if tr.ProjectID != "proj-1" {
+			t.Errorf("transition %d: expected project_id 'proj-1', got %q", i, tr.ProjectID)
+		}
+	}
+
+	// First transition should be ""->plan (earliest)
+	if result[0].FromStage != "" || result[0].ToStage != "plan" {
+		t.Errorf("first transition should be '' -> 'plan', got %q -> %q",
+			result[0].FromStage, result[0].ToStage)
+	}
+}
+
+func TestGetTransitionsByProject_TimeFilter(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "metrics.db")
+	repo := NewMetricsRepository(dbPath)
+	ctx := context.Background()
+
+	// Record a transition
+	_ = repo.RecordTransition(ctx, "proj-1", "plan", "tasks")
+
+	// Query with a future time - should find nothing
+	futureTime := time.Now().Add(1 * time.Hour)
+	result := repo.GetTransitionsByProject(ctx, "proj-1", futureTime)
+
+	if len(result) != 0 {
+		t.Errorf("expected 0 transitions with future since time, got %d", len(result))
+	}
+
+	// Query with past time - should find the transition
+	pastTime := time.Now().Add(-1 * time.Hour)
+	result = repo.GetTransitionsByProject(ctx, "proj-1", pastTime)
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 transition with past since time, got %d", len(result))
+	}
+}
+
+func TestGetTransitionsByProject_GracefulDegradation(t *testing.T) {
+	// Use invalid path to simulate failure
+	repo := NewMetricsRepository("/nonexistent/dir/metrics.db")
+	ctx := context.Background()
+
+	result := repo.GetTransitionsByProject(ctx, "proj-1", time.Now().Add(-24*time.Hour))
+
+	// Should return nil (graceful degradation)
+	if result != nil {
+		t.Errorf("expected nil (graceful degradation), got %v", result)
+	}
+}
+
+func TestGetTransitionsByTimeRange_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "metrics.db")
+	repo := NewMetricsRepository(dbPath)
+	ctx := context.Background()
+
+	// Record transitions
+	_ = repo.RecordTransition(ctx, "proj-1", "", "plan")
+	_ = repo.RecordTransition(ctx, "proj-2", "", "plan")
+	_ = repo.RecordTransition(ctx, "proj-3", "", "plan")
+
+	// Query all recent transitions
+	from := time.Now().Add(-1 * time.Hour)
+	to := time.Now().Add(1 * time.Hour)
+	result := repo.GetTransitionsByTimeRange(ctx, from, to)
+
+	if len(result) != 3 {
+		t.Errorf("expected 3 transitions, got %d", len(result))
+	}
+}
+
+func TestGetTransitionsByTimeRange_EmptyRange(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "metrics.db")
+	repo := NewMetricsRepository(dbPath)
+	ctx := context.Background()
+
+	// Record a transition
+	_ = repo.RecordTransition(ctx, "proj-1", "", "plan")
+
+	// Query with future range - should find nothing
+	from := time.Now().Add(1 * time.Hour)
+	to := time.Now().Add(2 * time.Hour)
+	result := repo.GetTransitionsByTimeRange(ctx, from, to)
+
+	if len(result) != 0 {
+		t.Errorf("expected 0 transitions in future range, got %d", len(result))
+	}
+}
+
+func TestGetTransitionsByTimeRange_GracefulDegradation(t *testing.T) {
+	repo := NewMetricsRepository("/nonexistent/dir/metrics.db")
+	ctx := context.Background()
+
+	from := time.Now().Add(-24 * time.Hour)
+	to := time.Now()
+	result := repo.GetTransitionsByTimeRange(ctx, from, to)
+
+	// Should return nil (graceful degradation)
+	if result != nil {
+		t.Errorf("expected nil (graceful degradation), got %v", result)
+	}
+}
+
+func TestRowToTransition(t *testing.T) {
+	row := &stageTransitionRow{
+		ID:             "test-uuid-123",
+		ProjectID:      "proj-1",
+		FromStage:      "plan",
+		ToStage:        "tasks",
+		TransitionedAt: "2026-01-16T10:30:00.123456789Z",
+	}
+
+	result := rowToTransition(row)
+
+	if result.ID != "test-uuid-123" {
+		t.Errorf("expected ID 'test-uuid-123', got %q", result.ID)
+	}
+	if result.ProjectID != "proj-1" {
+		t.Errorf("expected ProjectID 'proj-1', got %q", result.ProjectID)
+	}
+	if result.FromStage != "plan" {
+		t.Errorf("expected FromStage 'plan', got %q", result.FromStage)
+	}
+	if result.ToStage != "tasks" {
+		t.Errorf("expected ToStage 'tasks', got %q", result.ToStage)
+	}
+	if result.TransitionedAt.IsZero() {
+		t.Error("expected non-zero TransitionedAt")
+	}
+	if result.TransitionedAt.Year() != 2026 {
+		t.Errorf("expected year 2026, got %d", result.TransitionedAt.Year())
+	}
+}
+
+// Story 16.4: Tests for GetTransitionTimestamps (statsview.MetricsReader interface)
+
+func TestGetTransitionTimestamps_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "metrics.db")
+	repo := NewMetricsRepository(dbPath)
+	ctx := context.Background()
+
+	// Record multiple transitions
+	_ = repo.RecordTransition(ctx, "proj-1", "", "plan")
+	_ = repo.RecordTransition(ctx, "proj-1", "plan", "tasks")
+	_ = repo.RecordTransition(ctx, "proj-1", "tasks", "code")
+
+	// Query via the interface method
+	since := time.Now().Add(-1 * time.Hour)
+	result := repo.GetTransitionTimestamps(ctx, "proj-1", since)
+
+	if len(result) != 3 {
+		t.Fatalf("expected 3 transitions, got %d", len(result))
+	}
+
+	// Verify each result has a valid timestamp
+	for i, tr := range result {
+		if tr.TransitionedAt.IsZero() {
+			t.Errorf("transition %d: expected non-zero TransitionedAt", i)
+		}
+	}
+}
+
+func TestGetTransitionTimestamps_GracefulDegradation(t *testing.T) {
+	repo := NewMetricsRepository("/nonexistent/dir/metrics.db")
+	ctx := context.Background()
+
+	result := repo.GetTransitionTimestamps(ctx, "proj-1", time.Now().Add(-24*time.Hour))
+
+	// Should return empty slice (graceful degradation) - not nil
+	if len(result) != 0 {
+		t.Errorf("expected empty slice, got %d items", len(result))
+	}
+}
+
+func TestGetTransitionTimestamps_EmptyResult(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "metrics.db")
+	repo := NewMetricsRepository(dbPath)
+	ctx := context.Background()
+
+	// Initialize DB but don't record anything for this project
+	_ = repo.RecordTransition(ctx, "other-proj", "", "plan")
+
+	since := time.Now().Add(-1 * time.Hour)
+	result := repo.GetTransitionTimestamps(ctx, "nonexistent", since)
+
+	if len(result) != 0 {
+		t.Errorf("expected 0 transitions for nonexistent project, got %d", len(result))
 	}
 }

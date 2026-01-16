@@ -9,6 +9,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
+
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/statsview"
 )
 
 // walConnectionParams defines SQLite connection parameters for WAL mode and busy timeout.
@@ -100,4 +102,75 @@ func (r *MetricsRepository) RecordTransition(ctx context.Context, projectID, fro
 		return nil
 	}
 	return nil
+}
+
+// GetTransitionsByProject retrieves transitions for a project since the given time.
+// Returns empty slice on any error (graceful degradation).
+func (r *MetricsRepository) GetTransitionsByProject(ctx context.Context, projectID string, since time.Time) []StageTransition {
+	db, err := r.openDB(ctx)
+	if err != nil {
+		slog.Warn("metrics database unavailable", "error", err)
+		return nil
+	}
+	defer db.Close()
+
+	if err := r.ensureSchema(ctx, db); err != nil {
+		slog.Warn("metrics schema error", "error", err)
+		return nil
+	}
+
+	sinceStr := since.UTC().Format(time.RFC3339Nano)
+	var rows []stageTransitionRow
+	if err := db.SelectContext(ctx, &rows, selectByProjectWithTimeSQL, projectID, sinceStr); err != nil {
+		slog.Warn("failed to query transitions", "error", err, "project_id", projectID)
+		return nil
+	}
+
+	result := make([]StageTransition, len(rows))
+	for i, row := range rows {
+		result[i] = rowToTransition(&row)
+	}
+	return result
+}
+
+// GetTransitionsByTimeRange retrieves transitions within a time range.
+// Returns empty slice on any error (graceful degradation).
+func (r *MetricsRepository) GetTransitionsByTimeRange(ctx context.Context, from, to time.Time) []StageTransition {
+	db, err := r.openDB(ctx)
+	if err != nil {
+		slog.Warn("metrics database unavailable", "error", err)
+		return nil
+	}
+	defer db.Close()
+
+	if err := r.ensureSchema(ctx, db); err != nil {
+		slog.Warn("metrics schema error", "error", err)
+		return nil
+	}
+
+	fromStr := from.UTC().Format(time.RFC3339Nano)
+	toStr := to.UTC().Format(time.RFC3339Nano)
+	var rows []stageTransitionRow
+	if err := db.SelectContext(ctx, &rows, selectByTimeRangeSQL, fromStr, toStr); err != nil {
+		slog.Warn("failed to query transitions by time range", "error", err)
+		return nil
+	}
+
+	result := make([]StageTransition, len(rows))
+	for i, row := range rows {
+		result[i] = rowToTransition(&row)
+	}
+	return result
+}
+
+// GetTransitionTimestamps returns timestamps for TUI sparkline rendering.
+// Implements statsview.MetricsReader interface.
+// Avoids exposing internal types to TUI layer.
+func (r *MetricsRepository) GetTransitionTimestamps(ctx context.Context, projectID string, since time.Time) []statsview.Transition {
+	transitions := r.GetTransitionsByProject(ctx, projectID, since)
+	result := make([]statsview.Transition, len(transitions))
+	for i, t := range transitions {
+		result[i] = statsview.Transition{TransitionedAt: t.TransitionedAt}
+	}
+	return result
 }

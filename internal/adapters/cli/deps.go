@@ -47,6 +47,10 @@ var logReaderRegistry ports.LogReaderRegistry
 // Optional dependency - nil means metrics are disabled.
 var metricsRecorder *metrics.MetricsRecorder
 
+// metricsReader provides read access to metrics for stats view sparklines (Story 16.4).
+// Optional dependency - nil means sparklines show empty (graceful degradation).
+var metricsReader *metrics.MetricsRepository
+
 // SetDirectoryManager sets the directory manager for CLI commands.
 func SetDirectoryManager(dm ports.DirectoryManager) {
 	directoryManager = dm
@@ -115,4 +119,14 @@ func SetMetricsRecorder(recorder *metrics.MetricsRecorder) {
 // GetMetricsRecorder returns the metrics recorder (may be nil).
 func GetMetricsRecorder() *metrics.MetricsRecorder {
 	return metricsRecorder
+}
+
+// SetMetricsReader sets the metrics reader for stats view sparklines (Story 16.4).
+func SetMetricsReader(reader *metrics.MetricsRepository) {
+	metricsReader = reader
+}
+
+// GetMetricsReader returns the metrics reader (may be nil).
+func GetMetricsReader() *metrics.MetricsRepository {
+	return metricsReader
 }

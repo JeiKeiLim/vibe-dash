@@ -22,8 +22,9 @@ import (
 // The stateService parameter is optional - if nil, auto-activation is disabled (Story 11.3).
 // The logReaderRegistry parameter is optional - if nil, log viewing is disabled (Story 12.1).
 // The metricsRecorder parameter is optional - if nil, stage transition recording is disabled (Story 16.2).
-// Note: Config and metricsRecorder passed as parameters to avoid cli→tui→cli import cycle.
-func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detector, waitingDetector ports.WaitingDetector, fileWatcher ports.FileWatcher, detailLayout string, config *ports.Config, hibernationService ports.HibernationService, stateService ports.StateActivator, logReaderRegistry ports.LogReaderRegistry, metricsRecorder metricsRecorderInterface) error {
+// The metricsReader parameter is optional - if nil, sparklines show empty (Story 16.4).
+// Note: Config, metricsRecorder, and metricsReader passed as parameters to avoid cli→tui→cli import cycle.
+func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detector, waitingDetector ports.WaitingDetector, fileWatcher ports.FileWatcher, detailLayout string, config *ports.Config, hibernationService ports.HibernationService, stateService ports.StateActivator, logReaderRegistry ports.LogReaderRegistry, metricsRecorder metricsRecorderInterface, metricsReader metricsReaderInterface) error {
 	// Story 8.9: Initialize emoji fallback system BEFORE TUI renders
 	var useEmoji *bool
 	if config != nil {
@@ -62,6 +63,10 @@ func Run(ctx context.Context, repo ports.ProjectRepository, detector ports.Detec
 	// Story 16.2: Wire metrics recorder for stage transition tracking
 	if metricsRecorder != nil {
 		m.SetMetricsRecorder(metricsRecorder)
+	}
+	// Story 16.4: Wire metrics reader for stats view sparklines
+	if metricsReader != nil {
+		m.SetMetricsReader(metricsReader)
 	}
 
 	p := tea.NewProgram(

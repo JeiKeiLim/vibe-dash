@@ -20,6 +20,7 @@ import (
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/filesystem"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/components"
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/statsview"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
@@ -33,6 +34,12 @@ const ggTimeoutMs = 500
 // Used to decouple TUI from concrete metrics implementation for testability.
 type metricsRecorderInterface interface {
 	OnDetection(ctx context.Context, projectID string, newStage domain.Stage)
+}
+
+// metricsReaderInterface defines the contract for reading metrics data for sparklines (Story 16.4).
+// Used to decouple TUI from concrete metrics repository for testability.
+type metricsReaderInterface interface {
+	GetTransitionTimestamps(ctx context.Context, projectID string, since time.Time) []statsview.Transition
 }
 
 // Model represents the main TUI application state.
@@ -175,6 +182,9 @@ type Model struct {
 	// Story 16.3: Stats view state
 	statsViewScroll       int // Scroll position in stats view
 	statsActiveProjectIdx int // Saved dashboard selection for restoration
+
+	// Story 16.4: Metrics reader for stats view sparklines (optional, graceful nil)
+	metricsReader metricsReaderInterface
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -454,6 +464,12 @@ func (m *Model) SetMetricsRecorder(recorder metricsRecorderInterface) {
 	m.metricsRecorder = recorder
 }
 
+// SetMetricsReader sets the metrics reader for stats view sparklines (Story 16.4).
+// This is optional - if not set, sparklines show empty (graceful degradation).
+func (m *Model) SetMetricsReader(reader metricsReaderInterface) {
+	m.metricsReader = reader
+}
+
 // isProjectWaiting wraps WaitingDetector.IsWaiting for component callbacks.
 // Uses context.Background() since Bubble Tea Render() doesn't provide ctx.
 // Story 4.5: Returns false if detector is nil.
@@ -482,6 +498,29 @@ func (m Model) getAgentState(p *domain.Project) domain.AgentState {
 		return domain.AgentState{}
 	}
 	return m.waitingDetector.AgentState(context.Background(), p)
+}
+
+// getProjectActivity fetches activity counts for sparkline generation (Story 16.4).
+// Returns nil if metricsReader is not available (graceful degradation).
+// buckets: number of time buckets for the sparkline (typically 7-14).
+func (m Model) getProjectActivity(projectID string, buckets int) []int {
+	if m.metricsReader == nil {
+		return nil // Graceful degradation
+	}
+	// Get transitions for last 30 days
+	ctx := context.Background()
+	now := time.Now()
+	since := now.Add(-30 * 24 * time.Hour)
+	transitions := m.metricsReader.GetTransitionTimestamps(ctx, projectID, since)
+	if len(transitions) == 0 {
+		return nil
+	}
+	// Extract timestamps for bucketing
+	timestamps := make([]time.Time, len(transitions))
+	for i, t := range transitions {
+		timestamps[i] = t.TransitionedAt
+	}
+	return statsview.BucketActivityCounts(timestamps, buckets, 30*24*time.Hour, now)
 }
 
 // shouldShowDetailPanelByDefault returns true if detail panel should be open by default

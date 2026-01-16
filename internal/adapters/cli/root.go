@@ -36,10 +36,10 @@ Exit Codes:
 			return
 		}
 
-		// Pass detection service, waiting detector, file watcher, layout, config, hibernation service, state service, log reader registry, and metrics recorder to TUI
-		// (Story 3.6, 4.5, 4.6, 8.6, 8.7, 11.2, 11.3, 12.1, 16.2)
+		// Pass detection service, waiting detector, file watcher, layout, config, hibernation service, state service, log reader registry, metrics recorder, and metrics reader to TUI
+		// (Story 3.6, 4.5, 4.6, 8.6, 8.7, 11.2, 11.3, 12.1, 16.2, 16.4)
 		// Uses existing package variables from add.go and deps.go
-		if err := tui.Run(cmd.Context(), repository, detectionService, waitingDetector, fileWatcher, detailLayout, appConfig, hibernationService, stateService, logReaderRegistry, metricsRecorder); err != nil {
+		if err := tui.Run(cmd.Context(), repository, detectionService, waitingDetector, fileWatcher, detailLayout, appConfig, hibernationService, stateService, logReaderRegistry, metricsRecorder, metricsReader); err != nil {
 			slog.Error("TUI error", "error", err)
 		}
 	},
