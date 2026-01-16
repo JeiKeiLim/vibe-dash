@@ -355,7 +355,7 @@ development_status:
   15-4-implement-agent-state-detection-logic: done
   15-5-implement-generic-file-activity-fallback-detector: done
   15-6-integrate-agent-detection-into-tui-dashboard: done
-  15-7-display-confidence-level-in-detail-panel: review
+  15-7-display-confidence-level-in-detail-panel: done
   epic-15-retrospective: optional
 
   # Epic 16: Progress Metrics & Stats View - PHASE 2 (Experimental, Should Ship)
