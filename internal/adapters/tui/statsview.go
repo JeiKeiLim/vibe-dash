@@ -29,14 +29,14 @@ func (m Model) renderStatsProjectListView() string {
 		effectiveWidth = m.maxContentWidth
 	}
 
-	// Header: "STATS" title on left, "[ESC] Back to Dashboard" hint on right
+	// Header: "STATS" title on left, "[ ] Range  [ESC] Back" hint on right (Story 16.6)
 	title := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("99")).
 		Render("STATS")
 	hint := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
-		Render("[ESC] Back to Dashboard")
+		Render("[ ] Range  [ESC] Back")
 
 	// Calculate spacing between title and hint
 	titleWidth := lipgloss.Width(title)
@@ -119,9 +119,10 @@ func (m Model) renderStatsProjectList(width, height, buckets int) string {
 		nameWidth = 10
 	}
 
+	// Story 16.6: Use dynamic date range label from statsDateRange
 	headerLine := fmt.Sprintf("%-*s  %-*s  %s",
 		nameWidth, "Project",
-		sparklineWidth, "Activity (30d)",
+		sparklineWidth, m.statsDateRange.HeaderLabel(),
 		"Stage")
 	lines = append(lines, headerStyle.Render(headerLine))
 
@@ -252,7 +253,8 @@ func (m Model) renderStatsBreakdownView() string {
 	var contentLines []string
 	contentLines = append(contentLines, "")
 	contentLines = append(contentLines, projectStyle.Render("Project: ")+projectName)
-	contentLines = append(contentLines, dimStyle.Render("Period: Last 30 days"))
+	// Story 16.6: Use dynamic date range label from statsDateRange
+	contentLines = append(contentLines, dimStyle.Render("Period: "+m.statsDateRange.BreakdownLabel()))
 	contentLines = append(contentLines, "")
 	contentLines = append(contentLines, strings.Repeat("─", effectiveWidth))
 	contentLines = append(contentLines, "")

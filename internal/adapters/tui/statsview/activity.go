@@ -2,6 +2,29 @@ package statsview
 
 import "time"
 
+// CalculateTimeRangeFromTimestamps determines the time range from earliest timestamp to now.
+// Used for "All Time" date range where we don't have a fixed duration.
+// Returns minimum 1 day duration to avoid division by zero in bucket calculations.
+func CalculateTimeRangeFromTimestamps(timestamps []time.Time, now time.Time) time.Duration {
+	if len(timestamps) == 0 {
+		return 24 * time.Hour // Default to 1 day
+	}
+
+	// Find earliest timestamp
+	earliest := timestamps[0]
+	for _, ts := range timestamps[1:] {
+		if ts.Before(earliest) {
+			earliest = ts
+		}
+	}
+
+	timeRange := now.Sub(earliest)
+	if timeRange < 24*time.Hour {
+		return 24 * time.Hour // Minimum 1 day
+	}
+	return timeRange
+}
+
 // BucketActivityCounts calculates activity per time bucket.
 // timestamps: transition times (oldest first expected, but handles any order)
 // buckets: number of time buckets (e.g., 7 for weekly)

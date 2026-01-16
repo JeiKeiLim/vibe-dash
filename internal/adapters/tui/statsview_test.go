@@ -224,6 +224,7 @@ func TestStatsViewKeyBinding(t *testing.T) {
 }
 
 // TestRenderStatsView_Header verifies Stats View renders with correct header (AC3).
+// Story 16.6: Updated to verify [/] Range hint.
 func TestRenderStatsView_Header(t *testing.T) {
 	m := NewModel(nil)
 	m.ready = true
@@ -239,9 +240,12 @@ func TestRenderStatsView_Header(t *testing.T) {
 		t.Error("Stats View header should contain 'STATS' title")
 	}
 
-	// Verify back hint in header
-	if !strings.Contains(output, "[ESC] Back to Dashboard") {
-		t.Error("Stats View header should contain '[ESC] Back to Dashboard' hint")
+	// Verify back hint in header (Story 16.6: now includes range hint)
+	if !strings.Contains(output, "[ ] Range") {
+		t.Error("Stats View header should contain '[ ] Range' hint")
+	}
+	if !strings.Contains(output, "[ESC] Back") {
+		t.Error("Stats View header should contain '[ESC] Back' hint")
 	}
 }
 
@@ -852,5 +856,231 @@ func TestHandleStatsViewKeyMsg_EnterDoesNotWorkInBreakdown(t *testing.T) {
 	// Should still be showing the same breakdown project
 	if result.statsBreakdownProject != m.projects[0] {
 		t.Error("Enter should not change state when already in breakdown view")
+	}
+}
+
+// Story 16.6: Tests for Date Range Selector
+
+// TestEnterStatsView_InitializesDefaultDateRange verifies date range is set to default (30 days)
+// on Stats View entry (AC #4, AC #7).
+func TestEnterStatsView_InitializesDefaultDateRange(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.projectList = components.NewProjectListModel(nil, 100, 20)
+
+	// Set a non-default date range first
+	m.statsDateRange = statsview.DateRange{Preset: statsview.DateRange7Days}
+
+	// Enter stats view - should reset to default
+	m.enterStatsView()
+
+	if m.statsDateRange.Preset != statsview.DateRange30Days {
+		t.Errorf("Expected date range to be reset to DateRange30Days, got %v", m.statsDateRange.Preset)
+	}
+}
+
+// TestHandleStatsViewKeyMsg_BracketNextCycles verifies ] key cycles to next date range (AC #1).
+func TestHandleStatsViewKeyMsg_BracketNextCycles(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.viewMode = viewModeStats
+	m.statsBreakdownProject = nil // In project list view
+
+	// Start at default (30d)
+	m.statsDateRange = statsview.DefaultDateRange()
+
+	// Press ] - should cycle to 90d
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}}
+	result, _ := m.handleStatsViewKeyMsg(msg)
+
+	if result.statsDateRange.Preset != statsview.DateRange90Days {
+		t.Errorf("Expected DateRange90Days after ], got %v", result.statsDateRange.Preset)
+	}
+}
+
+// TestHandleStatsViewKeyMsg_BracketPrevCycles verifies [ key cycles to previous date range (AC #2).
+func TestHandleStatsViewKeyMsg_BracketPrevCycles(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.viewMode = viewModeStats
+	m.statsBreakdownProject = nil
+
+	// Start at 90d
+	m.statsDateRange = statsview.DateRange{Preset: statsview.DateRange90Days}
+
+	// Press [ - should cycle to 30d
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}}
+	result, _ := m.handleStatsViewKeyMsg(msg)
+
+	if result.statsDateRange.Preset != statsview.DateRange30Days {
+		t.Errorf("Expected DateRange30Days after [, got %v", result.statsDateRange.Preset)
+	}
+}
+
+// TestHandleStatsViewKeyMsg_DateRangeDisabledInBreakdown verifies date range cycling
+// is disabled in breakdown view (AC #1, #2 - only in project list view).
+func TestHandleStatsViewKeyMsg_DateRangeDisabledInBreakdown(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.viewMode = viewModeStats
+	m.statsDateRange = statsview.DefaultDateRange()
+
+	m.projects = []*domain.Project{
+		{ID: "p1", Name: "project-a", Path: "/path/a"},
+	}
+	m.statsBreakdownProject = m.projects[0] // In breakdown view
+
+	// Press ] - should NOT change date range
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}}
+	result, _ := m.handleStatsViewKeyMsg(msg)
+
+	if result.statsDateRange.Preset != statsview.DateRange30Days {
+		t.Errorf("Date range should not change in breakdown view, got %v", result.statsDateRange.Preset)
+	}
+}
+
+// TestRenderStatsView_DynamicHeaderLabel verifies column header shows current date range (AC #5).
+func TestRenderStatsView_DynamicHeaderLabel(t *testing.T) {
+	tests := []struct {
+		name     string
+		preset   statsview.DateRangePreset
+		expected string
+	}{
+		{"7 days", statsview.DateRange7Days, "Activity (7d)"},
+		{"30 days", statsview.DateRange30Days, "Activity (30d)"},
+		{"90 days", statsview.DateRange90Days, "Activity (90d)"},
+		{"1 year", statsview.DateRange1Year, "Activity (1y)"},
+		{"All time", statsview.DateRangeAllTime, "Activity (All)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel(nil)
+			m.ready = true
+			m.width = 100
+			m.height = 30
+			m.statusBar = components.NewStatusBarModel(100)
+			m.projects = []*domain.Project{
+				{ID: "p1", Name: "project-test", Path: "/path/test", CurrentStage: domain.StagePlan},
+			}
+			m.viewMode = viewModeStats
+			m.statsDateRange = statsview.DateRange{Preset: tt.preset}
+
+			output := m.renderStatsView()
+
+			if !strings.Contains(output, tt.expected) {
+				t.Errorf("Expected column header to contain %q, output: %s", tt.expected, output)
+			}
+		})
+	}
+}
+
+// TestRenderStatsBreakdownView_DynamicPeriodLabel verifies breakdown view shows current date range (AC #6).
+func TestRenderStatsBreakdownView_DynamicPeriodLabel(t *testing.T) {
+	tests := []struct {
+		name     string
+		preset   statsview.DateRangePreset
+		expected string
+	}{
+		{"7 days", statsview.DateRange7Days, "Period: Last 7 days"},
+		{"30 days", statsview.DateRange30Days, "Period: Last 30 days"},
+		{"90 days", statsview.DateRange90Days, "Period: Last 90 days"},
+		{"1 year", statsview.DateRange1Year, "Period: Last year"},
+		{"All time", statsview.DateRangeAllTime, "Period: All time"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel(nil)
+			m.ready = true
+			m.width = 100
+			m.height = 30
+			m.statusBar = components.NewStatusBarModel(100)
+			m.viewMode = viewModeStats
+			m.statsDateRange = statsview.DateRange{Preset: tt.preset}
+
+			m.statsBreakdownProject = &domain.Project{
+				ID:   "p1",
+				Name: "test-project",
+				Path: "/path/test",
+			}
+			m.statsBreakdownDurations = []statsview.StageDuration{
+				{Stage: "Plan", Duration: time.Hour},
+			}
+
+			output := m.renderStatsBreakdownView()
+
+			if !strings.Contains(output, tt.expected) {
+				t.Errorf("Expected breakdown view to contain %q, output: %s", tt.expected, output)
+			}
+		})
+	}
+}
+
+// TestDateRangeResetsOnReentry verifies date range resets on Stats View re-entry (AC #7).
+func TestDateRangeResetsOnReentry(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.projectList = components.NewProjectListModel(nil, 100, 20)
+	m.projects = []*domain.Project{
+		{ID: "p1", Name: "project-a", Path: "/path/a"},
+	}
+	m.projectList.SetProjects(m.projects)
+
+	// Enter stats view
+	m.enterStatsView()
+
+	// Change date range to 7d
+	m.statsDateRange = statsview.DateRange{Preset: statsview.DateRange7Days}
+
+	// Exit stats view
+	m.exitStatsView()
+
+	// Re-enter stats view
+	m.enterStatsView()
+
+	// Should be reset to default 30d
+	if m.statsDateRange.Preset != statsview.DateRange30Days {
+		t.Errorf("Date range should reset to default on re-entry, got %v", m.statsDateRange.Preset)
+	}
+}
+
+// TestHandleStatsViewKeyMsg_DateRangeCycleWrapsAround verifies cycling wraps around.
+func TestHandleStatsViewKeyMsg_DateRangeCycleWrapsAround(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.viewMode = viewModeStats
+	m.statsBreakdownProject = nil
+
+	// Start at AllTime
+	m.statsDateRange = statsview.DateRange{Preset: statsview.DateRangeAllTime}
+
+	// Press ] - should wrap to 7d
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}}
+	result, _ := m.handleStatsViewKeyMsg(msg)
+
+	if result.statsDateRange.Preset != statsview.DateRange7Days {
+		t.Errorf("Expected DateRange7Days after wrapping, got %v", result.statsDateRange.Preset)
+	}
+
+	// Now from 7d, press [ - should wrap to AllTime
+	m.statsDateRange = statsview.DateRange{Preset: statsview.DateRange7Days}
+	msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}}
+	result, _ = m.handleStatsViewKeyMsg(msg)
+
+	if result.statsDateRange.Preset != statsview.DateRangeAllTime {
+		t.Errorf("Expected DateRangeAllTime after wrapping backwards, got %v", result.statsDateRange.Preset)
 	}
 }

@@ -191,6 +191,9 @@ type Model struct {
 	// Story 16.5: Stats View breakdown state
 	statsBreakdownProject   *domain.Project           // Currently selected project for breakdown (nil = list view)
 	statsBreakdownDurations []statsview.StageDuration // Cached durations for display
+
+	// Story 16.6: Stats View date range state
+	statsDateRange statsview.DateRange // Current date range preset (initialized on Stats View entry)
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -509,35 +512,46 @@ func (m Model) getAgentState(p *domain.Project) domain.AgentState {
 // getProjectActivity fetches activity counts for sparkline generation (Story 16.4).
 // Returns nil if metricsReader is not available (graceful degradation).
 // buckets: number of time buckets for the sparkline (typically 7-14).
+// Story 16.6: Uses m.statsDateRange for date range filtering.
 func (m Model) getProjectActivity(projectID string, buckets int) []int {
 	if m.metricsReader == nil {
 		return nil // Graceful degradation
 	}
-	// Get transitions for last 30 days
 	ctx := context.Background()
 	now := time.Now()
-	since := now.Add(-30 * 24 * time.Hour)
+	since := m.statsDateRange.Since() // Story 16.6: Use selected date range
+
 	transitions := m.metricsReader.GetTransitionTimestamps(ctx, projectID, since)
 	if len(transitions) == 0 {
 		return nil
 	}
+
 	// Extract timestamps for bucketing
 	timestamps := make([]time.Time, len(transitions))
 	for i, t := range transitions {
 		timestamps[i] = t.TransitionedAt
 	}
-	return statsview.BucketActivityCounts(timestamps, buckets, 30*24*time.Hour, now)
+
+	// Story 16.6: Calculate time range for bucketing
+	timeRange := m.statsDateRange.Duration()
+	if timeRange == 0 {
+		// All time: calculate from earliest transition to now
+		timeRange = statsview.CalculateTimeRangeFromTimestamps(timestamps, now)
+	}
+
+	return statsview.BucketActivityCounts(timestamps, buckets, timeRange, now)
 }
 
 // getStageBreakdown fetches stage durations for a project (Story 16.5).
 // Returns nil if metricsReader is not available (graceful degradation).
+// Story 16.6: Uses m.statsDateRange for date range filtering.
 func (m Model) getStageBreakdown(projectID string) []statsview.StageDuration {
 	if m.metricsReader == nil {
 		return nil
 	}
 	ctx := context.Background()
 	now := time.Now()
-	since := now.Add(-30 * 24 * time.Hour) // Last 30 days
+	since := m.statsDateRange.Since() // Story 16.6: Use selected date range
 	transitions := m.metricsReader.GetFullTransitions(ctx, projectID, since)
 	if len(transitions) == 0 {
 		return nil
@@ -2827,8 +2841,9 @@ func (m Model) renderSessionPicker(width, height int) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
 }
 
-// Story 16.3/16.5: handleStatsViewKeyMsg handles keyboard input in Stats View.
+// Story 16.3/16.5/16.6: handleStatsViewKeyMsg handles keyboard input in Stats View.
 // Story 16.5: Supports breakdown sub-view with Enter to drill down, Esc to return.
+// Story 16.6: Supports date range cycling with [ and ] keys.
 func (m Model) handleStatsViewKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case KeyEscape, KeyQuit:
@@ -2850,6 +2865,18 @@ func (m Model) handleStatsViewKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.statsBreakdownProject = p
 				m.statsBreakdownDurations = m.getStageBreakdown(p.Path)
 			}
+		}
+		return m, nil
+	case "[":
+		// Story 16.6: Cycle to previous date range preset (only in project list view)
+		if m.statsBreakdownProject == nil {
+			m.statsDateRange = m.statsDateRange.Prev()
+		}
+		return m, nil
+	case "]":
+		// Story 16.6: Cycle to next date range preset (only in project list view)
+		if m.statsBreakdownProject == nil {
+			m.statsDateRange = m.statsDateRange.Next()
 		}
 		return m, nil
 	case KeyDown, KeyDownArrow:
@@ -3366,10 +3393,12 @@ func (m Model) renderTextView() string {
 }
 
 // Story 16.3: enterStatsView saves dashboard selection and switches to stats view.
+// Story 16.6: Initializes date range to default (30 days) on each entry (AC #7).
 func (m *Model) enterStatsView() {
 	m.statsActiveProjectIdx = m.projectList.Index()
 	m.viewMode = viewModeStats
 	m.statsViewScroll = 0
+	m.statsDateRange = statsview.DefaultDateRange() // Story 16.6: Reset to default on entry
 }
 
 // Story 16.3: exitStatsView returns to normal view with bounds-checked selection restoration.

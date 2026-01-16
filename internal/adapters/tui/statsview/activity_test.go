@@ -171,3 +171,72 @@ func TestBucketActivityCounts_SingleBucket(t *testing.T) {
 		t.Errorf("expected 3 events in single bucket, got %d", result[0])
 	}
 }
+
+// Story 16.6: Tests for CalculateTimeRangeFromTimestamps
+
+func TestCalculateTimeRangeFromTimestamps_EmptySlice(t *testing.T) {
+	now := time.Date(2026, 1, 16, 12, 0, 0, 0, time.UTC)
+	result := CalculateTimeRangeFromTimestamps(nil, now)
+
+	// Should return 1 day as default
+	if result != 24*time.Hour {
+		t.Errorf("Expected 1 day for nil timestamps, got %v", result)
+	}
+
+	result = CalculateTimeRangeFromTimestamps([]time.Time{}, now)
+	if result != 24*time.Hour {
+		t.Errorf("Expected 1 day for empty timestamps, got %v", result)
+	}
+}
+
+func TestCalculateTimeRangeFromTimestamps_FindsEarliest(t *testing.T) {
+	now := time.Date(2026, 1, 16, 12, 0, 0, 0, time.UTC)
+
+	// Timestamps in random order
+	timestamps := []time.Time{
+		now.Add(-10 * 24 * time.Hour), // 10 days ago
+		now.Add(-5 * 24 * time.Hour),  // 5 days ago
+		now.Add(-30 * 24 * time.Hour), // 30 days ago (earliest)
+		now.Add(-1 * 24 * time.Hour),  // 1 day ago
+	}
+
+	result := CalculateTimeRangeFromTimestamps(timestamps, now)
+
+	// Should be 30 days (from earliest to now)
+	expected := 30 * 24 * time.Hour
+	if result != expected {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
+
+func TestCalculateTimeRangeFromTimestamps_MinimumOneDay(t *testing.T) {
+	now := time.Date(2026, 1, 16, 12, 0, 0, 0, time.UTC)
+
+	// Timestamps very close to now
+	timestamps := []time.Time{
+		now.Add(-1 * time.Hour),
+		now.Add(-30 * time.Minute),
+	}
+
+	result := CalculateTimeRangeFromTimestamps(timestamps, now)
+
+	// Should return minimum 1 day
+	if result != 24*time.Hour {
+		t.Errorf("Expected minimum 1 day, got %v", result)
+	}
+}
+
+func TestCalculateTimeRangeFromTimestamps_SingleTimestamp(t *testing.T) {
+	now := time.Date(2026, 1, 16, 12, 0, 0, 0, time.UTC)
+
+	timestamps := []time.Time{
+		now.Add(-15 * 24 * time.Hour), // 15 days ago
+	}
+
+	result := CalculateTimeRangeFromTimestamps(timestamps, now)
+
+	expected := 15 * 24 * time.Hour
+	if result != expected {
+		t.Errorf("Expected %v, got %v", expected, result)
+	}
+}
