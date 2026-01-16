@@ -331,7 +331,7 @@ development_status:
   13-1-create-binary-name-resolution-utility: done
   13-2-update-version-command-to-use-dynamic-name: done
   13-3-update-error-messages-to-use-dynamic-name: done
-  epic-13-retrospective: optional
+  epic-13-retrospective: completed
 
   # Epic 14: Methodology Switching Detection - PHASE 2 (Bug Fix)
   # FR Coverage: FR-P2-7, FR-P2-8, FR-P2-9, FR-P2-10, FR-P2-11
