@@ -693,3 +693,94 @@ func TestProjectItemDelegate_WaitingColumnWidth_MaxCap(t *testing.T) {
 		t.Errorf("waitingColumnWidth() at ultra-wide = %d, want max %d", gotWidth, colWaitingMax)
 	}
 }
+
+// ============================================================================
+// Story 14.5: Coexistence Indicator Tests
+// ============================================================================
+
+func TestProjectItemDelegate_CoexistenceIndicator_Shown(t *testing.T) {
+	delegate := NewProjectItemDelegate(100)
+
+	project := &domain.Project{
+		ID:                 "1",
+		Name:               "coexistence-project",
+		Path:               "/test",
+		DetectedMethod:     "speckit",
+		CurrentStage:       domain.StagePlan,
+		CoexistenceWarning: true,
+		SecondaryMethod:    "bmad",
+		SecondaryStage:     domain.StageTasks,
+		LastActivityAt:     time.Now(),
+	}
+	item := ProjectItem{Project: project}
+
+	items := []list.Item{item}
+	l := list.New(items, delegate, 100, 10)
+
+	var buf bytes.Buffer
+	delegate.Render(&buf, l, 0, item)
+	output := buf.String()
+
+	// Should contain warning emoji when coexistence is detected
+	if !strings.Contains(output, "⚠️") {
+		t.Errorf("Render() should contain ⚠️ for coexistence project, got: %q", output)
+	}
+}
+
+func TestProjectItemDelegate_CoexistenceIndicator_Hidden(t *testing.T) {
+	delegate := NewProjectItemDelegate(100)
+
+	project := &domain.Project{
+		ID:                 "1",
+		Name:               "normal-project",
+		Path:               "/test",
+		DetectedMethod:     "speckit",
+		CurrentStage:       domain.StagePlan,
+		CoexistenceWarning: false, // No coexistence
+		LastActivityAt:     time.Now(),
+	}
+	item := ProjectItem{Project: project}
+
+	items := []list.Item{item}
+	l := list.New(items, delegate, 100, 10)
+
+	var buf bytes.Buffer
+	delegate.Render(&buf, l, 0, item)
+	output := buf.String()
+
+	// Should NOT contain warning emoji when no coexistence
+	if strings.Contains(output, "⚠️") {
+		t.Errorf("Render() should NOT contain ⚠️ for normal project, got: %q", output)
+	}
+}
+
+func TestProjectItemDelegate_CoexistenceIndicator_NarrowWidth(t *testing.T) {
+	// At narrow width (< 80), stage column is hidden, so coexistence indicator should not appear
+	delegate := NewProjectItemDelegate(70) // Below widthBreakpointShort (80)
+
+	project := &domain.Project{
+		ID:                 "1",
+		Name:               "coexistence-project",
+		Path:               "/test",
+		DetectedMethod:     "speckit",
+		CurrentStage:       domain.StagePlan,
+		CoexistenceWarning: true,
+		SecondaryMethod:    "bmad",
+		SecondaryStage:     domain.StageTasks,
+		LastActivityAt:     time.Now(),
+	}
+	item := ProjectItem{Project: project}
+
+	items := []list.Item{item}
+	l := list.New(items, delegate, 70, 10)
+
+	var buf bytes.Buffer
+	delegate.Render(&buf, l, 0, item)
+	output := buf.String()
+
+	// At narrow width, stage column is hidden, so warning emoji should NOT appear
+	// because the coexistence indicator is only added to the stage column
+	if strings.Contains(output, "⚠️") {
+		t.Errorf("Render() should NOT contain ⚠️ at narrow width (stage hidden), got: %q", output)
+	}
+}

@@ -671,3 +671,91 @@ func TestDetailPanel_SetAgentStateCallback(t *testing.T) {
 		t.Error("panel should have agentStateGetter after SetAgentStateCallback")
 	}
 }
+
+// ============================================================================
+// Story 14.5: Coexistence Warning Tests
+// ============================================================================
+
+func TestDetailPanel_CoexistenceWarning_Shown(t *testing.T) {
+	project := &domain.Project{
+		ID:                 "test-id",
+		Name:               "test-project",
+		Path:               "/test/path",
+		DetectedMethod:     "speckit",
+		CurrentStage:       domain.StagePlan,
+		CoexistenceWarning: true,
+		CoexistenceMessage: "Multiple methodologies detected with similar activity",
+		SecondaryMethod:    "bmad",
+		SecondaryStage:     domain.StageTasks,
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+		LastActivityAt:     time.Now(),
+	}
+
+	panel := NewDetailPanelModel(80, 20)
+	panel.SetVisible(true)
+	panel.SetProject(project)
+	output := panel.View()
+
+	// Should contain warning indicator and both methodologies
+	if !strings.Contains(output, "Coexistence") {
+		t.Error("expected Coexistence label in output")
+	}
+	if !strings.Contains(output, "speckit") {
+		t.Error("expected primary method 'speckit' in warning")
+	}
+	if !strings.Contains(output, "bmad") {
+		t.Error("expected secondary method 'bmad' in warning")
+	}
+}
+
+func TestDetailPanel_CoexistenceWarning_Hidden(t *testing.T) {
+	project := &domain.Project{
+		ID:                 "test-id",
+		Name:               "test-project",
+		Path:               "/test/path",
+		DetectedMethod:     "speckit",
+		CurrentStage:       domain.StagePlan,
+		CoexistenceWarning: false, // No warning
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+		LastActivityAt:     time.Now(),
+	}
+
+	panel := NewDetailPanelModel(80, 20)
+	panel.SetVisible(true)
+	panel.SetProject(project)
+	output := panel.View()
+
+	// Should NOT contain coexistence warning
+	if strings.Contains(output, "Coexistence") {
+		t.Error("should not show Coexistence label when flag is false")
+	}
+}
+
+func TestDetailPanel_CoexistenceWarning_HiddenWhenSecondaryMethodEmpty(t *testing.T) {
+	// Edge case: CoexistenceWarning true but SecondaryMethod empty
+	project := &domain.Project{
+		ID:                 "test-id",
+		Name:               "test-project",
+		Path:               "/test/path",
+		DetectedMethod:     "speckit",
+		CurrentStage:       domain.StagePlan,
+		CoexistenceWarning: true, // Warning flag set
+		SecondaryMethod:    "",   // But no secondary method
+		SecondaryStage:     domain.StagePlan,
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+		LastActivityAt:     time.Now(),
+	}
+
+	panel := NewDetailPanelModel(80, 20)
+	panel.SetVisible(true)
+	panel.SetProject(project)
+	output := panel.View()
+
+	// Should NOT contain coexistence warning when SecondaryMethod is empty
+	if strings.Contains(output, "Coexistence") {
+		t.Error("should not show Coexistence label when SecondaryMethod is empty")
+	}
+}

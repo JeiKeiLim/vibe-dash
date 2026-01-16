@@ -761,8 +761,8 @@ func (m Model) refreshProjectsCmd() tea.Cmd {
 			default:
 			}
 
-			// Run detection
-			result, err := m.detectionService.Detect(ctx, project.Path)
+			// Run detection with coexistence awareness (Story 14.5)
+			winner, allResults, err := m.detectionService.DetectWithCoexistenceSelection(ctx, project.Path)
 			if err != nil {
 				slog.Debug("refresh detection failed", "project", project.Name, "error", err)
 				failedCount++
@@ -777,11 +777,39 @@ func (m Model) refreshProjectsCmd() tea.Cmd {
 				continue
 			}
 
+			// Determine primary result and populate coexistence fields (Story 14.5)
+			var primary *domain.DetectionResult
+			if winner != nil {
+				primary = winner
+				// Clear any previous coexistence warning
+				currentProject.CoexistenceWarning = false
+				currentProject.CoexistenceMessage = ""
+				currentProject.SecondaryMethod = ""
+				currentProject.SecondaryStage = domain.StageUnknown
+			} else if len(allResults) > 0 {
+				// Tie case - use first as primary (already sorted by most recent timestamp)
+				primary = allResults[0]
+				currentProject.CoexistenceWarning = primary.HasCoexistenceWarning()
+				currentProject.CoexistenceMessage = primary.CoexistenceMessage
+				if len(allResults) > 1 {
+					currentProject.SecondaryMethod = allResults[1].Method
+					currentProject.SecondaryStage = allResults[1].Stage
+				}
+			} else {
+				// No methodology detected - use unknown
+				unknownResult := domain.NewDetectionResult("unknown", domain.StageUnknown, domain.ConfidenceUncertain, "No methodology detected")
+				primary = &unknownResult
+				currentProject.CoexistenceWarning = false
+				currentProject.CoexistenceMessage = ""
+				currentProject.SecondaryMethod = ""
+				currentProject.SecondaryStage = domain.StageUnknown
+			}
+
 			// Update ONLY detection fields, preserve state/hibernation/favorites
-			currentProject.DetectedMethod = result.Method
-			currentProject.CurrentStage = result.Stage
-			currentProject.Confidence = result.Confidence
-			currentProject.DetectionReasoning = result.Reasoning
+			currentProject.DetectedMethod = primary.Method
+			currentProject.CurrentStage = primary.Stage
+			currentProject.Confidence = primary.Confidence
+			currentProject.DetectionReasoning = primary.Reasoning
 			currentProject.UpdatedAt = time.Now()
 
 			if err := m.repository.Save(ctx, currentProject); err != nil {

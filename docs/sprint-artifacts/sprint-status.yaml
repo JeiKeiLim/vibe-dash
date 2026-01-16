@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2026-01-16
-updated_by: Dev (Amelia) - Story 14-4 code review passed, 2M/4L fixes applied
+updated_by: Dev (Amelia) - Story 14-5 code review passed, 1H/4M/1L fixes applied
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -336,13 +336,14 @@ development_status:
   # Epic 14: Methodology Switching Detection - PHASE 2 (Bug Fix)
   # FR Coverage: FR-P2-7, FR-P2-8, FR-P2-9, FR-P2-10, FR-P2-11
   # Fix first-match-wins bug, implement most-recent-artifact-wins
-  epic-14: in-progress
+  # 2026-01-16: COMPLETE - All 5 stories done, code review passed
+  epic-14: done
   14-1-implement-detectwithcoexistence-registry-method: done
   # Story 14-2: Code review done 2026-01-16, 3 fixes applied (M1 test, M2 consolidation, M3 docs)
   14-2-add-artifact-timestamp-to-detection-results: done
   14-3-implement-most-recent-artifact-wins-selection: done
   14-4-implement-coexistence-warning-for-tie-breaker: done
-  14-5-update-tui-to-display-methodology-coexistence: backlog
+  14-5-update-tui-to-display-methodology-coexistence: done
   epic-14-retrospective: optional
 
   # Epic 15: Sub-1-Minute Agent Detection - PHASE 2 (Core Feature, THE Killer Feature)

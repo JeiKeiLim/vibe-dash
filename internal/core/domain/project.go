@@ -10,14 +10,19 @@ import (
 
 // Project represents a development project being tracked
 type Project struct {
-	ID                 string       // Unique identifier (path hash, 16 hex chars)
-	Name               string       // Derived from directory name
-	Path               string       // Canonical absolute path
-	DisplayName        string       // Optional user-set nickname (FR5)
-	DetectedMethod     string       // "speckit", "bmad", "unknown"
-	CurrentStage       Stage        // Current workflow stage
-	Confidence         Confidence   // Detection confidence level (FR12)
-	DetectionReasoning string       // Human-readable detection explanation (FR11, FR26)
+	ID                 string     // Unique identifier (path hash, 16 hex chars)
+	Name               string     // Derived from directory name
+	Path               string     // Canonical absolute path
+	DisplayName        string     // Optional user-set nickname (FR5)
+	DetectedMethod     string     // "speckit", "bmad", "unknown"
+	CurrentStage       Stage      // Current workflow stage
+	Confidence         Confidence // Detection confidence level (FR12)
+	DetectionReasoning string     // Human-readable detection explanation (FR11, FR26)
+	// Coexistence fields for Story 14.5 (runtime-only, not persisted)
+	CoexistenceWarning bool         // True when multiple methodologies with similar timestamps
+	CoexistenceMessage string       // Warning text for display
+	SecondaryMethod    string       // Second methodology when coexistence detected
+	SecondaryStage     Stage        // Second methodology's stage
 	IsFavorite         bool         // Always visible regardless of activity (FR30)
 	State              ProjectState // Active or Hibernated (FR28-33)
 	Notes              string       // User notes/memo (FR21)

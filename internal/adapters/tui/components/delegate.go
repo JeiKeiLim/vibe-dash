@@ -261,6 +261,23 @@ func (d ProjectItemDelegate) renderRow(item ProjectItem, isSelected bool, nameWi
 	if d.showStageColumn() {
 		stageWidth := d.stageColumnWidth()
 		stage := stageformat.FormatStageInfoWithWidth(item.Project, stageWidth)
+
+		// Add coexistence indicator if warning set (Story 14.5)
+		if item.Project.CoexistenceWarning {
+			// Prepend warning emoji to stage info
+			warningEmoji := emoji.Warning()
+			stage = fmt.Sprintf("%s %s", warningEmoji, stage)
+			// Truncate if needed to fit width using rune-safe truncation
+			// Note: lipgloss.Width handles ANSI escape codes and multi-byte chars
+			if lipgloss.Width(stage) > stageWidth && stageWidth > 3 {
+				// Use rune-safe truncation to avoid cutting UTF-8 sequences
+				runes := []rune(stage)
+				if len(runes) > stageWidth-3 {
+					stage = string(runes[:stageWidth-3]) + "..."
+				}
+			}
+		}
+
 		stageStr := fmt.Sprintf("%-*s", stageWidth, stage)
 		sb.WriteString(styles.DimStyle.Render(stageStr))
 		sb.WriteString(" ")

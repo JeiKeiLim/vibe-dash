@@ -158,6 +158,22 @@ func (m DetailPanelModel) renderProject() string {
 	}
 	lines = append(lines, formatField("Detection", reasoning))
 
+	// Coexistence warning section - Story 14.5
+	// Only show if both CoexistenceWarning is true AND SecondaryMethod is populated
+	if p.CoexistenceWarning && p.SecondaryMethod != "" {
+		warningText := fmt.Sprintf("Both %s (%s) and %s (%s) detected with similar activity",
+			p.DetectedMethod,
+			p.CurrentStage.String(),
+			p.SecondaryMethod,
+			p.SecondaryStage.String(),
+		)
+		warningLine := fmt.Sprintf("%s %s",
+			emoji.Warning(),
+			styles.WarningStyle.Render(warningText),
+		)
+		lines = append(lines, formatField("Coexistence", warningLine))
+	}
+
 	// Notes
 	notes := p.Notes
 	if notes == "" {

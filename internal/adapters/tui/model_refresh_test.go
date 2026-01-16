@@ -635,3 +635,131 @@ func TestModel_RefreshComplete_NoFailures(t *testing.T) {
 		t.Error("expected batch command for reload and timer")
 	}
 }
+
+// ============================================================================
+// Story 14.5: Coexistence Detection Tests
+// ============================================================================
+
+// coexistenceMockDetector implements ports.Detector for coexistence testing.
+type coexistenceMockDetector struct {
+	detectWithCoexistenceFunc func(ctx context.Context, path string) (*domain.DetectionResult, []*domain.DetectionResult, error)
+}
+
+func (m *coexistenceMockDetector) Detect(ctx context.Context, path string) (*domain.DetectionResult, error) {
+	return &domain.DetectionResult{Method: "test", Stage: domain.StagePlan}, nil
+}
+
+func (m *coexistenceMockDetector) DetectMultiple(ctx context.Context, path string) ([]*domain.DetectionResult, error) {
+	return nil, nil
+}
+
+func (m *coexistenceMockDetector) DetectWithCoexistenceSelection(ctx context.Context, path string) (*domain.DetectionResult, []*domain.DetectionResult, error) {
+	if m.detectWithCoexistenceFunc != nil {
+		return m.detectWithCoexistenceFunc(ctx, path)
+	}
+	result := &domain.DetectionResult{Method: "test", Stage: domain.StagePlan}
+	return result, nil, nil
+}
+
+var _ ports.Detector = (*coexistenceMockDetector)(nil)
+
+// TestModel_RefreshWithCoexistence_ClearWinner verifies coexistence fields cleared when clear winner
+func TestModel_RefreshWithCoexistence_ClearWinner(t *testing.T) {
+	project := &domain.Project{
+		ID:                 "1",
+		Path:               "/test1",
+		Name:               "test1",
+		CoexistenceWarning: true, // Pre-existing warning should be cleared
+		SecondaryMethod:    "bmad",
+	}
+	repo := &refreshMockRepository{
+		projects: []*domain.Project{project},
+	}
+
+	m := NewModel(repo)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.projects = repo.projects
+	m.projectList = components.NewProjectListModel(m.projects, m.width, m.height)
+	m.statusBar = components.NewStatusBarModel(m.width)
+	m.SetDetectionService(&coexistenceMockDetector{
+		detectWithCoexistenceFunc: func(ctx context.Context, path string) (*domain.DetectionResult, []*domain.DetectionResult, error) {
+			// Return clear winner (no coexistence)
+			winner := &domain.DetectionResult{Method: "speckit", Stage: domain.StagePlan}
+			return winner, nil, nil
+		},
+	})
+
+	// Execute the refresh command
+	cmd := m.refreshProjectsCmd()
+	msg := cmd()
+
+	// Handle the message
+	_, ok := msg.(refreshCompleteMsg)
+	if !ok {
+		t.Fatalf("expected refreshCompleteMsg, got %T", msg)
+	}
+
+	// Verify coexistence warning was cleared
+	if m.projects[0].CoexistenceWarning {
+		t.Error("expected CoexistenceWarning to be false after clear winner")
+	}
+	if m.projects[0].SecondaryMethod != "" {
+		t.Errorf("expected SecondaryMethod to be empty, got: %s", m.projects[0].SecondaryMethod)
+	}
+}
+
+// TestModel_RefreshWithCoexistence_TieCase verifies coexistence fields set when tie detected
+func TestModel_RefreshWithCoexistence_TieCase(t *testing.T) {
+	project := &domain.Project{
+		ID:   "1",
+		Path: "/test1",
+		Name: "test1",
+	}
+	repo := &refreshMockRepository{
+		projects: []*domain.Project{project},
+	}
+
+	m := NewModel(repo)
+	m.ready = true
+	m.width = 80
+	m.height = 40
+	m.projects = repo.projects
+	m.projectList = components.NewProjectListModel(m.projects, m.width, m.height)
+	m.statusBar = components.NewStatusBarModel(m.width)
+	m.SetDetectionService(&coexistenceMockDetector{
+		detectWithCoexistenceFunc: func(ctx context.Context, path string) (*domain.DetectionResult, []*domain.DetectionResult, error) {
+			// Return tie (nil winner, multiple results with coexistence warning)
+			result1 := domain.NewDetectionResult("speckit", domain.StagePlan, domain.ConfidenceCertain, "plan.md found")
+			result1 = result1.WithCoexistenceWarning("Multiple methodologies detected")
+			result2 := domain.NewDetectionResult("bmad", domain.StageTasks, domain.ConfidenceCertain, "epics.md found")
+			result2 = result2.WithCoexistenceWarning("Multiple methodologies detected")
+			return nil, []*domain.DetectionResult{&result1, &result2}, nil
+		},
+	})
+
+	// Execute the refresh command
+	cmd := m.refreshProjectsCmd()
+	msg := cmd()
+
+	// Handle the message
+	_, ok := msg.(refreshCompleteMsg)
+	if !ok {
+		t.Fatalf("expected refreshCompleteMsg, got %T", msg)
+	}
+
+	// Verify coexistence warning was set
+	if !m.projects[0].CoexistenceWarning {
+		t.Error("expected CoexistenceWarning to be true after tie case")
+	}
+	if m.projects[0].CoexistenceMessage != "Multiple methodologies detected" {
+		t.Errorf("expected CoexistenceMessage to be 'Multiple methodologies detected', got: %s", m.projects[0].CoexistenceMessage)
+	}
+	if m.projects[0].SecondaryMethod != "bmad" {
+		t.Errorf("expected SecondaryMethod to be 'bmad', got: %s", m.projects[0].SecondaryMethod)
+	}
+	if m.projects[0].SecondaryStage != domain.StageTasks {
+		t.Errorf("expected SecondaryStage to be StageTasks, got: %s", m.projects[0].SecondaryStage)
+	}
+}
