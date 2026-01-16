@@ -509,11 +509,16 @@ func TestGetProjectActivity_NilReader(t *testing.T) {
 
 // mockMetricsReader implements metricsReaderInterface for testing.
 type mockMetricsReader struct {
-	transitions []statsview.Transition
+	transitions     []statsview.Transition
+	fullTransitions []statsview.FullTransition
 }
 
 func (m *mockMetricsReader) GetTransitionTimestamps(_ context.Context, _ string, _ time.Time) []statsview.Transition {
 	return m.transitions
+}
+
+func (m *mockMetricsReader) GetFullTransitions(_ context.Context, _ string, _ time.Time) []statsview.FullTransition {
+	return m.fullTransitions
 }
 
 // TestGetProjectActivity_WithMockReader verifies full integration path with mock reader.
@@ -565,5 +570,287 @@ func TestGetProjectActivity_EmptyTransitions(t *testing.T) {
 	// Should return nil when no transitions (graceful degradation)
 	if result != nil {
 		t.Errorf("Expected nil when no transitions, got %v", result)
+	}
+}
+
+// Story 16.5: Tests for Breakdown View
+
+// TestHandleStatsViewKeyMsg_EnterEntersBreakdown verifies Enter key enters breakdown view.
+func TestHandleStatsViewKeyMsg_EnterEntersBreakdown(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.viewMode = viewModeStats
+	m.statsBreakdownProject = nil
+	m.projects = []*domain.Project{
+		{ID: "p1", Name: "project-a", Path: "/path/a", State: domain.StateActive, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+		{ID: "p2", Name: "project-b", Path: "/path/b", State: domain.StateActive, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+	m.statsViewScroll = 0 // First project selected
+
+	// Press Enter
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	result, _ := m.handleStatsViewKeyMsg(msg)
+
+	// Should enter breakdown view
+	if result.statsBreakdownProject == nil {
+		t.Error("Enter key should set statsBreakdownProject")
+	}
+	if result.statsBreakdownProject.ID != "p1" {
+		t.Errorf("Expected first project, got %s", result.statsBreakdownProject.ID)
+	}
+}
+
+// TestHandleStatsViewKeyMsg_EscExitsBreakdownFirst verifies Esc key exits breakdown
+// before exiting Stats View entirely.
+func TestHandleStatsViewKeyMsg_EscExitsBreakdownFirst(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.viewMode = viewModeStats
+	m.projectList = components.NewProjectListModel(nil, 100, 20)
+
+	projects := []*domain.Project{
+		{ID: "p1", Name: "project-a", Path: "/path/a", State: domain.StateActive, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+	m.projects = projects
+	m.projectList.SetProjects(projects)
+
+	// Set breakdown state
+	m.statsBreakdownProject = projects[0]
+	m.statsBreakdownDurations = []statsview.StageDuration{
+		{Stage: "Plan", Duration: 3 * time.Hour},
+	}
+
+	// Press Esc - should exit breakdown, not Stats View
+	msg := tea.KeyMsg{Type: tea.KeyEscape}
+	result, _ := m.handleStatsViewKeyMsg(msg)
+
+	// Should still be in stats view
+	if result.viewMode != viewModeStats {
+		t.Error("Esc should first exit breakdown, not Stats View entirely")
+	}
+	// Breakdown should be cleared
+	if result.statsBreakdownProject != nil {
+		t.Error("Esc should clear statsBreakdownProject")
+	}
+	if result.statsBreakdownDurations != nil {
+		t.Error("Esc should clear statsBreakdownDurations")
+	}
+}
+
+// TestHandleStatsViewKeyMsg_EscExitsStatsViewFromList verifies Esc key exits Stats View
+// when not in breakdown view.
+func TestHandleStatsViewKeyMsg_EscExitsStatsViewFromList(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.viewMode = viewModeStats
+	m.statsBreakdownProject = nil // Not in breakdown view
+	m.projectList = components.NewProjectListModel(nil, 100, 20)
+	m.projects = []*domain.Project{
+		{ID: "p1", Name: "project-a", Path: "/path/a", State: domain.StateActive, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+	}
+	m.projectList.SetProjects(m.projects)
+
+	// Press Esc - should exit Stats View
+	msg := tea.KeyMsg{Type: tea.KeyEscape}
+	result, _ := m.handleStatsViewKeyMsg(msg)
+
+	if result.viewMode != viewModeNormal {
+		t.Error("Esc should exit Stats View when not in breakdown")
+	}
+}
+
+// TestGetStageBreakdown_NilReader verifies graceful degradation when metricsReader is nil.
+func TestGetStageBreakdown_NilReader(t *testing.T) {
+	m := NewModel(nil)
+	m.metricsReader = nil
+
+	result := m.getStageBreakdown("test-project")
+
+	if result != nil {
+		t.Errorf("Expected nil when metricsReader is nil, got %v", result)
+	}
+}
+
+// TestGetStageBreakdown_WithMockReader verifies breakdown calculation with mock reader.
+func TestGetStageBreakdown_WithMockReader(t *testing.T) {
+	m := NewModel(nil)
+	now := time.Now()
+
+	// Create mock reader with full transitions
+	mockReader := &mockMetricsReader{
+		fullTransitions: []statsview.FullTransition{
+			{FromStage: "", ToStage: "Plan", TransitionedAt: now.Add(-5 * time.Hour)},
+			{FromStage: "Plan", ToStage: "Tasks", TransitionedAt: now.Add(-3 * time.Hour)},
+			{FromStage: "Tasks", ToStage: "Implement", TransitionedAt: now.Add(-2 * time.Hour)},
+		},
+	}
+	m.metricsReader = mockReader
+
+	result := m.getStageBreakdown("test-project")
+
+	if result == nil {
+		t.Fatal("Expected non-nil result")
+	}
+	if len(result) != 3 {
+		t.Fatalf("Expected 3 stage durations, got %d", len(result))
+	}
+}
+
+// TestGetStageBreakdown_EmptyTransitions verifies nil return when no transitions.
+func TestGetStageBreakdown_EmptyTransitions(t *testing.T) {
+	m := NewModel(nil)
+
+	mockReader := &mockMetricsReader{
+		fullTransitions: []statsview.FullTransition{},
+	}
+	m.metricsReader = mockReader
+
+	result := m.getStageBreakdown("test-project")
+
+	if result != nil {
+		t.Errorf("Expected nil when no transitions, got %v", result)
+	}
+}
+
+// TestRenderStatsBreakdownView_ShowsProjectInfo verifies breakdown view shows project info.
+func TestRenderStatsBreakdownView_ShowsProjectInfo(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.viewMode = viewModeStats
+	m.statusBar = components.NewStatusBarModel(100)
+
+	m.statsBreakdownProject = &domain.Project{
+		ID:   "p1",
+		Name: "my-awesome-project",
+		Path: "/path/to/project",
+	}
+	m.statsBreakdownDurations = []statsview.StageDuration{
+		{Stage: "Plan", Duration: 3 * time.Hour, IsCurrent: false},
+		{Stage: "Implement", Duration: 5 * time.Hour, IsCurrent: true},
+	}
+
+	output := m.renderStatsBreakdownView()
+
+	// Should show project name
+	if !strings.Contains(output, "my-awesome-project") {
+		t.Error("Breakdown view should show project name")
+	}
+	// Should show header
+	if !strings.Contains(output, "STATS") {
+		t.Error("Breakdown view should show STATS header")
+	}
+	// Should show back hint
+	if !strings.Contains(output, "[ESC] Back to Project List") {
+		t.Error("Breakdown view should show back hint")
+	}
+}
+
+// TestRenderStatsBreakdownView_NoData verifies "No stage data available" message.
+func TestRenderStatsBreakdownView_NoData(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.viewMode = viewModeStats
+	m.statusBar = components.NewStatusBarModel(100)
+
+	m.statsBreakdownProject = &domain.Project{
+		ID:   "p1",
+		Name: "empty-project",
+		Path: "/path/to/project",
+	}
+	m.statsBreakdownDurations = nil // No data
+
+	output := m.renderStatsBreakdownView()
+
+	if !strings.Contains(output, "No stage data available") {
+		t.Error("Breakdown view should show 'No stage data available' when no data")
+	}
+}
+
+// TestRenderStatsView_SwitchesToBreakdown verifies renderStatsView switches to breakdown.
+func TestRenderStatsView_SwitchesToBreakdown(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.viewMode = viewModeStats
+	m.statusBar = components.NewStatusBarModel(100)
+
+	// With breakdown project set
+	m.statsBreakdownProject = &domain.Project{
+		ID:   "p1",
+		Name: "breakdown-project",
+		Path: "/path/to/project",
+	}
+	m.statsBreakdownDurations = []statsview.StageDuration{
+		{Stage: "Plan", Duration: 1 * time.Hour},
+	}
+
+	output := m.renderStatsView()
+
+	// Should render breakdown view (shows project name)
+	if !strings.Contains(output, "breakdown-project") {
+		t.Error("renderStatsView should delegate to breakdown view when statsBreakdownProject is set")
+	}
+	// Should show "[ESC] Back to Project List" instead of "[ESC] Back to Dashboard"
+	if !strings.Contains(output, "Back to Project List") {
+		t.Error("Breakdown view should show 'Back to Project List' hint")
+	}
+}
+
+// TestHandleStatsViewKeyMsg_ScrollDoesNotWorkInBreakdown verifies scroll keys
+// are disabled in breakdown view.
+func TestHandleStatsViewKeyMsg_ScrollDoesNotWorkInBreakdown(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.viewMode = viewModeStats
+	m.statsViewScroll = 1
+	m.projects = []*domain.Project{
+		{ID: "p1", Name: "project-a", Path: "/path/a"},
+		{ID: "p2", Name: "project-b", Path: "/path/b"},
+		{ID: "p3", Name: "project-c", Path: "/path/c"},
+	}
+	m.statsBreakdownProject = m.projects[0] // In breakdown view
+
+	// Press down - should not change scroll
+	msg := tea.KeyMsg{Type: tea.KeyDown}
+	result, _ := m.handleStatsViewKeyMsg(msg)
+
+	if result.statsViewScroll != 1 {
+		t.Errorf("Scroll should not change in breakdown view, got %d", result.statsViewScroll)
+	}
+}
+
+// TestHandleStatsViewKeyMsg_EnterDoesNotWorkInBreakdown verifies Enter key
+// does nothing when already in breakdown view.
+func TestHandleStatsViewKeyMsg_EnterDoesNotWorkInBreakdown(t *testing.T) {
+	m := NewModel(nil)
+	m.ready = true
+	m.width = 100
+	m.height = 30
+	m.viewMode = viewModeStats
+	m.projects = []*domain.Project{
+		{ID: "p1", Name: "project-a", Path: "/path/a"},
+	}
+	m.statsBreakdownProject = m.projects[0] // Already in breakdown
+
+	// Press Enter - should do nothing
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	result, _ := m.handleStatsViewKeyMsg(msg)
+
+	// Should still be showing the same breakdown project
+	if result.statsBreakdownProject != m.projects[0] {
+		t.Error("Enter should not change state when already in breakdown view")
 	}
 }

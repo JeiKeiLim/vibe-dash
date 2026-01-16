@@ -551,3 +551,76 @@ func TestGetTransitionTimestamps_EmptyResult(t *testing.T) {
 		t.Errorf("expected 0 transitions for nonexistent project, got %d", len(result))
 	}
 }
+
+// Story 16.5: Tests for GetFullTransitions (statsview.FullTransitionReader interface)
+
+func TestGetFullTransitions_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "metrics.db")
+	repo := NewMetricsRepository(dbPath)
+	ctx := context.Background()
+
+	// Record multiple transitions
+	_ = repo.RecordTransition(ctx, "proj-1", "", "plan")
+	_ = repo.RecordTransition(ctx, "proj-1", "plan", "tasks")
+	_ = repo.RecordTransition(ctx, "proj-1", "tasks", "code")
+
+	// Query via the interface method
+	since := time.Now().Add(-1 * time.Hour)
+	result := repo.GetFullTransitions(ctx, "proj-1", since)
+
+	if len(result) != 3 {
+		t.Fatalf("expected 3 transitions, got %d", len(result))
+	}
+
+	// Verify each result has correct fields
+	expected := []struct {
+		from string
+		to   string
+	}{
+		{"", "plan"},
+		{"plan", "tasks"},
+		{"tasks", "code"},
+	}
+
+	for i, tr := range result {
+		if tr.FromStage != expected[i].from {
+			t.Errorf("transition %d: expected from '%s', got '%s'", i, expected[i].from, tr.FromStage)
+		}
+		if tr.ToStage != expected[i].to {
+			t.Errorf("transition %d: expected to '%s', got '%s'", i, expected[i].to, tr.ToStage)
+		}
+		if tr.TransitionedAt.IsZero() {
+			t.Errorf("transition %d: expected non-zero TransitionedAt", i)
+		}
+	}
+}
+
+func TestGetFullTransitions_GracefulDegradation(t *testing.T) {
+	repo := NewMetricsRepository("/nonexistent/dir/metrics.db")
+	ctx := context.Background()
+
+	result := repo.GetFullTransitions(ctx, "proj-1", time.Now().Add(-24*time.Hour))
+
+	// Should return empty slice (graceful degradation)
+	if len(result) != 0 {
+		t.Errorf("expected empty slice, got %d items", len(result))
+	}
+}
+
+func TestGetFullTransitions_EmptyResult(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "metrics.db")
+	repo := NewMetricsRepository(dbPath)
+	ctx := context.Background()
+
+	// Initialize DB but don't record anything for this project
+	_ = repo.RecordTransition(ctx, "other-proj", "", "plan")
+
+	since := time.Now().Add(-1 * time.Hour)
+	result := repo.GetFullTransitions(ctx, "nonexistent", since)
+
+	if len(result) != 0 {
+		t.Errorf("expected 0 transitions for nonexistent project, got %d", len(result))
+	}
+}

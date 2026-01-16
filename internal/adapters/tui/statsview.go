@@ -3,15 +3,26 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/statsview"
 )
 
-// Story 16.3/16.4: renderStatsView renders the full-screen Stats View with activity sparklines.
+// Story 16.3/16.4/16.5: renderStatsView renders Stats View with sparklines or breakdown.
 // Layout: Header with "STATS" title and [ESC] hint, project list with sparklines.
+// Story 16.5: Checks statsBreakdownProject to switch between list and breakdown views.
 func (m Model) renderStatsView() string {
+	// Story 16.5: If breakdown project is selected, show breakdown view
+	if m.statsBreakdownProject != nil {
+		return m.renderStatsBreakdownView()
+	}
+	return m.renderStatsProjectListView()
+}
+
+// renderStatsProjectListView renders the project list with sparklines (original renderStatsView).
+func (m Model) renderStatsProjectListView() string {
 	// Calculate effective width (Story 8.10: respect max content width)
 	effectiveWidth := m.width
 	if m.isWideWidth() {
@@ -189,4 +200,129 @@ func (m Model) renderStatsProjectList(width, height, buckets int) string {
 	}
 
 	return strings.Join(lines[:height], "\n")
+}
+
+// renderStatsBreakdownView renders the detailed time-per-stage breakdown for a project.
+// Story 16.5: Shows horizontal bars with duration and percentage per stage.
+func (m Model) renderStatsBreakdownView() string {
+	// Calculate effective width (Story 8.10: respect max content width)
+	effectiveWidth := m.width
+	if m.isWideWidth() {
+		effectiveWidth = m.maxContentWidth
+	}
+
+	// Header: "STATS" title on left, "[ESC] Back to Project List" hint on right
+	title := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("99")).
+		Render("STATS")
+	hint := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("241")).
+		Render("[ESC] Back to Project List")
+
+	// Calculate spacing between title and hint
+	titleWidth := lipgloss.Width(title)
+	hintWidth := lipgloss.Width(hint)
+	spacing := effectiveWidth - titleWidth - hintWidth
+	if spacing < 1 {
+		spacing = 1
+	}
+
+	header := lipgloss.JoinHorizontal(lipgloss.Top,
+		title,
+		strings.Repeat(" ", spacing),
+		hint,
+	)
+
+	// Content height (account for header and status bar)
+	contentHeight := m.height - statusBarHeight(m.height) - 2 // -2 for header padding
+	if contentHeight < 1 {
+		contentHeight = 1
+	}
+
+	// Project info section
+	projectStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("252"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+
+	projectName := m.statsBreakdownProject.Name
+	if len(projectName) > effectiveWidth-15 {
+		projectName = projectName[:effectiveWidth-18] + "..."
+	}
+
+	var contentLines []string
+	contentLines = append(contentLines, "")
+	contentLines = append(contentLines, projectStyle.Render("Project: ")+projectName)
+	contentLines = append(contentLines, dimStyle.Render("Period: Last 30 days"))
+	contentLines = append(contentLines, "")
+	contentLines = append(contentLines, strings.Repeat("─", effectiveWidth))
+	contentLines = append(contentLines, "")
+	contentLines = append(contentLines, projectStyle.Render("Stage Breakdown:"))
+	contentLines = append(contentLines, "")
+
+	// Render breakdown or "no data" message
+	if len(m.statsBreakdownDurations) == 0 {
+		contentLines = append(contentLines, dimStyle.Render("  No stage data available"))
+	} else {
+		// Render breakdown bars
+		breakdownStr := statsview.RenderBreakdown(m.statsBreakdownDurations, effectiveWidth-4)
+		for _, line := range strings.Split(breakdownStr, "\n") {
+			contentLines = append(contentLines, "  "+line)
+		}
+
+		// Calculate and display total
+		contentLines = append(contentLines, "")
+		total := statsview.CalculateTotalDuration(m.statsBreakdownDurations)
+		totalStr := formatTotalDuration(total)
+		contentLines = append(contentLines, projectStyle.Render("Total: ")+totalStr)
+	}
+
+	contentLines = append(contentLines, "")
+	contentLines = append(contentLines, strings.Repeat("─", effectiveWidth))
+
+	// Fill remaining height with empty lines
+	for len(contentLines) < contentHeight {
+		contentLines = append(contentLines, "")
+	}
+
+	content := strings.Join(contentLines[:contentHeight], "\n")
+
+	// Combine header and content
+	statsContent := lipgloss.JoinVertical(lipgloss.Left, header, content)
+
+	// Add status bar
+	statusBar := m.statusBar.View()
+	combined := lipgloss.JoinVertical(lipgloss.Left, statsContent, statusBar)
+
+	// Center if wide width (AC5: responsive layout)
+	if m.isWideWidth() {
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Top, combined)
+	}
+	return combined
+}
+
+// formatTotalDuration formats total duration for display in breakdown view.
+func formatTotalDuration(d time.Duration) string {
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+
+	if days > 0 {
+		if hours > 0 {
+			return fmt.Sprintf("%dd %dh", days, hours)
+		}
+		return fmt.Sprintf("%dd", days)
+	}
+
+	if hours > 0 {
+		if minutes > 0 {
+			return fmt.Sprintf("%dh %dm", hours, minutes)
+		}
+		return fmt.Sprintf("%dh", hours)
+	}
+
+	if minutes > 0 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+
+	return "< 1m"
 }

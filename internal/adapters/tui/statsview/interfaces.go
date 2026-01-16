@@ -20,3 +20,12 @@ type MetricsReader interface {
 	// Returns empty slice on any error (graceful degradation).
 	GetTransitionTimestamps(ctx context.Context, projectID string, since time.Time) []Transition
 }
+
+// FullTransitionReader provides full transition data for breakdown calculation.
+// Extends MetricsReader with richer data needed for time-per-stage calculations.
+type FullTransitionReader interface {
+	MetricsReader
+	// GetFullTransitions retrieves full transition data for a project since given time.
+	// Returns empty slice on any error (graceful degradation).
+	GetFullTransitions(ctx context.Context, projectID string, since time.Time) []FullTransition
+}

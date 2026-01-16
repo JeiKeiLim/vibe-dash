@@ -174,3 +174,19 @@ func (r *MetricsRepository) GetTransitionTimestamps(ctx context.Context, project
 	}
 	return result
 }
+
+// GetFullTransitions retrieves full transition data for breakdown display.
+// Implements statsview.FullTransitionReader interface (Story 16.5).
+// Returns empty slice on any error (graceful degradation).
+func (r *MetricsRepository) GetFullTransitions(ctx context.Context, projectID string, since time.Time) []statsview.FullTransition {
+	transitions := r.GetTransitionsByProject(ctx, projectID, since)
+	result := make([]statsview.FullTransition, len(transitions))
+	for i, t := range transitions {
+		result[i] = statsview.FullTransition{
+			FromStage:      t.FromStage,
+			ToStage:        t.ToStage,
+			TransitionedAt: t.TransitionedAt,
+		}
+	}
+	return result
+}

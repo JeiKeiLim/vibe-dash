@@ -36,10 +36,12 @@ type metricsRecorderInterface interface {
 	OnDetection(ctx context.Context, projectID string, newStage domain.Stage)
 }
 
-// metricsReaderInterface defines the contract for reading metrics data for sparklines (Story 16.4).
+// metricsReaderInterface defines the contract for reading metrics data (Story 16.4, 16.5).
 // Used to decouple TUI from concrete metrics repository for testability.
+// Supports both sparklines (timestamps) and breakdown (full transitions).
 type metricsReaderInterface interface {
 	GetTransitionTimestamps(ctx context.Context, projectID string, since time.Time) []statsview.Transition
+	GetFullTransitions(ctx context.Context, projectID string, since time.Time) []statsview.FullTransition
 }
 
 // Model represents the main TUI application state.
@@ -185,6 +187,10 @@ type Model struct {
 
 	// Story 16.4: Metrics reader for stats view sparklines (optional, graceful nil)
 	metricsReader metricsReaderInterface
+
+	// Story 16.5: Stats View breakdown state
+	statsBreakdownProject   *domain.Project           // Currently selected project for breakdown (nil = list view)
+	statsBreakdownDurations []statsview.StageDuration // Cached durations for display
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -521,6 +527,22 @@ func (m Model) getProjectActivity(projectID string, buckets int) []int {
 		timestamps[i] = t.TransitionedAt
 	}
 	return statsview.BucketActivityCounts(timestamps, buckets, 30*24*time.Hour, now)
+}
+
+// getStageBreakdown fetches stage durations for a project (Story 16.5).
+// Returns nil if metricsReader is not available (graceful degradation).
+func (m Model) getStageBreakdown(projectID string) []statsview.StageDuration {
+	if m.metricsReader == nil {
+		return nil
+	}
+	ctx := context.Background()
+	now := time.Now()
+	since := now.Add(-30 * 24 * time.Hour) // Last 30 days
+	transitions := m.metricsReader.GetFullTransitions(ctx, projectID, since)
+	if len(transitions) == 0 {
+		return nil
+	}
+	return statsview.CalculateFromFullTransitions(transitions, now)
 }
 
 // shouldShowDetailPanelByDefault returns true if detail panel should be open by default
@@ -2805,17 +2827,46 @@ func (m Model) renderSessionPicker(width, height int) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
 }
 
-// Story 16.3: handleStatsViewKeyMsg handles keyboard input in Stats View.
+// Story 16.3/16.5: handleStatsViewKeyMsg handles keyboard input in Stats View.
+// Story 16.5: Supports breakdown sub-view with Enter to drill down, Esc to return.
 func (m Model) handleStatsViewKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case KeyEscape, KeyQuit:
+		// Story 16.5: If in breakdown view, return to project list
+		if m.statsBreakdownProject != nil {
+			m.statsBreakdownProject = nil
+			m.statsBreakdownDurations = nil
+			return m, nil
+		}
+		// Exit Stats View entirely (return to dashboard)
 		m.exitStatsView()
 		return m, nil
+	case "enter":
+		// Story 16.5: Enter breakdown view for selected project
+		if m.statsBreakdownProject == nil && len(m.projects) > 0 {
+			selectedIdx := m.statsViewScroll
+			if selectedIdx >= 0 && selectedIdx < len(m.projects) {
+				p := m.projects[selectedIdx]
+				m.statsBreakdownProject = p
+				m.statsBreakdownDurations = m.getStageBreakdown(p.Path)
+			}
+		}
+		return m, nil
 	case KeyDown, KeyDownArrow:
-		// Future story: scroll down
+		// Only scroll in project list view (not breakdown)
+		if m.statsBreakdownProject == nil && len(m.projects) > 0 {
+			if m.statsViewScroll < len(m.projects)-1 {
+				m.statsViewScroll++
+			}
+		}
 		return m, nil
 	case KeyUp, KeyUpArrow:
-		// Future story: scroll up
+		// Only scroll in project list view (not breakdown)
+		if m.statsBreakdownProject == nil {
+			if m.statsViewScroll > 0 {
+				m.statsViewScroll--
+			}
+		}
 		return m, nil
 	}
 	return m, nil
