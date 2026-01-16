@@ -29,9 +29,10 @@ If you're curious about BMAD or want to see what continuous AI-assisted developm
 
 - **Multi-Project Dashboard** — Track all your AI coding projects from one terminal
 - **Real-time Monitoring** — File watcher detects changes and updates the dashboard automatically
-- **Agent Waiting Detection** — Know instantly when your AI coding agent needs input
+- **Sub-1-Minute Agent Detection** — Know instantly when your AI agent needs input via Claude Code log parsing (high confidence) with file-activity fallback for other tools
+- **Detection Confidence Display** — See confidence levels (High/Medium/Low) for agent state detection
 - **Claude Code Log Viewer** — View and tail Claude Code session logs directly from the dashboard
-- **Methodology Support** — Built-in support for BMAD and Speckit workflows
+- **Methodology Coexistence Detection** — Warns when multiple methodologies (BMAD, Speckit) are detected; uses most-recent-artifact-wins for tie-breaking
 - **Project Hibernation** — Auto-hibernate inactive projects; auto-activate on file changes
 - **Favorites & Notes** — Star important projects and add personal notes
 - **Flexible Layouts** — Vertical (side-by-side) or horizontal (stacked) detail panel
@@ -120,10 +121,12 @@ vdash
 
 | Indicator | Meaning |
 |-----------|---------|
-| `WAITING` | AI agent is waiting for user input |
+| `WAITING` | AI agent is waiting for user input (detected via Claude Code logs or file activity) |
 | `2m ago` | Time since last file change |
 | `Active` | Recent activity detected |
 | `Hibernated` | Project is dormant (press `h` to view) |
+
+The detail panel shows detection confidence: **High** (from Claude Code logs), **Medium** (file activity patterns), or **Low** (threshold-based fallback).
 
 ## Keyboard Shortcuts
 
@@ -275,7 +278,7 @@ registry.Register(mydetector.NewMyDetector())
 
 ## Architecture
 
-vibe-dash follows hexagonal architecture (ports & adapters), established in Epic 1 and maintained consistently through 11 epics of development:
+vibe-dash follows hexagonal architecture (ports & adapters), established in Epic 1 and maintained consistently through 16 epics of development:
 
 ```
 internal/
@@ -348,4 +351,4 @@ Contributions are welcome! Please:
 
 ## License
 
-[MIT License](LICENSE) - Copyright (c) 2025 Jongkuk Lim
+[MIT License](LICENSE) - Copyright (c) 2025-2026 Jongkuk Lim
