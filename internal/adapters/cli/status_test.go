@@ -487,6 +487,10 @@ func TestStatus_AllFlag_Empty(t *testing.T) {
 	if !strings.Contains(output, "No projects tracked") {
 		t.Errorf("expected empty message, got: %s", output)
 	}
+	// Story 13.3 AC4: Suggestion should use dynamic binary name
+	if !strings.Contains(output, " add .'") {
+		t.Errorf("expected 'add .' suggestion, got: %s", output)
+	}
 }
 
 func TestStatus_AllFlag_JSON_Empty(t *testing.T) {

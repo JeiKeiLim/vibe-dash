@@ -246,7 +246,7 @@ func TestHibernateCmd_FavoriteProject_ReturnsError(t *testing.T) {
 	if !strings.Contains(output, "Cannot hibernate favorite") {
 		t.Errorf("expected favorite error message, got: %s", output)
 	}
-	if !strings.Contains(output, "vdash favorite test-project --off") {
+	if !strings.Contains(output, "favorite test-project --off") {
 		t.Errorf("expected hint about removing favorite, got: %s", output)
 	}
 }

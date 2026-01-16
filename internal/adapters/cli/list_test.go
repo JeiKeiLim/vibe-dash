@@ -241,8 +241,8 @@ func TestList_EmptyList_PlainText(t *testing.T) {
 	if !strings.Contains(output, "No projects tracked") {
 		t.Errorf("expected empty message, got: %s", output)
 	}
-	if !strings.Contains(output, "vdash add") {
-		t.Errorf("expected add command hint, got: %s", output)
+	if !strings.Contains(output, " add .'") {
+		t.Errorf("expected 'add .' suggestion, got: %s", output)
 	}
 }
 

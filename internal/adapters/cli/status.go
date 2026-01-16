@@ -143,7 +143,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 		// Plain text output
 		if len(projects) == 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "No projects tracked. Run 'vdash add .' to add one.\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "No projects tracked. Run '%s add .' to add one.\n", BinaryName())
 			return nil
 		}
 

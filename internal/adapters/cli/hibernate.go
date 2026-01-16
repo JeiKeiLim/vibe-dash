@@ -83,7 +83,7 @@ func runHibernate(cmd *cobra.Command, args []string) error {
 			cmd.SilenceErrors = true
 			cmd.SilenceUsage = true
 			fmt.Fprintf(cmd.OutOrStdout(), "Cannot hibernate favorite project: %s\n", identifier)
-			fmt.Fprintf(cmd.OutOrStdout(), "Remove favorite status first with: vdash favorite %s --off\n", identifier)
+			fmt.Fprintf(cmd.OutOrStdout(), "Remove favorite status first with: %s favorite %s --off\n", BinaryName(), identifier)
 			return err
 		}
 		return fmt.Errorf("failed to hibernate project: %w", err)
