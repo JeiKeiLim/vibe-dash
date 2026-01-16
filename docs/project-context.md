@@ -272,16 +272,17 @@ assistant + stop_reason: "tool_use"  → WORKING
 - `internal/adapters/persistence/metrics/` - metrics.db access
 - `internal/adapters/tui/statsview/` - Dedicated TUI view
 
-**Schema Addition:**
+**Schema Addition (in separate metrics.db):**
 ```sql
 CREATE TABLE stage_transitions (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
     from_stage TEXT NOT NULL,
     to_stage TEXT NOT NULL,
-    transitioned_at TEXT NOT NULL,
-    FOREIGN KEY(project_id) REFERENCES projects(id)
+    transitioned_at TEXT NOT NULL
 );
+-- Note: No FK to projects - metrics.db is separate from state.db
+-- project_id is a string identifier (path hash), not a cross-DB reference
 ```
 
 **TUI Entry:** `'s'` key from Dashboard → Stats View → `Esc`/`'q'` back
