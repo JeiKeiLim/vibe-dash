@@ -11,6 +11,7 @@ package detectors
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
@@ -85,4 +86,47 @@ func (r *Registry) DetectAll(ctx context.Context, path string) (*domain.Detectio
 		reasoning,
 	)
 	return &result, nil
+}
+
+// DetectWithCoexistence runs ALL registered detectors and returns all matches.
+// Unlike DetectAll which returns first match, this method collects all results
+// for methodology coexistence evaluation.
+// Returns empty slice if no detectors match (not an error).
+func (r *Registry) DetectWithCoexistence(ctx context.Context, path string) ([]*domain.DetectionResult, error) {
+	// Check context at entry
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	// Initialize as empty slice (not nil) to ensure consistent return value
+	results := make([]*domain.DetectionResult, 0)
+
+	for _, detector := range r.detectors {
+		// Check context before each detector
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		if detector.CanDetect(ctx, path) {
+			result, err := detector.Detect(ctx, path)
+			if err != nil {
+				// Log detector errors but continue to next detector (resilient design)
+				slog.Debug("detector error during coexistence detection",
+					"detector", detector.Name(),
+					"path", path,
+					"error", err,
+				)
+				continue
+			}
+			if result != nil {
+				results = append(results, result)
+			}
+		}
+	}
+
+	return results, nil
 }

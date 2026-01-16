@@ -270,3 +270,187 @@ func TestRegistry_WithRealDetector(t *testing.T) {
 	// Verify interface compliance
 	var _ ports.MethodDetector = r.Detectors()[0]
 }
+
+// ============================================================================
+// DetectWithCoexistence Tests
+// ============================================================================
+
+func TestRegistry_DetectWithCoexistence_MultipleMethods(t *testing.T) {
+	r := detectors.NewRegistry()
+	ctx := context.Background()
+
+	result1 := domain.NewDetectionResult("speckit", domain.StageSpecify, domain.ConfidenceCertain, "spec.md exists")
+	result2 := domain.NewDetectionResult("bmad", domain.StageTasks, domain.ConfidenceCertain, "sprint-status.yaml exists")
+
+	detector1 := &mockDetector{name: "speckit", canDetect: true, result: &result1}
+	detector2 := &mockDetector{name: "bmad", canDetect: true, result: &result2}
+
+	r.Register(detector1)
+	r.Register(detector2)
+
+	results, err := r.DetectWithCoexistence(ctx, "/some/path")
+	if err != nil {
+		t.Fatalf("DetectWithCoexistence() error = %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Errorf("DetectWithCoexistence() returned %d results, want 2", len(results))
+	}
+	// Verify results are returned in registration order
+	if results[0].Method != "speckit" {
+		t.Errorf("DetectWithCoexistence()[0].Method = %q, want %q", results[0].Method, "speckit")
+	}
+	if results[1].Method != "bmad" {
+		t.Errorf("DetectWithCoexistence()[1].Method = %q, want %q", results[1].Method, "bmad")
+	}
+	// Both detectors should have been called
+	if detector1.detectCalls != 1 {
+		t.Errorf("First detector called %d times, want 1", detector1.detectCalls)
+	}
+	if detector2.detectCalls != 1 {
+		t.Errorf("Second detector called %d times, want 1", detector2.detectCalls)
+	}
+}
+
+func TestRegistry_DetectWithCoexistence_SingleMatch(t *testing.T) {
+	r := detectors.NewRegistry()
+	ctx := context.Background()
+
+	result1 := domain.NewDetectionResult("speckit", domain.StageSpecify, domain.ConfidenceCertain, "spec.md exists")
+
+	detector1 := &mockDetector{name: "speckit", canDetect: true, result: &result1}
+	detector2 := &mockDetector{name: "bmad", canDetect: false}
+
+	r.Register(detector1)
+	r.Register(detector2)
+
+	results, err := r.DetectWithCoexistence(ctx, "/some/path")
+	if err != nil {
+		t.Fatalf("DetectWithCoexistence() error = %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Errorf("DetectWithCoexistence() returned %d results, want 1", len(results))
+	}
+	if results[0].Method != "speckit" {
+		t.Errorf("DetectWithCoexistence()[0].Method = %q, want %q", results[0].Method, "speckit")
+	}
+}
+
+func TestRegistry_DetectWithCoexistence_NoMatchReturnsEmptySlice(t *testing.T) {
+	r := detectors.NewRegistry()
+	ctx := context.Background()
+
+	detector1 := &mockDetector{name: "speckit", canDetect: false}
+	detector2 := &mockDetector{name: "bmad", canDetect: false}
+
+	r.Register(detector1)
+	r.Register(detector2)
+
+	results, err := r.DetectWithCoexistence(ctx, "/some/path")
+	if err != nil {
+		t.Fatalf("DetectWithCoexistence() error = %v", err)
+	}
+
+	if results == nil {
+		t.Error("DetectWithCoexistence() returned nil, want empty slice")
+	}
+	if len(results) != 0 {
+		t.Errorf("DetectWithCoexistence() returned %d results, want 0", len(results))
+	}
+}
+
+func TestRegistry_DetectWithCoexistence_ContextCancellation(t *testing.T) {
+	r := detectors.NewRegistry()
+
+	detector := &mockDetector{name: "first", canDetect: true}
+	r.Register(detector)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	_, err := r.DetectWithCoexistence(ctx, "/some/path")
+	if err != context.Canceled {
+		t.Errorf("DetectWithCoexistence() with cancelled context should return context.Canceled, got %v", err)
+	}
+}
+
+func TestRegistry_DetectWithCoexistence_ErrorHandling(t *testing.T) {
+	r := detectors.NewRegistry()
+	ctx := context.Background()
+
+	result2 := domain.NewDetectionResult("bmad", domain.StageTasks, domain.ConfidenceCertain, "sprint-status.yaml exists")
+
+	// First detector returns error
+	detector1 := &mockDetector{name: "speckit", canDetect: true, detectErr: errors.New("file read error")}
+	// Second detector succeeds
+	detector2 := &mockDetector{name: "bmad", canDetect: true, result: &result2}
+
+	r.Register(detector1)
+	r.Register(detector2)
+
+	results, err := r.DetectWithCoexistence(ctx, "/some/path")
+	if err != nil {
+		t.Fatalf("DetectWithCoexistence() should not return error, got %v", err)
+	}
+
+	// Should continue and return the successful result
+	if len(results) != 1 {
+		t.Errorf("DetectWithCoexistence() returned %d results, want 1", len(results))
+	}
+	if results[0].Method != "bmad" {
+		t.Errorf("DetectWithCoexistence()[0].Method = %q, want %q", results[0].Method, "bmad")
+	}
+	// Both detectors should have been called
+	if detector1.detectCalls != 1 {
+		t.Errorf("First detector called %d times, want 1", detector1.detectCalls)
+	}
+	if detector2.detectCalls != 1 {
+		t.Errorf("Second detector called %d times, want 1", detector2.detectCalls)
+	}
+}
+
+func TestRegistry_DetectWithCoexistence_NilResultHandling(t *testing.T) {
+	r := detectors.NewRegistry()
+	ctx := context.Background()
+
+	result2 := domain.NewDetectionResult("bmad", domain.StageTasks, domain.ConfidenceCertain, "sprint-status.yaml exists")
+
+	// First detector returns nil result (no error)
+	detector1 := &mockDetector{name: "speckit", canDetect: true, result: nil}
+	// Second detector succeeds
+	detector2 := &mockDetector{name: "bmad", canDetect: true, result: &result2}
+
+	r.Register(detector1)
+	r.Register(detector2)
+
+	results, err := r.DetectWithCoexistence(ctx, "/some/path")
+	if err != nil {
+		t.Fatalf("DetectWithCoexistence() error = %v", err)
+	}
+
+	// Should skip nil result and return only the successful one
+	if len(results) != 1 {
+		t.Errorf("DetectWithCoexistence() returned %d results, want 1", len(results))
+	}
+	if results[0].Method != "bmad" {
+		t.Errorf("DetectWithCoexistence()[0].Method = %q, want %q", results[0].Method, "bmad")
+	}
+}
+
+func TestRegistry_DetectWithCoexistence_EmptyRegistry(t *testing.T) {
+	r := detectors.NewRegistry()
+	ctx := context.Background()
+
+	results, err := r.DetectWithCoexistence(ctx, "/some/path")
+	if err != nil {
+		t.Fatalf("DetectWithCoexistence() error = %v", err)
+	}
+
+	if results == nil {
+		t.Error("DetectWithCoexistence() returned nil, want empty slice")
+	}
+	if len(results) != 0 {
+		t.Errorf("DetectWithCoexistence() returned %d results, want 0", len(results))
+	}
+}

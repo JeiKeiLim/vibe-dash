@@ -36,6 +36,12 @@ type DetectorRegistry interface {
 	// Returns a result with Method="unknown" if no detector matches.
 	DetectAll(ctx context.Context, path string) (*domain.DetectionResult, error)
 
+	// DetectWithCoexistence runs ALL registered detectors and returns all matches.
+	// Unlike DetectAll which returns first match, this method collects all results
+	// for methodology coexistence evaluation.
+	// Returns empty slice if no detectors match (not an error).
+	DetectWithCoexistence(ctx context.Context, path string) ([]*domain.DetectionResult, error)
+
 	// Detectors returns all registered detectors for multi-methodology detection.
 	Detectors() []MethodDetector
 }

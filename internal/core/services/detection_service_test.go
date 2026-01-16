@@ -32,6 +32,25 @@ func (m *mockRegistry) Detectors() []ports.MethodDetector {
 	return m.detectors
 }
 
+func (m *mockRegistry) DetectWithCoexistence(ctx context.Context, path string) ([]*domain.DetectionResult, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	// Return results based on detectors that can detect
+	var results []*domain.DetectionResult
+	for _, d := range m.detectors {
+		if d.CanDetect(ctx, path) {
+			result, err := d.Detect(ctx, path)
+			if err == nil && result != nil {
+				results = append(results, result)
+			}
+		}
+	}
+	return results, nil
+}
+
 // mockDetector implements ports.MethodDetector for testing DetectMultiple
 type mockDetector struct {
 	name         string
