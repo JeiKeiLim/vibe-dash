@@ -65,6 +65,11 @@ func TestRenderHelpOverlay_ContainsViewShortcuts(t *testing.T) {
 	if !strings.Contains(result, "h        View hibernated") {
 		t.Error("Expected help overlay to contain 'h        View hibernated' key binding")
 	}
+
+	// Story 16.7: Check for 's' stats shortcut in Views section
+	if !strings.Contains(result, "s        View stats") {
+		t.Error("Expected help overlay to contain 's        View stats' key binding")
+	}
 }
 
 func TestRenderHelpOverlay_ContainsGeneralShortcuts(t *testing.T) {
