@@ -137,6 +137,13 @@ func TestDetectionResult_ZeroValue(t *testing.T) {
 	if !dr.ArtifactTimestamp.IsZero() {
 		t.Errorf("Zero value ArtifactTimestamp = %v, want zero time", dr.ArtifactTimestamp)
 	}
+	// Story 14.4: Zero value should have no coexistence warning
+	if dr.CoexistenceWarning {
+		t.Errorf("Zero value CoexistenceWarning = %v, want false", dr.CoexistenceWarning)
+	}
+	if dr.CoexistenceMessage != "" {
+		t.Errorf("Zero value CoexistenceMessage = %q, want empty string", dr.CoexistenceMessage)
+	}
 }
 
 func TestDetectionResult_WithTimestamp(t *testing.T) {
@@ -264,5 +271,71 @@ func TestDetectionResult_WithTimestamp_Chaining(t *testing.T) {
 	// Original should be unchanged
 	if !dr.ArtifactTimestamp.IsZero() {
 		t.Errorf("Original ArtifactTimestamp = %v, want zero time", dr.ArtifactTimestamp)
+	}
+}
+
+func TestDetectionResult_CoexistenceWarning(t *testing.T) {
+	tests := []struct {
+		name         string
+		applyWarning bool
+		wantWarning  bool
+		wantMessage  string
+	}{
+		{
+			name:         "default has no warning",
+			applyWarning: false,
+			wantWarning:  false,
+			wantMessage:  "",
+		},
+		{
+			name:         "with warning sets flag and message",
+			applyWarning: true,
+			wantWarning:  true,
+			wantMessage:  "test message",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := NewDetectionResult("speckit", StagePlan, ConfidenceCertain, "test")
+			if tt.applyWarning {
+				r = r.WithCoexistenceWarning("test message")
+			}
+
+			if r.HasCoexistenceWarning() != tt.wantWarning {
+				t.Errorf("HasCoexistenceWarning() = %v, want %v", r.HasCoexistenceWarning(), tt.wantWarning)
+			}
+			if r.CoexistenceMessage != tt.wantMessage {
+				t.Errorf("CoexistenceMessage = %q, want %q", r.CoexistenceMessage, tt.wantMessage)
+			}
+		})
+	}
+}
+
+func TestDetectionResult_CoexistenceWarning_PreservesOtherFields(t *testing.T) {
+	timestamp := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+	original := NewDetectionResult("bmad", StageTasks, ConfidenceLikely, "found .bmad").WithTimestamp(timestamp)
+	modified := original.WithCoexistenceWarning("test")
+
+	// Verify original unchanged
+	if original.CoexistenceWarning {
+		t.Error("original should not be modified")
+	}
+
+	// Verify ALL fields preserved
+	if modified.Method != "bmad" {
+		t.Errorf("Method = %q, want %q", modified.Method, "bmad")
+	}
+	if modified.Stage != StageTasks {
+		t.Errorf("Stage = %v, want %v", modified.Stage, StageTasks)
+	}
+	if modified.Confidence != ConfidenceLikely {
+		t.Errorf("Confidence = %v, want %v", modified.Confidence, ConfidenceLikely)
+	}
+	if modified.Reasoning != "found .bmad" {
+		t.Errorf("Reasoning = %q, want %q", modified.Reasoning, "found .bmad")
+	}
+	if !modified.ArtifactTimestamp.Equal(timestamp) {
+		t.Errorf("ArtifactTimestamp = %v, want %v", modified.ArtifactTimestamp, timestamp)
 	}
 }

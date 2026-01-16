@@ -574,3 +574,105 @@ func TestDetectionService_DetectWithCoexistenceSelection_RegistryError(t *testin
 		t.Errorf("expected ErrDetectionFailed wrapper, got %v", err)
 	}
 }
+
+// Story 14.4 Tests: Coexistence Warning
+func TestDetectionService_DetectWithCoexistenceSelection_CoexistenceWarning(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name             string
+		mockResults      []*domain.DetectionResult
+		wantWarningOnAll bool
+		wantMessage      string
+	}{
+		{
+			name: "tie case - warning set on all results",
+			mockResults: []*domain.DetectionResult{
+				createTestResultWithTimestamp("speckit", now.Add(-30*time.Minute)),
+				createTestResultWithTimestamp("bmad", now.Add(-45*time.Minute)),
+			},
+			wantWarningOnAll: true,
+			wantMessage:      services.CoexistenceWarningMessage,
+		},
+		{
+			name: "exact 1 hour boundary - warning set (AC6 inclusive)",
+			mockResults: []*domain.DetectionResult{
+				createTestResultWithTimestamp("speckit", now),
+				createTestResultWithTimestamp("bmad", now.Add(-1*time.Hour)),
+			},
+			wantWarningOnAll: true,
+			wantMessage:      services.CoexistenceWarningMessage,
+		},
+		{
+			name: "clear winner (>1hr diff) - no warning",
+			mockResults: []*domain.DetectionResult{
+				createTestResultWithTimestamp("speckit", now.Add(-7*24*time.Hour)),
+				createTestResultWithTimestamp("bmad", now),
+			},
+			wantWarningOnAll: false,
+		},
+		{
+			name: "single result - no warning",
+			mockResults: []*domain.DetectionResult{
+				createTestResultWithTimestamp("speckit", now),
+			},
+			wantWarningOnAll: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry := &mockRegistry{
+				detectWithCoexistenceResults:    tt.mockResults,
+				detectWithCoexistenceResultsSet: true,
+			}
+			svc := services.NewDetectionService(registry)
+
+			winner, all, err := svc.DetectWithCoexistenceSelection(context.Background(), "/test")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if tt.wantWarningOnAll {
+				// Tie case: winner should be nil, all results should have warning
+				if winner != nil {
+					t.Errorf("expected nil winner for tie case, got %v", winner)
+				}
+				for i, r := range all {
+					if !r.HasCoexistenceWarning() {
+						t.Errorf("result[%d] should have CoexistenceWarning=true", i)
+					}
+					if r.CoexistenceMessage != tt.wantMessage {
+						t.Errorf("result[%d].CoexistenceMessage = %q, want %q", i, r.CoexistenceMessage, tt.wantMessage)
+					}
+				}
+			} else {
+				// Clear winner or single: check no warning on winner
+				if winner != nil && winner.HasCoexistenceWarning() {
+					t.Error("winner should not have coexistence warning")
+				}
+			}
+		})
+	}
+}
+
+func TestDetectionService_DetectWithCoexistenceSelection_UnknownHasNoWarning(t *testing.T) {
+	// AC5: No methodologies returns unknown with CoexistenceWarning=false
+	mock := &mockRegistry{
+		detectWithCoexistenceResults:    []*domain.DetectionResult{},
+		detectWithCoexistenceResultsSet: true,
+	}
+	svc := services.NewDetectionService(mock)
+
+	winner, _, err := svc.DetectWithCoexistenceSelection(context.Background(), "/test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if winner == nil {
+		t.Fatal("expected unknown result, got nil")
+	}
+	if winner.HasCoexistenceWarning() {
+		t.Error("unknown result should not have coexistence warning (AC5)")
+	}
+}

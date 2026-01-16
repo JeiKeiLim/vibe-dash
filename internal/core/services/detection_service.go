@@ -14,6 +14,10 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 )
 
+// CoexistenceWarningMessage is the standard message shown when methodologies have similar timestamps.
+// Exported for use by TUI layer in Story 14.5.
+const CoexistenceWarningMessage = "Multiple methodologies detected with similar activity"
+
 // DetectionService orchestrates methodology detection across registered detectors.
 // It provides the core business logic for workflow detection.
 //
@@ -158,6 +162,13 @@ func (s *DetectionService) DetectWithCoexistenceSelection(ctx context.Context, p
 		return winner, results, nil
 	}
 
-	// Tie - return all results for caller to handle coexistence display
-	return nil, results, nil
+	// Tie case: Set coexistence warning on all results
+	warningResults := make([]*domain.DetectionResult, len(results))
+	for i, r := range results {
+		modified := r.WithCoexistenceWarning(CoexistenceWarningMessage)
+		warningResults[i] = &modified
+	}
+
+	// Tie - return all results with warning for caller to handle coexistence display
+	return nil, warningResults, nil
 }

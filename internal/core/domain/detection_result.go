@@ -7,11 +7,13 @@ import (
 
 // DetectionResult represents the result of detecting a project's workflow methodology and stage
 type DetectionResult struct {
-	Method            string     // "speckit", "bmad", "unknown"
-	Stage             Stage      // Detected stage
-	Confidence        Confidence // How certain the detection is
-	Reasoning         string     // Human-readable explanation (FR11, FR26)
-	ArtifactTimestamp time.Time  // Most recent artifact modification time (zero if unknown)
+	Method             string     // "speckit", "bmad", "unknown"
+	Stage              Stage      // Detected stage
+	Confidence         Confidence // How certain the detection is
+	Reasoning          string     // Human-readable explanation (FR11, FR26)
+	ArtifactTimestamp  time.Time  // Most recent artifact modification time (zero if unknown)
+	CoexistenceWarning bool       // True when multiple methodologies have similar timestamps
+	CoexistenceMessage string     // Warning message for TUI display
 }
 
 // NewDetectionResult creates a new DetectionResult with the given values
@@ -53,4 +55,18 @@ func (dr DetectionResult) WithTimestamp(t time.Time) DetectionResult {
 // HasTimestamp returns true if the DetectionResult has a non-zero ArtifactTimestamp
 func (dr DetectionResult) HasTimestamp() bool {
 	return !dr.ArtifactTimestamp.IsZero()
+}
+
+// WithCoexistenceWarning returns a copy with coexistence warning set.
+// Used by DetectionService when tie-breaker can't determine clear winner.
+func (dr DetectionResult) WithCoexistenceWarning(msg string) DetectionResult {
+	dr.CoexistenceWarning = true
+	dr.CoexistenceMessage = msg
+	return dr
+}
+
+// HasCoexistenceWarning returns true if coexistence warning is set.
+// Used by TUI (Story 14.5) to determine if warning should be displayed.
+func (dr DetectionResult) HasCoexistenceWarning() bool {
+	return dr.CoexistenceWarning
 }
