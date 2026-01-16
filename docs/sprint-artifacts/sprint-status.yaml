@@ -356,7 +356,9 @@ development_status:
   15-5-implement-generic-file-activity-fallback-detector: done
   15-6-integrate-agent-detection-into-tui-dashboard: done
   15-7-display-confidence-level-in-detail-panel: done
-  epic-15-retrospective: optional
+  # 2026-01-16: Retrospective complete. Detection bug discovered (RETRO-15-001).
+  # Epic stays in-progress until bug is fixed. See epic-15-retro-2026-01-16.md
+  epic-15-retrospective: done
 
   # Epic 16: Progress Metrics & Stats View - PHASE 2 (Experimental, Should Ship)
   # FR Coverage: FR-P2-12, FR-P2-13, FR-P2-14, FR-P2-15, FR-P2-16, FR-P2-17, FR-P2-18

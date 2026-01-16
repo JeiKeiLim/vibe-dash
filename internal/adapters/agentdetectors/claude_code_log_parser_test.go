@@ -78,9 +78,20 @@ func TestClaudeLogEntry_IsEndTurn(t *testing.T) {
 		entry    ClaudeLogEntry
 		expected bool
 	}{
-		{"end_turn stop", ClaudeLogEntry{StopReason: "end_turn"}, true},
-		{"tool_use stop", ClaudeLogEntry{StopReason: "tool_use"}, false},
-		{"empty stop", ClaudeLogEntry{StopReason: ""}, false},
+		// v2.1.7 format (stop_reason)
+		{"v2.1.7: end_turn stop", ClaudeLogEntry{StopReason: "end_turn"}, true},
+		{"v2.1.7: tool_use stop", ClaudeLogEntry{StopReason: "tool_use"}, false},
+		{"v2.1.7: empty stop", ClaudeLogEntry{StopReason: ""}, false},
+		// v2.1.9+ format (ContentTypes)
+		{"v2.1.9: text only", ClaudeLogEntry{ContentTypes: []string{"text"}}, true},
+		{"v2.1.9: thinking then text", ClaudeLogEntry{ContentTypes: []string{"thinking", "text"}}, true},
+		{"v2.1.9: tool_use", ClaudeLogEntry{ContentTypes: []string{"tool_use"}}, false},
+		{"v2.1.9: text and tool_use", ClaudeLogEntry{ContentTypes: []string{"text", "tool_use"}}, false},
+		{"v2.1.9: thinking only", ClaudeLogEntry{ContentTypes: []string{"thinking"}}, false},
+		{"v2.1.9: empty content types", ClaudeLogEntry{ContentTypes: []string{}}, false},
+		// Both formats (v2.1.7 takes precedence)
+		{"both: end_turn with text", ClaudeLogEntry{StopReason: "end_turn", ContentTypes: []string{"text"}}, true},
+		{"both: tool_use with text", ClaudeLogEntry{StopReason: "tool_use", ContentTypes: []string{"text"}}, false},
 	}
 
 	for _, tt := range tests {
@@ -98,9 +109,19 @@ func TestClaudeLogEntry_IsToolUse(t *testing.T) {
 		entry    ClaudeLogEntry
 		expected bool
 	}{
-		{"tool_use stop", ClaudeLogEntry{StopReason: "tool_use"}, true},
-		{"end_turn stop", ClaudeLogEntry{StopReason: "end_turn"}, false},
-		{"empty stop", ClaudeLogEntry{StopReason: ""}, false},
+		// v2.1.7 format (stop_reason)
+		{"v2.1.7: tool_use stop", ClaudeLogEntry{StopReason: "tool_use"}, true},
+		{"v2.1.7: end_turn stop", ClaudeLogEntry{StopReason: "end_turn"}, false},
+		{"v2.1.7: empty stop", ClaudeLogEntry{StopReason: ""}, false},
+		// v2.1.9+ format (ContentTypes)
+		{"v2.1.9: tool_use content", ClaudeLogEntry{ContentTypes: []string{"tool_use"}}, true},
+		{"v2.1.9: thinking then tool_use", ClaudeLogEntry{ContentTypes: []string{"thinking", "tool_use"}}, true},
+		{"v2.1.9: text only", ClaudeLogEntry{ContentTypes: []string{"text"}}, false},
+		{"v2.1.9: thinking only", ClaudeLogEntry{ContentTypes: []string{"thinking"}}, false},
+		{"v2.1.9: empty content types", ClaudeLogEntry{ContentTypes: []string{}}, false},
+		// Both formats (v2.1.7 takes precedence)
+		{"both: tool_use stop with text content", ClaudeLogEntry{StopReason: "tool_use", ContentTypes: []string{"text"}}, true},
+		{"both: end_turn stop with tool_use content", ClaudeLogEntry{StopReason: "end_turn", ContentTypes: []string{"tool_use"}}, false},
 	}
 
 	for _, tt := range tests {
@@ -531,6 +552,97 @@ func TestTypeInference_FromMessageRole(t *testing.T) {
 	}
 	if entry.Type != "assistant" {
 		t.Errorf("expected type=assistant (inferred from message.role), got %s", entry.Type)
+	}
+}
+
+// =============================================================================
+// Task 5: v2.1.9+ ContentTypes extraction tests
+// =============================================================================
+
+func TestContentTypes_V219Format(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "session.jsonl")
+
+	// v2.1.9 format: stop_reason is null, content types in message.content[].type
+	content := `{"type":"assistant","message":{"role":"assistant","stop_reason":null,"content":[{"type":"tool_use","id":"toolu_123","name":"Bash"}]},"timestamp":"2026-01-16T10:00:00Z"}
+`
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	parser := NewClaudeCodeLogParser()
+	entry, err := parser.ParseLastAssistantEntry(context.Background(), filePath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if entry == nil {
+		t.Fatal("expected entry, got nil")
+	}
+	if len(entry.ContentTypes) != 1 || entry.ContentTypes[0] != "tool_use" {
+		t.Errorf("expected ContentTypes=[tool_use], got %v", entry.ContentTypes)
+	}
+	if !entry.IsToolUse() {
+		t.Error("expected IsToolUse()=true for v2.1.9 format with tool_use content")
+	}
+}
+
+func TestContentTypes_V219Format_TextOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "session.jsonl")
+
+	// v2.1.9 format: text content only = end turn (waiting for user)
+	content := `{"type":"assistant","message":{"role":"assistant","stop_reason":null,"content":[{"type":"text","text":"Here is my response"}]},"timestamp":"2026-01-16T10:00:00Z"}
+`
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	parser := NewClaudeCodeLogParser()
+	entry, err := parser.ParseLastAssistantEntry(context.Background(), filePath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if entry == nil {
+		t.Fatal("expected entry, got nil")
+	}
+	if len(entry.ContentTypes) != 1 || entry.ContentTypes[0] != "text" {
+		t.Errorf("expected ContentTypes=[text], got %v", entry.ContentTypes)
+	}
+	if !entry.IsEndTurn() {
+		t.Error("expected IsEndTurn()=true for v2.1.9 format with text-only content")
+	}
+	if entry.IsToolUse() {
+		t.Error("expected IsToolUse()=false for v2.1.9 format with text-only content")
+	}
+}
+
+func TestContentTypes_V219Format_MultipleContents(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "session.jsonl")
+
+	// v2.1.9 format: thinking + tool_use = working
+	content := `{"type":"assistant","message":{"role":"assistant","stop_reason":null,"content":[{"type":"thinking","thinking":"Let me think..."},{"type":"tool_use","id":"toolu_123","name":"Read"}]},"timestamp":"2026-01-16T10:00:00Z"}
+`
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	parser := NewClaudeCodeLogParser()
+	entry, err := parser.ParseLastAssistantEntry(context.Background(), filePath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if entry == nil {
+		t.Fatal("expected entry, got nil")
+	}
+	if len(entry.ContentTypes) != 2 {
+		t.Errorf("expected 2 ContentTypes, got %v", entry.ContentTypes)
+	}
+	if !entry.IsToolUse() {
+		t.Error("expected IsToolUse()=true for v2.1.9 format with tool_use in content")
+	}
+	if entry.IsEndTurn() {
+		t.Error("expected IsEndTurn()=false for v2.1.9 format with tool_use in content")
 	}
 }
 

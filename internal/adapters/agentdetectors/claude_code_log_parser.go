@@ -21,10 +21,11 @@ const (
 
 // ClaudeLogEntry represents a parsed log entry from Claude Code JSONL logs.
 type ClaudeLogEntry struct {
-	Type       string    // "user", "assistant", "system", "summary"
-	StopReason string    // "end_turn", "tool_use", etc. (only for assistant)
-	Timestamp  time.Time // Entry timestamp (supports RFC3339 and RFC3339Nano)
-	RawJSON    []byte    // Original JSON for debugging/troubleshooting
+	Type         string    // "user", "assistant", "system", "summary"
+	StopReason   string    // "end_turn", "tool_use", etc. (only for assistant, v2.1.7 format)
+	ContentTypes []string  // Content types from message.content[].type (v2.1.9+ format)
+	Timestamp    time.Time // Entry timestamp (supports RFC3339 and RFC3339Nano)
+	RawJSON      []byte    // Original JSON for debugging/troubleshooting
 }
 
 // IsAssistant returns true if this is an assistant message entry.
@@ -33,13 +34,47 @@ func (e ClaudeLogEntry) IsAssistant() bool {
 }
 
 // IsEndTurn returns true if the assistant completed and is waiting for user.
+// Supports both v2.1.7 format (stop_reason: "end_turn") and v2.1.9+ format
+// (content contains only "text", no "tool_use").
 func (e ClaudeLogEntry) IsEndTurn() bool {
-	return e.StopReason == "end_turn"
+	// v2.1.7 format: explicit stop_reason takes precedence
+	if e.StopReason != "" {
+		return e.StopReason == "end_turn"
+	}
+	// v2.1.9+ format: check content types (only when stop_reason is empty/null)
+	// End turn = has text content but no tool_use (assistant finished responding)
+	if len(e.ContentTypes) > 0 {
+		hasText := false
+		hasToolUse := false
+		for _, ct := range e.ContentTypes {
+			if ct == "text" {
+				hasText = true
+			}
+			if ct == "tool_use" {
+				hasToolUse = true
+			}
+		}
+		// End turn: has text, no tool_use pending
+		return hasText && !hasToolUse
+	}
+	return false
 }
 
 // IsToolUse returns true if the assistant is actively using tools (working).
+// Supports both v2.1.7 format (stop_reason: "tool_use") and v2.1.9+ format
+// (content contains "tool_use").
 func (e ClaudeLogEntry) IsToolUse() bool {
-	return e.StopReason == "tool_use"
+	// v2.1.7 format: explicit stop_reason takes precedence
+	if e.StopReason != "" {
+		return e.StopReason == "tool_use"
+	}
+	// v2.1.9+ format: check content types (only when stop_reason is empty/null)
+	for _, ct := range e.ContentTypes {
+		if ct == "tool_use" {
+			return true
+		}
+	}
+	return false
 }
 
 // ClaudeCodeLogParser parses Claude Code JSONL log files with tail optimization.
@@ -329,12 +364,25 @@ func (p *ClaudeCodeLogParser) parseLine(line []byte) (ClaudeLogEntry, error) {
 		}
 	}
 
-	// Extract stop_reason (check both locations)
+	// Extract stop_reason (check both locations) - v2.1.7 format
 	if sr, ok := raw["stop_reason"].(string); ok {
 		entry.StopReason = sr
 	} else if msg, ok := raw["message"].(map[string]interface{}); ok {
 		if sr, ok := msg["stop_reason"].(string); ok {
 			entry.StopReason = sr
+		}
+	}
+
+	// Extract content types from message.content[].type - v2.1.9+ format
+	if msg, ok := raw["message"].(map[string]interface{}); ok {
+		if content, ok := msg["content"].([]interface{}); ok {
+			for _, c := range content {
+				if contentMap, ok := c.(map[string]interface{}); ok {
+					if ct, ok := contentMap["type"].(string); ok {
+						entry.ContentTypes = append(entry.ContentTypes, ct)
+					}
+				}
+			}
 		}
 	}
 
