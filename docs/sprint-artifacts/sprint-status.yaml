@@ -351,7 +351,7 @@ development_status:
   epic-15: in-progress
   15-1-define-agentactivitydetector-interface-and-types: done
   15-2-implement-claude-code-project-path-matcher: done
-  15-3-implement-claude-code-jsonl-log-parser: backlog
+  15-3-implement-claude-code-jsonl-log-parser: done
   15-4-implement-agent-state-detection-logic: backlog
   15-5-implement-generic-file-activity-fallback-detector: backlog
   15-6-integrate-agent-detection-into-tui-dashboard: backlog

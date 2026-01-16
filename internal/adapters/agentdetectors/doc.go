@@ -6,7 +6,8 @@
 // various AI agent states (working, waiting, idle).
 //
 // Implementations:
-//   - ClaudeCodePathMatcher: Matches project paths to Claude Code log directories
-//   - ClaudeCodeDetector (Story 15.3): Parses Claude Code JSONL logs (planned)
+//   - ClaudeCodePathMatcher (Story 15.2): Matches project paths to Claude Code log directories
+//   - ClaudeCodeLogParser (Story 15.3): Parses Claude Code JSONL logs with tail optimization
+//   - ClaudeCodeDetector (Story 15.4): Implements AgentActivityDetector using PathMatcher + LogParser (planned)
 //   - GenericDetector (Story 15.5): File activity fallback for unknown agents (planned)
 package agentdetectors
