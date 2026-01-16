@@ -32,11 +32,19 @@ func TestVersionTemplateFormat(t *testing.T) {
 	// Test that version template contains expected format components
 	template := RootCmd.VersionTemplate()
 
-	expectedParts := []string{"vdash version", "commit:", "built:"}
+	// BinaryName() returns dynamic name based on os.Args[0], so we verify
+	// the template format without checking specific binary name
+	expectedParts := []string{"version {{.Version}}", "commit:", "built:"}
 	for _, part := range expectedParts {
 		if !strings.Contains(template, part) {
 			t.Errorf("Version template missing %q, got: %s", part, template)
 		}
+	}
+
+	// Verify binary name appears at the start of template
+	binaryName := BinaryName()
+	if !strings.HasPrefix(template, binaryName+" version") {
+		t.Errorf("Version template should start with binary name, got: %s", template)
 	}
 }
 

@@ -4,5 +4,5 @@ package cli
 // Called from SetVersion after version info is injected from main.go.
 func setupVersion() {
 	RootCmd.Version = appVersion
-	RootCmd.SetVersionTemplate("vdash version {{.Version}} (commit: " + appCommit + ", built: " + appDate + ")\n")
+	RootCmd.SetVersionTemplate(BinaryName() + " version {{.Version}} (commit: " + appCommit + ", built: " + appDate + ")\n")
 }
