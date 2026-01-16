@@ -350,7 +350,7 @@ development_status:
   # 2026-01-16: Story 15-1 drafted - Interface and types foundation
   epic-15: in-progress
   15-1-define-agentactivitydetector-interface-and-types: done
-  15-2-implement-claude-code-project-path-matcher: backlog
+  15-2-implement-claude-code-project-path-matcher: done
   15-3-implement-claude-code-jsonl-log-parser: backlog
   15-4-implement-agent-state-detection-logic: backlog
   15-5-implement-generic-file-activity-fallback-detector: backlog
