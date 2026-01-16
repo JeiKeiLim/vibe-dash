@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2026-01-16
-updated_by: Amelia (Dev Agent) - Story 15-4 done after code review fixes
+updated_by: Amelia (Dev Agent) - Story 15-5 code review complete, all fixes applied
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -353,7 +353,7 @@ development_status:
   15-2-implement-claude-code-project-path-matcher: done
   15-3-implement-claude-code-jsonl-log-parser: done
   15-4-implement-agent-state-detection-logic: done
-  15-5-implement-generic-file-activity-fallback-detector: backlog
+  15-5-implement-generic-file-activity-fallback-detector: done
   15-6-integrate-agent-detection-into-tui-dashboard: backlog
   15-7-display-confidence-level-in-detail-panel: backlog
   epic-15-retrospective: optional

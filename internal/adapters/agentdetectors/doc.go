@@ -10,5 +10,7 @@
 //   - ClaudeCodeLogParser (Story 15.3): Parses Claude Code JSONL logs with tail optimization
 //   - ClaudeCodeDetector (Story 15.4): Main implementation of AgentActivityDetector for Claude Code.
 //     Composes PathMatcher and LogParser to detect agent state from JSONL logs with high confidence.
-//   - GenericDetector (Story 15.5): File activity fallback for unknown agents (planned)
+//   - GenericDetector (Story 15.5): File activity fallback for any project. Scans filesystem for most
+//     recent file modification time and returns Working/WaitingForUser with ConfidenceUncertain.
+//     Used as fallback when tool-specific detectors (like ClaudeCodeDetector) don't match.
 package agentdetectors
