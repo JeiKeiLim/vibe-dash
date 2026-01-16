@@ -8,6 +8,7 @@
 // Implementations:
 //   - ClaudeCodePathMatcher (Story 15.2): Matches project paths to Claude Code log directories
 //   - ClaudeCodeLogParser (Story 15.3): Parses Claude Code JSONL logs with tail optimization
-//   - ClaudeCodeDetector (Story 15.4): Implements AgentActivityDetector using PathMatcher + LogParser (planned)
+//   - ClaudeCodeDetector (Story 15.4): Main implementation of AgentActivityDetector for Claude Code.
+//     Composes PathMatcher and LogParser to detect agent state from JSONL logs with high confidence.
 //   - GenericDetector (Story 15.5): File activity fallback for unknown agents (planned)
 package agentdetectors
