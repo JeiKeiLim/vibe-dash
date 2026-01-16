@@ -34,6 +34,11 @@ func (m *refreshMockDetector) DetectMultiple(ctx context.Context, path string) (
 	return nil, nil
 }
 
+func (m *refreshMockDetector) DetectWithCoexistenceSelection(ctx context.Context, path string) (*domain.DetectionResult, []*domain.DetectionResult, error) {
+	result, err := m.Detect(ctx, path)
+	return result, nil, err
+}
+
 // refreshMockRepository implements ports.ProjectRepository for testing.
 type refreshMockRepository struct {
 	projects  []*domain.Project

@@ -24,6 +24,15 @@ type Detector interface {
 	// DetectMultiple checks ALL registered detectors and returns all matching results.
 	// This supports FR14: detecting multiple methodologies in the same project.
 	DetectMultiple(ctx context.Context, path string) ([]*domain.DetectionResult, error)
+
+	// DetectWithCoexistenceSelection runs all detectors and selects based on timestamps.
+	//
+	// Return semantics:
+	//   - (winner, allResults, nil)   → clear winner (>1 hour timestamp difference)
+	//   - (nil, allResults, nil)      → tie (<=1 hour), caller handles coexistence UI
+	//   - (unknownResult, nil, nil)   → no methodologies detected
+	//   - (nil, nil, err)             → error (empty path, context cancelled, detection failed)
+	DetectWithCoexistenceSelection(ctx context.Context, path string) (*domain.DetectionResult, []*domain.DetectionResult, error)
 }
 
 // DetectorRegistry coordinates detection across multiple MethodDetectors.

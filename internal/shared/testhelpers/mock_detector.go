@@ -13,10 +13,14 @@ type MockDetector struct {
 	mu sync.RWMutex
 
 	// Result configuration
-	detectResult   *domain.DetectionResult
-	detectErr      error
-	multipleResult []*domain.DetectionResult
-	multipleErr    error
+	detectResult                   *domain.DetectionResult
+	detectErr                      error
+	multipleResult                 []*domain.DetectionResult
+	multipleErr                    error
+	coexistenceSelectionWinner     *domain.DetectionResult
+	coexistenceSelectionAll        []*domain.DetectionResult
+	coexistenceSelectionErr        error
+	coexistenceSelectionResultsSet bool
 
 	// Call tracking
 	detectCalls []string
@@ -80,4 +84,34 @@ func (m *MockDetector) DetectMultiple(_ context.Context, _ string) ([]*domain.De
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.multipleResult, m.multipleErr
+}
+
+// SetCoexistenceSelectionResult sets the results to return from DetectWithCoexistenceSelection.
+func (m *MockDetector) SetCoexistenceSelectionResult(winner *domain.DetectionResult, all []*domain.DetectionResult) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.coexistenceSelectionWinner = winner
+	m.coexistenceSelectionAll = all
+	m.coexistenceSelectionResultsSet = true
+}
+
+// SetCoexistenceSelectionError sets the error to return from DetectWithCoexistenceSelection.
+func (m *MockDetector) SetCoexistenceSelectionError(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.coexistenceSelectionErr = err
+}
+
+// DetectWithCoexistenceSelection implements ports.Detector.
+func (m *MockDetector) DetectWithCoexistenceSelection(_ context.Context, _ string) (*domain.DetectionResult, []*domain.DetectionResult, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.coexistenceSelectionErr != nil {
+		return nil, nil, m.coexistenceSelectionErr
+	}
+	if m.coexistenceSelectionResultsSet {
+		return m.coexistenceSelectionWinner, m.coexistenceSelectionAll, nil
+	}
+	// Default: delegate to single detection result
+	return m.detectResult, nil, m.detectErr
 }

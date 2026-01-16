@@ -245,3 +245,8 @@ func (d *CallCountDetector) Detect(_ context.Context, _ string) (*domain.Detecti
 func (d *CallCountDetector) DetectMultiple(_ context.Context, _ string) ([]*domain.DetectionResult, error) {
 	return nil, nil
 }
+
+func (d *CallCountDetector) DetectWithCoexistenceSelection(ctx context.Context, path string) (*domain.DetectionResult, []*domain.DetectionResult, error) {
+	result, err := d.Detect(ctx, path)
+	return result, nil, err
+}

@@ -117,3 +117,47 @@ func (s *DetectionService) DetectMultiple(ctx context.Context, path string) ([]*
 
 	return results, nil
 }
+
+// DetectWithCoexistenceSelection runs all detectors and selects based on timestamps.
+//
+// Return semantics:
+//   - (winner, allResults, nil)   → clear winner (>1 hour timestamp difference)
+//   - (nil, allResults, nil)      → tie (<=1 hour), caller handles coexistence UI
+//   - (unknownResult, nil, nil)   → no methodologies detected
+//   - (nil, nil, err)             → error (empty path, context cancelled, detection failed)
+func (s *DetectionService) DetectWithCoexistenceSelection(ctx context.Context, path string) (*domain.DetectionResult, []*domain.DetectionResult, error) {
+	if path == "" {
+		return nil, nil, fmt.Errorf("%w: empty path", domain.ErrPathNotAccessible)
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	default:
+	}
+
+	results, err := s.registry.DetectWithCoexistence(ctx, path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %v", domain.ErrDetectionFailed, err)
+	}
+
+	if len(results) == 0 {
+		// No methodology detected - return unknown result (consistent with Detect behavior)
+		unknown := domain.NewDetectionResult(
+			"unknown",
+			domain.StageUnknown,
+			domain.ConfidenceUncertain,
+			"no methodology markers found",
+		)
+		return &unknown, nil, nil
+	}
+
+	// Use selector from domain package (maintains hexagonal boundary)
+	winner, hasWinner := domain.SelectByTimestamp(results)
+	if hasWinner {
+		return winner, results, nil
+	}
+
+	// Tie - return all results for caller to handle coexistence display
+	return nil, results, nil
+}
