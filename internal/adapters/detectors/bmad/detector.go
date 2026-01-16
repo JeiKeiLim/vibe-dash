@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -107,12 +108,17 @@ func (d *BMADDetector) Detect(ctx context.Context, path string) (*domain.Detecti
 
 	// Special case: _bmad-output has no config.yaml
 	if strings.HasSuffix(bmadDir, "_bmad-output") {
+		// Try to get mtime from the _bmad-output directory itself
+		var dirMtime time.Time
+		if info, err := os.Stat(bmadDir); err == nil {
+			dirMtime = info.ModTime()
+		}
 		result := domain.NewDetectionResult(
 			d.Name(),
 			domain.StageUnknown,
 			domain.ConfidenceLikely,
 			"BMAD detected (_bmad-output), config not expected",
-		)
+		).WithTimestamp(dirMtime)
 		return &result, nil
 	}
 
@@ -133,12 +139,17 @@ func (d *BMADDetector) Detect(ctx context.Context, path string) (*domain.Detecti
 
 	if !cfgFound {
 		// No config found - return lower confidence
+		// Try to get mtime from the bmad directory itself
+		var dirMtime time.Time
+		if info, err := os.Stat(bmadDir); err == nil {
+			dirMtime = info.ModTime()
+		}
 		result := domain.NewDetectionResult(
 			d.Name(),
 			domain.StageUnknown,
 			domain.ConfidenceLikely,
 			filepath.Base(bmadDir)+" folder exists but config.yaml not found",
-		)
+		).WithTimestamp(dirMtime)
 		return &result, nil
 	}
 
@@ -151,7 +162,7 @@ func (d *BMADDetector) Detect(ctx context.Context, path string) (*domain.Detecti
 
 	// Detect stage from sprint-status.yaml or artifacts
 	// Pass bmadDir so we can read config for artifact paths
-	stage, stageConfidence, stageReasoning := d.detectStage(ctx, path, bmadDir)
+	stage, stageConfidence, stageReasoning, artifactMtime := d.detectStage(ctx, path, bmadDir)
 
 	// Build combined reasoning
 	var fullReasoning string
@@ -173,7 +184,7 @@ func (d *BMADDetector) Detect(ctx context.Context, path string) (*domain.Detecti
 		stage,
 		finalConfidence,
 		fullReasoning,
-	)
+	).WithTimestamp(artifactMtime)
 	return &result, nil
 }
 
@@ -222,33 +233,4 @@ func resolveConfigPath(configValue, projectPath string) string {
 		return ""
 	}
 	return strings.ReplaceAll(configValue, "{project-root}", projectPath)
-}
-
-// findBMADConfig searches for and parses BMAD config from the marker directory.
-// Tries both core/config.yaml and bmm/config.yaml, merging values from both.
-func findBMADConfig(bmadDir string) *BMADConfig {
-	var merged BMADConfig
-
-	for _, cfgRelPath := range configPaths {
-		cfgPath := filepath.Join(bmadDir, cfgRelPath)
-		if cfg := parseConfig(cfgPath); cfg != nil {
-			// Merge: later values override earlier if non-empty
-			if cfg.OutputFolder != "" {
-				merged.OutputFolder = cfg.OutputFolder
-			}
-			if cfg.SprintArtifacts != "" {
-				merged.SprintArtifacts = cfg.SprintArtifacts
-			}
-			if cfg.ImplementationArtifacts != "" {
-				merged.ImplementationArtifacts = cfg.ImplementationArtifacts
-			}
-		}
-	}
-
-	// Return nil if nothing was found
-	if merged.OutputFolder == "" && merged.SprintArtifacts == "" && merged.ImplementationArtifacts == "" {
-		return nil
-	}
-
-	return &merged
 }

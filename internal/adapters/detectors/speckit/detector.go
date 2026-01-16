@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 )
@@ -114,7 +115,7 @@ func (d *SpeckitDetector) Detect(ctx context.Context, path string) (*domain.Dete
 	}
 
 	// Find most recently modified spec directory
-	targetDir, reasoning := d.findMostRecentDir(specsDir, specDirs)
+	targetDir, reasoning, dirMtime := d.findMostRecentDir(specsDir, specDirs)
 
 	// Check context again before file analysis
 	select {
@@ -124,16 +125,21 @@ func (d *SpeckitDetector) Detect(ctx context.Context, path string) (*domain.Dete
 	}
 
 	// Analyze artifacts in target directory
-	return d.analyzeSpecDir(filepath.Join(specsDir, targetDir), reasoning)
+	return d.analyzeSpecDir(filepath.Join(specsDir, targetDir), reasoning, dirMtime)
 }
 
 // findMostRecentDir finds the most recently modified directory.
 // If modification times cannot be determined, falls back to first directory with explanation.
 // Epic 4 Hotfix H4: When mtimes are equal (e.g., after git clone), uses lexicographic
 // sort descending so higher-numbered directories (005-*) are preferred over lower (001-*).
-func (d *SpeckitDetector) findMostRecentDir(baseDir string, dirs []os.DirEntry) (string, string) {
+// Returns the directory name, reasoning string, and directory modification time.
+func (d *SpeckitDetector) findMostRecentDir(baseDir string, dirs []os.DirEntry) (string, string, time.Time) {
 	if len(dirs) == 1 {
-		return dirs[0].Name(), fmt.Sprintf("spec: %s", dirs[0].Name())
+		info, err := dirs[0].Info()
+		if err == nil {
+			return dirs[0].Name(), fmt.Sprintf("spec: %s", dirs[0].Name()), info.ModTime()
+		}
+		return dirs[0].Name(), fmt.Sprintf("spec: %s", dirs[0].Name()), time.Time{}
 	}
 
 	type dirMod struct {
@@ -168,20 +174,40 @@ func (d *SpeckitDetector) findMostRecentDir(baseDir string, dirs []os.DirEntry) 
 			return dirs[i].Name() > dirs[j].Name()
 		})
 		reasoning := fmt.Sprintf("unable to determine modification times, using highest-numbered: %s", dirs[0].Name())
-		return dirs[0].Name(), reasoning
+		return dirs[0].Name(), reasoning, time.Time{}
 	}
 
 	reasoning := fmt.Sprintf("spec: %s, most recently modified", dirMods[0].name)
-	return dirMods[0].name, reasoning
+	dirMtime := time.Unix(dirMods[0].modTime, 0)
+	return dirMods[0].name, reasoning, dirMtime
 }
 
+// speckitArtifacts are the standard Speckit artifact files checked for stage detection.
+// Order matters: highest stage first (implement > tasks > plan > spec).
+var speckitArtifacts = []string{"implement.md", "tasks.md", "plan.md", "spec.md"}
+
 // analyzeSpecDir determines the stage based on artifact files.
-func (d *SpeckitDetector) analyzeSpecDir(dirPath string, extraReasoning string) (*domain.DetectionResult, error) {
-	// Check for artifact files (order matters: check highest stage first)
-	hasImplement := d.fileExists(filepath.Join(dirPath, "implement.md"))
-	hasTasks := d.fileExists(filepath.Join(dirPath, "tasks.md"))
-	hasPlan := d.fileExists(filepath.Join(dirPath, "plan.md"))
-	hasSpec := d.fileExists(filepath.Join(dirPath, "spec.md"))
+// dirMtime is the directory modification time from findMostRecentDir.
+// Returns DetectionResult with ArtifactTimestamp set to max(dirMtime, file mtimes).
+func (d *SpeckitDetector) analyzeSpecDir(dirPath string, extraReasoning string, dirMtime time.Time) (*domain.DetectionResult, error) {
+	// Track the maximum modification time and file existence in a single pass
+	maxMtime := dirMtime
+	fileExists := make(map[string]bool)
+
+	for _, file := range speckitArtifacts {
+		filePath := filepath.Join(dirPath, file)
+		if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
+			fileExists[file] = true
+			if info.ModTime().After(maxMtime) {
+				maxMtime = info.ModTime()
+			}
+		}
+	}
+
+	hasImplement := fileExists["implement.md"]
+	hasTasks := fileExists["tasks.md"]
+	hasPlan := fileExists["plan.md"]
+	hasSpec := fileExists["spec.md"]
 
 	var stage domain.Stage
 	var confidence domain.Confidence
@@ -215,12 +241,6 @@ func (d *SpeckitDetector) analyzeSpecDir(dirPath string, extraReasoning string) 
 		reasoning = reasoning + " (" + extraReasoning + ")"
 	}
 
-	result := domain.NewDetectionResult(d.Name(), stage, confidence, reasoning)
+	result := domain.NewDetectionResult(d.Name(), stage, confidence, reasoning).WithTimestamp(maxMtime)
 	return &result, nil
-}
-
-// fileExists checks if a file exists and is not a directory.
-func (d *SpeckitDetector) fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }

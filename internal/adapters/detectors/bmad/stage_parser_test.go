@@ -1710,16 +1710,24 @@ func TestFindSprintStatusPath(t *testing.T) {
 			tt.setup(t, dir)
 
 			// Test with nil config (hardcoded fallback paths)
-			got := findSprintStatusPath(dir, nil)
+			got, gotMtime := findSprintStatusPath(dir, nil)
 
 			if tt.wantFound {
 				wantFullPath := filepath.Join(dir, tt.wantPath)
 				if got != wantFullPath {
 					t.Errorf("findSprintStatusPath() = %q, want %q", got, wantFullPath)
 				}
+				// When found, should have non-zero mtime
+				if gotMtime.IsZero() {
+					t.Errorf("findSprintStatusPath() returned zero mtime for found path")
+				}
 			} else {
 				if got != "" {
 					t.Errorf("findSprintStatusPath() = %q, want empty string", got)
+				}
+				// When not found, mtime should be zero
+				if !gotMtime.IsZero() {
+					t.Errorf("findSprintStatusPath() returned non-zero mtime for not found: %v", gotMtime)
 				}
 			}
 		})
@@ -1838,12 +1846,16 @@ func TestFindSprintStatusPath_WithConfig(t *testing.T) {
 			dir := t.TempDir()
 			tt.setup(t, dir)
 
-			got := findSprintStatusPath(dir, tt.config)
+			got, gotMtime := findSprintStatusPath(dir, tt.config)
 
 			if tt.wantFound {
 				wantFullPath := filepath.Join(dir, tt.wantPath)
 				if got != wantFullPath {
 					t.Errorf("findSprintStatusPath() = %q, want %q", got, wantFullPath)
+				}
+				// When found, should have non-zero mtime
+				if gotMtime.IsZero() {
+					t.Errorf("findSprintStatusPath() returned zero mtime for found path")
 				}
 			} else {
 				if got != "" {
@@ -1938,7 +1950,7 @@ func TestDetectStage_Integration(t *testing.T) {
 			d := NewBMADDetector()
 			// Pass bmadDir for config-based path resolution
 			bmadDir := filepath.Join(dir, ".bmad")
-			stage, confidence, reasoning := d.detectStage(context.Background(), dir, bmadDir)
+			stage, confidence, reasoning, _ := d.detectStage(context.Background(), dir, bmadDir)
 
 			if stage != tt.wantStage {
 				t.Errorf("detectStage() stage = %v, want %v", stage, tt.wantStage)
@@ -1962,7 +1974,7 @@ func TestDetectStage_ContextCancellation(t *testing.T) {
 	cancel() // Cancel immediately
 
 	bmadDir := filepath.Join(dir, ".bmad")
-	stage, confidence, reasoning := d.detectStage(ctx, dir, bmadDir)
+	stage, confidence, reasoning, artifactMtime := d.detectStage(ctx, dir, bmadDir)
 
 	if stage != domain.StageUnknown {
 		t.Errorf("detectStage() with cancelled context stage = %v, want StageUnknown", stage)
@@ -1972,6 +1984,9 @@ func TestDetectStage_ContextCancellation(t *testing.T) {
 	}
 	if reasoning != "" {
 		t.Errorf("detectStage() with cancelled context reasoning = %q, want empty", reasoning)
+	}
+	if !artifactMtime.IsZero() {
+		t.Errorf("detectStage() with cancelled context artifactMtime = %v, want zero", artifactMtime)
 	}
 }
 

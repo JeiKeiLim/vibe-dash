@@ -1,6 +1,9 @@
 package domain
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestNewDetectionResult(t *testing.T) {
 	dr := NewDetectionResult("speckit", StagePlan, ConfidenceCertain, "plan.md exists")
@@ -129,5 +132,137 @@ func TestDetectionResult_ZeroValue(t *testing.T) {
 	}
 	if dr.Reasoning != "" {
 		t.Errorf("Zero value Reasoning = %q, want empty string", dr.Reasoning)
+	}
+	// AC4: Zero value should have zero ArtifactTimestamp
+	if !dr.ArtifactTimestamp.IsZero() {
+		t.Errorf("Zero value ArtifactTimestamp = %v, want zero time", dr.ArtifactTimestamp)
+	}
+}
+
+func TestDetectionResult_WithTimestamp(t *testing.T) {
+	baseTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+
+	tests := []struct {
+		name          string
+		timestamp     time.Time
+		wantTimestamp time.Time
+	}{
+		{
+			name:          "set non-zero timestamp",
+			timestamp:     baseTime,
+			wantTimestamp: baseTime,
+		},
+		{
+			name:          "set zero timestamp",
+			timestamp:     time.Time{},
+			wantTimestamp: time.Time{},
+		},
+		{
+			name:          "set different timestamp",
+			timestamp:     baseTime.Add(2 * time.Hour),
+			wantTimestamp: baseTime.Add(2 * time.Hour),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dr := NewDetectionResult("speckit", StagePlan, ConfidenceCertain, "test")
+			result := dr.WithTimestamp(tt.timestamp)
+
+			if !result.ArtifactTimestamp.Equal(tt.wantTimestamp) {
+				t.Errorf("WithTimestamp() ArtifactTimestamp = %v, want %v", result.ArtifactTimestamp, tt.wantTimestamp)
+			}
+			// Verify other fields preserved
+			if result.Method != dr.Method {
+				t.Errorf("WithTimestamp() Method = %q, want %q", result.Method, dr.Method)
+			}
+			if result.Stage != dr.Stage {
+				t.Errorf("WithTimestamp() Stage = %v, want %v", result.Stage, dr.Stage)
+			}
+			if result.Confidence != dr.Confidence {
+				t.Errorf("WithTimestamp() Confidence = %v, want %v", result.Confidence, dr.Confidence)
+			}
+		})
+	}
+}
+
+func TestDetectionResult_WithTimestamp_Immutability(t *testing.T) {
+	// Test that original result is unchanged after WithTimestamp (AC5 - fluent method returns copy)
+	original := NewDetectionResult("bmad", StageImplement, ConfidenceLikely, "original")
+	timestamp := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+
+	modified := original.WithTimestamp(timestamp)
+
+	// Original should still have zero timestamp
+	if !original.ArtifactTimestamp.IsZero() {
+		t.Errorf("Original ArtifactTimestamp changed to %v, want zero time", original.ArtifactTimestamp)
+	}
+
+	// Modified should have the new timestamp
+	if !modified.ArtifactTimestamp.Equal(timestamp) {
+		t.Errorf("Modified ArtifactTimestamp = %v, want %v", modified.ArtifactTimestamp, timestamp)
+	}
+}
+
+func TestDetectionResult_HasTimestamp(t *testing.T) {
+	tests := []struct {
+		name      string
+		timestamp time.Time
+		want      bool
+	}{
+		{
+			name:      "zero time returns false",
+			timestamp: time.Time{},
+			want:      false,
+		},
+		{
+			name:      "non-zero time returns true",
+			timestamp: time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC),
+			want:      true,
+		},
+		{
+			name:      "unix epoch returns true",
+			timestamp: time.Unix(0, 0),
+			want:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dr := NewDetectionResult("speckit", StagePlan, ConfidenceCertain, "test").WithTimestamp(tt.timestamp)
+			if got := dr.HasTimestamp(); got != tt.want {
+				t.Errorf("HasTimestamp() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDetectionResult_HasTimestamp_ZeroValue(t *testing.T) {
+	// Test that zero value DetectionResult returns false for HasTimestamp
+	var dr DetectionResult
+	if dr.HasTimestamp() {
+		t.Error("Zero value DetectionResult.HasTimestamp() = true, want false")
+	}
+}
+
+func TestDetectionResult_WithTimestamp_Chaining(t *testing.T) {
+	// Test that chaining WithTimestamp calls works correctly - last call wins
+	t1 := time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2024, 6, 16, 12, 0, 0, 0, time.UTC)
+	t3 := time.Date(2024, 6, 17, 14, 0, 0, 0, time.UTC)
+
+	dr := NewDetectionResult("speckit", StagePlan, ConfidenceCertain, "test")
+
+	// Chain multiple WithTimestamp calls
+	result := dr.WithTimestamp(t1).WithTimestamp(t2).WithTimestamp(t3)
+
+	// Final result should have t3
+	if !result.ArtifactTimestamp.Equal(t3) {
+		t.Errorf("Chained WithTimestamp() ArtifactTimestamp = %v, want %v (last timestamp)", result.ArtifactTimestamp, t3)
+	}
+
+	// Original should be unchanged
+	if !dr.ArtifactTimestamp.IsZero() {
+		t.Errorf("Original ArtifactTimestamp = %v, want zero time", dr.ArtifactTimestamp)
 	}
 }

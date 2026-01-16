@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -669,18 +670,27 @@ func detectStageFromArtifacts(ctx context.Context, projectPath string) (domain.S
 
 // findSprintStatusPath searches for sprint-status.yaml using config-based paths first,
 // then falls back to standard locations.
+// Returns the path and modification time if found, or empty string and zero time if not found.
 // Parameters:
 //   - projectPath: the root project directory
 //   - cfg: parsed BMAD config (may be nil)
-func findSprintStatusPath(projectPath string, cfg *BMADConfig) string {
+func findSprintStatusPath(projectPath string, cfg *BMADConfig) (string, time.Time) {
+	// Helper to check path and return with mtime
+	checkPath := func(statusPath string) (string, time.Time, bool) {
+		if info, err := os.Stat(statusPath); err == nil {
+			return statusPath, info.ModTime(), true
+		}
+		return "", time.Time{}, false
+	}
+
 	// 1. Try config-based paths first (most accurate)
 	if cfg != nil {
 		// Priority 1: sprint_artifacts from config (vibe-dash style)
 		if cfg.SprintArtifacts != "" {
 			resolved := resolveConfigPath(cfg.SprintArtifacts, projectPath)
 			statusPath := filepath.Join(resolved, "sprint-status.yaml")
-			if _, err := os.Stat(statusPath); err == nil {
-				return statusPath
+			if path, mtime, ok := checkPath(statusPath); ok {
+				return path, mtime
 			}
 		}
 
@@ -688,8 +698,8 @@ func findSprintStatusPath(projectPath string, cfg *BMADConfig) string {
 		if cfg.ImplementationArtifacts != "" {
 			resolved := resolveConfigPath(cfg.ImplementationArtifacts, projectPath)
 			statusPath := filepath.Join(resolved, "sprint-status.yaml")
-			if _, err := os.Stat(statusPath); err == nil {
-				return statusPath
+			if path, mtime, ok := checkPath(statusPath); ok {
+				return path, mtime
 			}
 		}
 
@@ -699,20 +709,20 @@ func findSprintStatusPath(projectPath string, cfg *BMADConfig) string {
 
 			// Try output_folder/sprint-artifacts/sprint-status.yaml
 			statusPath := filepath.Join(resolved, "sprint-artifacts", "sprint-status.yaml")
-			if _, err := os.Stat(statusPath); err == nil {
-				return statusPath
+			if path, mtime, ok := checkPath(statusPath); ok {
+				return path, mtime
 			}
 
 			// Try output_folder/implementation-artifacts/sprint-status.yaml
 			statusPath = filepath.Join(resolved, "implementation-artifacts", "sprint-status.yaml")
-			if _, err := os.Stat(statusPath); err == nil {
-				return statusPath
+			if path, mtime, ok := checkPath(statusPath); ok {
+				return path, mtime
 			}
 
 			// Try output_folder/sprint-status.yaml (directly in output folder)
 			statusPath = filepath.Join(resolved, "sprint-status.yaml")
-			if _, err := os.Stat(statusPath); err == nil {
-				return statusPath
+			if path, mtime, ok := checkPath(statusPath); ok {
+				return path, mtime
 			}
 		}
 	}
@@ -720,63 +730,111 @@ func findSprintStatusPath(projectPath string, cfg *BMADConfig) string {
 	// 2. Fallback to hardcoded standard locations (for backwards compatibility)
 	// Primary location: docs/sprint-artifacts/sprint-status.yaml (.bmad convention)
 	primary := filepath.Join(projectPath, "docs", "sprint-artifacts", "sprint-status.yaml")
-	if _, err := os.Stat(primary); err == nil {
-		return primary
+	if path, mtime, ok := checkPath(primary); ok {
+		return path, mtime
 	}
 
 	// Alternative location: docs/sprint-status.yaml
 	alt := filepath.Join(projectPath, "docs", "sprint-status.yaml")
-	if _, err := os.Stat(alt); err == nil {
-		return alt
+	if path, mtime, ok := checkPath(alt); ok {
+		return path, mtime
 	}
 
 	// _bmad convention: _bmad-output/implementation-artifacts/sprint-status.yaml
 	bmadOutput := filepath.Join(projectPath, "_bmad-output", "implementation-artifacts", "sprint-status.yaml")
-	if _, err := os.Stat(bmadOutput); err == nil {
-		return bmadOutput
+	if path, mtime, ok := checkPath(bmadOutput); ok {
+		return path, mtime
 	}
 
-	return ""
+	return "", time.Time{}
 }
 
 // detectStage performs stage detection for a BMAD v6 project.
 // It first tries to parse sprint-status.yaml (using config for path), then falls back to artifact detection.
+// Returns stage, confidence, reasoning, and artifact timestamp.
 // Parameters:
 //   - ctx: context for cancellation
 //   - path: project root path
 //   - bmadDir: the BMAD marker directory (.bmad or _bmad) for reading config
-func (d *BMADDetector) detectStage(ctx context.Context, path string, bmadDir string) (domain.Stage, domain.Confidence, string) {
+func (d *BMADDetector) detectStage(ctx context.Context, path string, bmadDir string) (domain.Stage, domain.Confidence, string, time.Time) {
 	// Check context first
 	select {
 	case <-ctx.Done():
-		return domain.StageUnknown, domain.ConfidenceUncertain, ""
+		return domain.StageUnknown, domain.ConfidenceUncertain, "", time.Time{}
 	default:
 	}
 
-	// Read BMAD config for artifact paths
+	// Read BMAD config for artifact paths and track config mtime as fallback
 	var cfg *BMADConfig
+	var configMtime time.Time
 	if bmadDir != "" {
-		cfg = findBMADConfig(bmadDir)
+		cfg, configMtime = findBMADConfigWithMtime(bmadDir)
 	}
 
 	// Try to find and parse sprint-status.yaml
-	statusPath := findSprintStatusPath(path, cfg)
+	statusPath, statusMtime := findSprintStatusPath(path, cfg)
 	if statusPath != "" {
 		status, err := parseSprintStatus(ctx, statusPath)
 		if err != nil {
-			// Parse error - return unknown with reason
-			return domain.StageUnknown, domain.ConfidenceUncertain, "sprint-status.yaml parse error"
+			// Parse error - return unknown with reason, use config mtime as fallback
+			return domain.StageUnknown, domain.ConfidenceUncertain, "sprint-status.yaml parse error", configMtime
 		}
 
-		return determineStageFromStatus(status)
+		stage, confidence, reasoning := determineStageFromStatus(status)
+		// Use max of sprint-status mtime and config mtime
+		artifactMtime := statusMtime
+		if configMtime.After(artifactMtime) {
+			artifactMtime = configMtime
+		}
+		return stage, confidence, reasoning, artifactMtime
 	}
 
 	// Fallback to artifact detection
 	stage, confidence, reasoning, err := detectStageFromArtifacts(ctx, path)
 	if err != nil {
 		// Context cancellation
-		return domain.StageUnknown, domain.ConfidenceUncertain, ""
+		return domain.StageUnknown, domain.ConfidenceUncertain, "", time.Time{}
 	}
 
-	return stage, confidence, reasoning
+	// For artifact-based detection, use config mtime if available
+	return stage, confidence, reasoning, configMtime
+}
+
+// findBMADConfigWithMtime searches for and parses BMAD config from the marker directory.
+// It tries configPaths in order (core/config.yaml, bmm/config.yaml) and merges non-empty
+// fields - later values override earlier ones. Returns the merged config and the maximum
+// modification time of all config files found (for AC3 timestamp tracking).
+func findBMADConfigWithMtime(bmadDir string) (*BMADConfig, time.Time) {
+	var merged BMADConfig
+	var maxMtime time.Time
+
+	for _, cfgRelPath := range configPaths {
+		cfgPath := filepath.Join(bmadDir, cfgRelPath)
+		info, err := os.Stat(cfgPath)
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(maxMtime) {
+			maxMtime = info.ModTime()
+		}
+		if cfg := parseConfig(cfgPath); cfg != nil {
+			// Merge: later values override earlier if non-empty
+			if cfg.OutputFolder != "" {
+				merged.OutputFolder = cfg.OutputFolder
+			}
+			if cfg.SprintArtifacts != "" {
+				merged.SprintArtifacts = cfg.SprintArtifacts
+			}
+			if cfg.ImplementationArtifacts != "" {
+				merged.ImplementationArtifacts = cfg.ImplementationArtifacts
+			}
+		}
+	}
+
+	// Return nil if nothing was found
+	if merged.OutputFolder == "" && merged.SprintArtifacts == "" && merged.ImplementationArtifacts == "" {
+		return nil, maxMtime
+	}
+
+	return &merged, maxMtime
 }

@@ -848,3 +848,210 @@ func TestBMADDetector_ReasoningFormat(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// Story 14.2: Timestamp Tests (AC3, AC4)
+// =============================================================================
+
+// createFileWithMtime creates a file with a specific modification time for testing.
+func createFileWithMtime(t *testing.T, path string, content string, mtime time.Time) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write file %s: %v", path, err)
+	}
+	if err := os.Chtimes(path, mtime, mtime); err != nil {
+		t.Fatalf("failed to set mtime for %s: %v", path, err)
+	}
+}
+
+func TestBMADDetector_Timestamp(t *testing.T) {
+	baseTime := time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name          string
+		setup         func(t *testing.T, dir string)
+		wantTimestamp func(baseTime time.Time) time.Time // function to compute expected timestamp
+		checkExact    bool                               // whether to check exact time match
+	}{
+		{
+			name: "AC3: timestamp reflects sprint-status.yaml mtime",
+			setup: func(t *testing.T, dir string) {
+				// Create BMAD structure
+				bmadDir := filepath.Join(dir, ".bmad", "bmm")
+				if err := os.MkdirAll(bmadDir, 0755); err != nil {
+					t.Fatalf("failed to create .bmad/bmm: %v", err)
+				}
+
+				// Create config with older mtime
+				configContent := `# BMM Module Configuration
+# Version: 6.0.0-alpha.13
+project_name: test
+`
+				configPath := filepath.Join(bmadDir, "config.yaml")
+				configTime := baseTime.Add(-48 * time.Hour)
+				createFileWithMtime(t, configPath, configContent, configTime)
+
+				// Create sprint-status.yaml with newer mtime (30m ago)
+				sprintDir := filepath.Join(dir, "docs", "sprint-artifacts")
+				if err := os.MkdirAll(sprintDir, 0755); err != nil {
+					t.Fatalf("failed to create sprint-artifacts: %v", err)
+				}
+				sprintContent := `development_status:
+  epic-1: in-progress
+  1-1-feature: in-progress
+`
+				sprintTime := baseTime.Add(-30 * time.Minute)
+				createFileWithMtime(t, filepath.Join(sprintDir, "sprint-status.yaml"), sprintContent, sprintTime)
+			},
+			wantTimestamp: func(bt time.Time) time.Time { return bt.Add(-30 * time.Minute) }, // sprint-status time
+			checkExact:    true,
+		},
+		{
+			name: "AC3: timestamp reflects config.yaml mtime when no sprint-status",
+			setup: func(t *testing.T, dir string) {
+				// Create BMAD structure with config only (no sprint-status)
+				bmadDir := filepath.Join(dir, ".bmad", "bmm")
+				if err := os.MkdirAll(bmadDir, 0755); err != nil {
+					t.Fatalf("failed to create .bmad/bmm: %v", err)
+				}
+
+				// Create config with specific mtime
+				configContent := `# BMM Module Configuration
+# Version: 6.0.0-alpha.13
+project_name: test
+`
+				configPath := filepath.Join(bmadDir, "config.yaml")
+				configTime := baseTime.Add(-2 * time.Hour)
+				createFileWithMtime(t, configPath, configContent, configTime)
+
+				// Create docs folder with artifact (for artifact detection fallback)
+				docsDir := filepath.Join(dir, "docs")
+				if err := os.MkdirAll(docsDir, 0755); err != nil {
+					t.Fatalf("failed to create docs: %v", err)
+				}
+				// Create an epic file for artifact detection
+				epicPath := filepath.Join(docsDir, "epic-1.md")
+				epicTime := baseTime.Add(-5 * time.Hour)
+				createFileWithMtime(t, epicPath, "# Epic 1", epicTime)
+			},
+			wantTimestamp: func(bt time.Time) time.Time { return bt.Add(-2 * time.Hour) }, // config time
+			checkExact:    true,
+		},
+		{
+			name: "AC4: zero time when only marker directory exists (no config, no sprint-status)",
+			setup: func(t *testing.T, dir string) {
+				// Create empty _bmad-output (no config expected)
+				bmadOutput := filepath.Join(dir, "_bmad-output")
+				if err := os.MkdirAll(bmadOutput, 0755); err != nil {
+					t.Fatalf("failed to create _bmad-output: %v", err)
+				}
+			},
+			wantTimestamp: func(bt time.Time) time.Time { return time.Time{} },
+			checkExact:    false, // _bmad-output gets its own dir mtime, not zero
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tt.setup(t, dir)
+
+			d := NewBMADDetector()
+			result, err := d.Detect(context.Background(), dir)
+
+			if err != nil {
+				t.Fatalf("Detect() error = %v", err)
+			}
+
+			if result == nil {
+				t.Fatalf("Detect() returned nil result")
+			}
+
+			if tt.checkExact {
+				wantTime := tt.wantTimestamp(baseTime)
+				if !result.ArtifactTimestamp.Equal(wantTime) {
+					t.Errorf("ArtifactTimestamp = %v, want %v", result.ArtifactTimestamp, wantTime)
+				}
+			}
+		})
+	}
+}
+
+func TestBMADDetector_Timestamp_HasTimestamp(t *testing.T) {
+	// Test that detected results have timestamps (non-zero) when artifacts exist
+	dir := t.TempDir()
+	createBMADStructure(t, dir, true)
+
+	// Add sprint-status for complete detection
+	sprintDir := filepath.Join(dir, "docs", "sprint-artifacts")
+	if err := os.MkdirAll(sprintDir, 0755); err != nil {
+		t.Fatalf("failed to create sprint-artifacts: %v", err)
+	}
+	sprintContent := `development_status:
+  epic-1: in-progress
+`
+	if err := os.WriteFile(filepath.Join(sprintDir, "sprint-status.yaml"), []byte(sprintContent), 0644); err != nil {
+		t.Fatalf("failed to write sprint-status.yaml: %v", err)
+	}
+
+	d := NewBMADDetector()
+	result, err := d.Detect(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("Detect() returned nil result")
+	}
+
+	if !result.HasTimestamp() {
+		t.Error("HasTimestamp() = false, want true for detected BMAD project with sprint-status")
+	}
+}
+
+func TestBMADDetector_Timestamp_MaxOfConfigAndStatus(t *testing.T) {
+	// AC3: Test that timestamp is max of sprint-status mtime and config mtime
+	baseTime := time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+
+	// Create BMAD structure
+	bmadDir := filepath.Join(dir, ".bmad", "bmm")
+	if err := os.MkdirAll(bmadDir, 0755); err != nil {
+		t.Fatalf("failed to create .bmad/bmm: %v", err)
+	}
+
+	// Config is NEWER than sprint-status
+	configContent := `# BMM Module Configuration
+# Version: 6.0.0-alpha.13
+project_name: test
+`
+	configPath := filepath.Join(bmadDir, "config.yaml")
+	configTime := baseTime.Add(-1 * time.Hour) // 1 hour ago
+	createFileWithMtime(t, configPath, configContent, configTime)
+
+	// Sprint-status is OLDER
+	sprintDir := filepath.Join(dir, "docs", "sprint-artifacts")
+	if err := os.MkdirAll(sprintDir, 0755); err != nil {
+		t.Fatalf("failed to create sprint-artifacts: %v", err)
+	}
+	sprintContent := `development_status:
+  epic-1: in-progress
+`
+	sprintPath := filepath.Join(sprintDir, "sprint-status.yaml")
+	sprintTime := baseTime.Add(-24 * time.Hour) // 24 hours ago
+	createFileWithMtime(t, sprintPath, sprintContent, sprintTime)
+
+	d := NewBMADDetector()
+	result, err := d.Detect(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("Detect() returned nil result")
+	}
+
+	// Should use config time (newer)
+	if !result.ArtifactTimestamp.Equal(configTime) {
+		t.Errorf("ArtifactTimestamp = %v, want config time %v (should use max of config and sprint-status)",
+			result.ArtifactTimestamp, configTime)
+	}
+}
