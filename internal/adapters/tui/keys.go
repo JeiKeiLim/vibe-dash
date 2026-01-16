@@ -32,6 +32,9 @@ const (
 	KeyLogJumpEnd  = "G"           // Jump to end, resume auto-scroll (AC3)
 	KeyShiftEnter  = "shift+enter" // Open session picker from project list
 	KeyLogOpenView = "l"           // Story 12.2 AC1: Open session selector from project list
+
+	// Stats View (Story 16.3)
+	KeyStats = "s" // Open Stats View from Dashboard
 )
 
 // KeyBindings holds the current key bindings for the TUI.
@@ -66,6 +69,9 @@ type KeyBindings struct {
 	LogJumpEnd  string
 	ShiftEnter  string
 	LogOpenView string // Story 12.2 AC1: Open session selector from project list
+
+	// Stats View (Story 16.3)
+	Stats string
 }
 
 // DefaultKeyBindings returns the default key bindings.
@@ -100,5 +106,8 @@ func DefaultKeyBindings() KeyBindings {
 		LogJumpEnd:  KeyLogJumpEnd,
 		ShiftEnter:  KeyShiftEnter,
 		LogOpenView: KeyLogOpenView, // Story 12.2 AC1
+
+		// Stats View (Story 16.3)
+		Stats: KeyStats,
 	}
 }

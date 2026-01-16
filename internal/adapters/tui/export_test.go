@@ -33,3 +33,35 @@ func GetValidationError(m Model) string {
 func EffectiveNameForTest(p *domain.Project) string {
 	return effectiveName(p)
 }
+
+// Story 16.3: Stats view test helpers
+
+// IsStatsMode returns true if the model is in stats view mode
+func IsStatsMode(m Model) bool {
+	return m.viewMode == viewModeStats
+}
+
+// GetStatsActiveProjectIdx returns the saved project index for restoration
+func GetStatsActiveProjectIdx(m Model) int {
+	return m.statsActiveProjectIdx
+}
+
+// SetViewModeStatsForTest sets the model to stats view mode for testing
+func SetViewModeStatsForTest(m *Model) {
+	m.viewMode = viewModeStats
+}
+
+// EnterStatsViewForTest exposes enterStatsView for testing
+func EnterStatsViewForTest(m *Model) {
+	m.enterStatsView()
+}
+
+// ExitStatsViewForTest exposes exitStatsView for testing
+func ExitStatsViewForTest(m *Model) {
+	m.exitStatsView()
+}
+
+// GetProjectListIndexForTest returns the current project list index
+func GetProjectListIndexForTest(m Model) int {
+	return m.projectList.Index()
+}

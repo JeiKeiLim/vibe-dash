@@ -171,6 +171,10 @@ type Model struct {
 
 	// Story 16.2: Metrics recorder for stage transition tracking
 	metricsRecorder metricsRecorderInterface
+
+	// Story 16.3: Stats view state
+	statsViewScroll       int // Scroll position in stats view
+	statsActiveProjectIdx int // Saved dashboard selection for restoration
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -872,6 +876,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Story 12.1: Route to text view handler when in text view mode
 		if m.viewMode == viewModeTextView {
 			return m.handleTextViewKeyMsg(msg)
+		}
+		// Story 16.3: Route to stats view handler when in stats view mode
+		if m.viewMode == viewModeStats {
+			return m.handleStatsViewKeyMsg(msg)
 		}
 		// Story 12.1: Route to session picker handler when showing
 		if m.showSessionPicker {
@@ -1919,6 +1927,14 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.handleShiftEnterForSessionPicker()
 		}
 		return m, nil
+
+	case KeyStats:
+		// Story 16.3: Open Stats View (AC1)
+		if m.showHelp || m.isEditingNote || m.isConfirmingRemove {
+			return m, nil
+		}
+		m.enterStatsView()
+		return m, nil
 	}
 
 	// Story 11.4: Forward key messages to hibernated list when in hibernated view (AC8)
@@ -2152,6 +2168,11 @@ func (m Model) View() string {
 	// Story 12.1: Render text view (full screen log display)
 	if m.viewMode == viewModeTextView {
 		return m.renderTextView()
+	}
+
+	// Story 16.3: Render Stats View (full screen metrics display)
+	if m.viewMode == viewModeStats {
+		return m.renderStatsView()
 	}
 
 	// Story 12.1: Render session picker overlay
@@ -2745,6 +2766,22 @@ func (m Model) renderSessionPicker(width, height int) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
 }
 
+// Story 16.3: handleStatsViewKeyMsg handles keyboard input in Stats View.
+func (m Model) handleStatsViewKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.String() {
+	case KeyEscape, KeyQuit:
+		m.exitStatsView()
+		return m, nil
+	case KeyDown, KeyDownArrow:
+		// Future story: scroll down
+		return m, nil
+	case KeyUp, KeyUpArrow:
+		// Future story: scroll up
+		return m, nil
+	}
+	return m, nil
+}
+
 // handleTextViewKeyMsg handles keyboard input in text view mode.
 func (m Model) handleTextViewKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	contentHeight := m.height - statusBarHeight(m.height) - 2 // -2 for header/footer
@@ -3236,4 +3273,19 @@ func (m Model) renderTextView() string {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Top, combined)
 	}
 	return combined
+}
+
+// Story 16.3: enterStatsView saves dashboard selection and switches to stats view.
+func (m *Model) enterStatsView() {
+	m.statsActiveProjectIdx = m.projectList.Index()
+	m.viewMode = viewModeStats
+	m.statsViewScroll = 0
+}
+
+// Story 16.3: exitStatsView returns to normal view with bounds-checked selection restoration.
+func (m *Model) exitStatsView() {
+	m.viewMode = viewModeNormal
+	if m.statsActiveProjectIdx >= 0 && m.statsActiveProjectIdx < len(m.projects) {
+		m.projectList.SelectByIndex(m.statsActiveProjectIdx)
+	}
 }
