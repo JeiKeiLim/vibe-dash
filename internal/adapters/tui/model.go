@@ -29,6 +29,12 @@ import (
 // Story 12.2 AC2: Timeout for double-key detection (e.g., 'gg' for jump to top)
 const ggTimeoutMs = 500
 
+// metricsRecorderInterface defines the contract for recording stage transitions (Story 16.2).
+// Used to decouple TUI from concrete metrics implementation for testability.
+type metricsRecorderInterface interface {
+	OnDetection(ctx context.Context, projectID string, newStage domain.Stage)
+}
+
 // Model represents the main TUI application state.
 type Model struct {
 	width            int  // Terminal width (from WindowSizeMsg)
@@ -162,6 +168,9 @@ type Model struct {
 	searchInput   string // Text being typed (before Enter)
 	searchIndex   int    // Current match index (0-based)
 	searchMatches []int  // Line numbers with matches
+
+	// Story 16.2: Metrics recorder for stage transition tracking
+	metricsRecorder metricsRecorderInterface
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -433,6 +442,12 @@ func (m *Model) SetStateService(svc ports.StateActivator) {
 // This is optional - if not set, log viewing shows "not available" message.
 func (m *Model) SetLogReaderRegistry(registry ports.LogReaderRegistry) {
 	m.logReaderRegistry = registry
+}
+
+// SetMetricsRecorder sets the metrics recorder for stage transition tracking (Story 16.2).
+// This is optional - if not set, metrics recording is disabled.
+func (m *Model) SetMetricsRecorder(recorder metricsRecorderInterface) {
+	m.metricsRecorder = recorder
 }
 
 // isProjectWaiting wraps WaitingDetector.IsWaiting for component callbacks.
@@ -803,6 +818,11 @@ func (m Model) refreshProjectsCmd() tea.Cmd {
 				currentProject.CoexistenceMessage = ""
 				currentProject.SecondaryMethod = ""
 				currentProject.SecondaryStage = domain.StageUnknown
+			}
+
+			// Story 16.2: Record stage detection for metrics (recorder internally tracks previous stage)
+			if m.metricsRecorder != nil {
+				m.metricsRecorder.OnDetection(ctx, currentProject.Path, primary.Stage)
 			}
 
 			// Update ONLY detection fields, preserve state/hibernation/favorites

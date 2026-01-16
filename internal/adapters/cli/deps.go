@@ -1,6 +1,9 @@
 package cli
 
-import "github.com/JeiKeiLim/vibe-dash/internal/core/ports"
+import (
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence/metrics"
+	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
+)
 
 // Version info - set from main.go
 var (
@@ -39,6 +42,10 @@ var stateService ports.StateActivator
 
 // logReaderRegistry handles log reading for Claude Code logs (Story 12.1).
 var logReaderRegistry ports.LogReaderRegistry
+
+// metricsRecorder handles stage transition recording for progress metrics (Story 16.2).
+// Optional dependency - nil means metrics are disabled.
+var metricsRecorder *metrics.MetricsRecorder
 
 // SetDirectoryManager sets the directory manager for CLI commands.
 func SetDirectoryManager(dm ports.DirectoryManager) {
@@ -98,4 +105,14 @@ func SetStateService(svc ports.StateActivator) {
 // SetLogReaderRegistry sets the log reader registry for log viewing (Story 12.1).
 func SetLogReaderRegistry(registry ports.LogReaderRegistry) {
 	logReaderRegistry = registry
+}
+
+// SetMetricsRecorder sets the metrics recorder for stage transition tracking (Story 16.2).
+func SetMetricsRecorder(recorder *metrics.MetricsRecorder) {
+	metricsRecorder = recorder
+}
+
+// GetMetricsRecorder returns the metrics recorder (may be nil).
+func GetMetricsRecorder() *metrics.MetricsRecorder {
+	return metricsRecorder
 }

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/filesystem"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/logreaders"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence"
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/persistence/metrics"
 	"github.com/JeiKeiLim/vibe-dash/internal/config"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/services"
 )
@@ -197,6 +199,20 @@ func run(ctx context.Context) error {
 	cli.SetLogReaderRegistry(logReaderReg)
 
 	slog.Debug("log reader registry initialized", "readers", len(logReaderReg.Readers()))
+
+	// Story 16.2: Create MetricsRecorder for stage transition tracking
+	metricsDBPath := filepath.Join(basePath, "metrics.db")
+	metricsRepo := metrics.NewMetricsRepository(metricsDBPath)
+	metricsRecorder := metrics.NewMetricsRecorder(metricsRepo)
+	cli.SetMetricsRecorder(metricsRecorder)
+
+	// Flush pending metrics on shutdown (before coordinator.Close)
+	defer func() {
+		metricsRecorder.Flush(context.Background())
+		slog.Debug("metrics recorder flushed")
+	}()
+
+	slog.Debug("metrics recorder initialized", "db_path", metricsDBPath)
 
 	return cli.Execute(ctx)
 }
