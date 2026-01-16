@@ -20,7 +20,6 @@ import (
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/filesystem"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/components"
-	"github.com/JeiKeiLim/vibe-dash/internal/adapters/tui/statsview"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/domain"
 	"github.com/JeiKeiLim/vibe-dash/internal/core/ports"
 	"github.com/JeiKeiLim/vibe-dash/internal/shared/emoji"
@@ -29,20 +28,6 @@ import (
 
 // Story 12.2 AC2: Timeout for double-key detection (e.g., 'gg' for jump to top)
 const ggTimeoutMs = 500
-
-// metricsRecorderInterface defines the contract for recording stage transitions (Story 16.2).
-// Used to decouple TUI from concrete metrics implementation for testability.
-type metricsRecorderInterface interface {
-	OnDetection(ctx context.Context, projectID string, newStage domain.Stage)
-}
-
-// metricsReaderInterface defines the contract for reading metrics data (Story 16.4, 16.5).
-// Used to decouple TUI from concrete metrics repository for testability.
-// Supports both sparklines (timestamps) and breakdown (full transitions).
-type metricsReaderInterface interface {
-	GetTransitionTimestamps(ctx context.Context, projectID string, since time.Time) []statsview.Transition
-	GetFullTransitions(ctx context.Context, projectID string, since time.Time) []statsview.FullTransition
-}
 
 // Model represents the main TUI application state.
 type Model struct {
@@ -177,23 +162,6 @@ type Model struct {
 	searchInput   string // Text being typed (before Enter)
 	searchIndex   int    // Current match index (0-based)
 	searchMatches []int  // Line numbers with matches
-
-	// Story 16.2: Metrics recorder for stage transition tracking
-	metricsRecorder metricsRecorderInterface
-
-	// Story 16.3: Stats view state
-	statsViewScroll       int // Scroll position in stats view
-	statsActiveProjectIdx int // Saved dashboard selection for restoration
-
-	// Story 16.4: Metrics reader for stats view sparklines (optional, graceful nil)
-	metricsReader metricsReaderInterface
-
-	// Story 16.5: Stats View breakdown state
-	statsBreakdownProject   *domain.Project           // Currently selected project for breakdown (nil = list view)
-	statsBreakdownDurations []statsview.StageDuration // Cached durations for display
-
-	// Story 16.6: Stats View date range state
-	statsDateRange statsview.DateRange // Current date range preset (initialized on Stats View entry)
 }
 
 // resizeTickMsg is used for resize debouncing.
@@ -467,18 +435,6 @@ func (m *Model) SetLogReaderRegistry(registry ports.LogReaderRegistry) {
 	m.logReaderRegistry = registry
 }
 
-// SetMetricsRecorder sets the metrics recorder for stage transition tracking (Story 16.2).
-// This is optional - if not set, metrics recording is disabled.
-func (m *Model) SetMetricsRecorder(recorder metricsRecorderInterface) {
-	m.metricsRecorder = recorder
-}
-
-// SetMetricsReader sets the metrics reader for stats view sparklines (Story 16.4).
-// This is optional - if not set, sparklines show empty (graceful degradation).
-func (m *Model) SetMetricsReader(reader metricsReaderInterface) {
-	m.metricsReader = reader
-}
-
 // isProjectWaiting wraps WaitingDetector.IsWaiting for component callbacks.
 // Uses context.Background() since Bubble Tea Render() doesn't provide ctx.
 // Story 4.5: Returns false if detector is nil.
@@ -507,56 +463,6 @@ func (m Model) getAgentState(p *domain.Project) domain.AgentState {
 		return domain.AgentState{}
 	}
 	return m.waitingDetector.AgentState(context.Background(), p)
-}
-
-// getProjectActivity fetches activity counts for sparkline generation (Story 16.4).
-// Returns nil if metricsReader is not available (graceful degradation).
-// buckets: number of time buckets for the sparkline (typically 7-14).
-// Story 16.6: Uses m.statsDateRange for date range filtering.
-func (m Model) getProjectActivity(projectID string, buckets int) []int {
-	if m.metricsReader == nil {
-		return nil // Graceful degradation
-	}
-	ctx := context.Background()
-	now := time.Now()
-	since := m.statsDateRange.Since() // Story 16.6: Use selected date range
-
-	transitions := m.metricsReader.GetTransitionTimestamps(ctx, projectID, since)
-	if len(transitions) == 0 {
-		return nil
-	}
-
-	// Extract timestamps for bucketing
-	timestamps := make([]time.Time, len(transitions))
-	for i, t := range transitions {
-		timestamps[i] = t.TransitionedAt
-	}
-
-	// Story 16.6: Calculate time range for bucketing
-	timeRange := m.statsDateRange.Duration()
-	if timeRange == 0 {
-		// All time: calculate from earliest transition to now
-		timeRange = statsview.CalculateTimeRangeFromTimestamps(timestamps, now)
-	}
-
-	return statsview.BucketActivityCounts(timestamps, buckets, timeRange, now)
-}
-
-// getStageBreakdown fetches stage durations for a project (Story 16.5).
-// Returns nil if metricsReader is not available (graceful degradation).
-// Story 16.6: Uses m.statsDateRange for date range filtering.
-func (m Model) getStageBreakdown(projectID string) []statsview.StageDuration {
-	if m.metricsReader == nil {
-		return nil
-	}
-	ctx := context.Background()
-	now := time.Now()
-	since := m.statsDateRange.Since() // Story 16.6: Use selected date range
-	transitions := m.metricsReader.GetFullTransitions(ctx, projectID, since)
-	if len(transitions) == 0 {
-		return nil
-	}
-	return statsview.CalculateFromFullTransitions(transitions, now)
 }
 
 // shouldShowDetailPanelByDefault returns true if detail panel should be open by default
@@ -899,11 +805,6 @@ func (m Model) refreshProjectsCmd() tea.Cmd {
 				currentProject.SecondaryStage = domain.StageUnknown
 			}
 
-			// Story 16.2: Record stage detection for metrics (recorder internally tracks previous stage)
-			if m.metricsRecorder != nil {
-				m.metricsRecorder.OnDetection(ctx, currentProject.Path, primary.Stage)
-			}
-
 			// Update ONLY detection fields, preserve state/hibernation/favorites
 			currentProject.DetectedMethod = primary.Method
 			currentProject.CurrentStage = primary.Stage
@@ -951,10 +852,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Story 12.1: Route to text view handler when in text view mode
 		if m.viewMode == viewModeTextView {
 			return m.handleTextViewKeyMsg(msg)
-		}
-		// Story 16.3: Route to stats view handler when in stats view mode
-		if m.viewMode == viewModeStats {
-			return m.handleStatsViewKeyMsg(msg)
 		}
 		// Story 12.1: Route to session picker handler when showing
 		if m.showSessionPicker {
@@ -2002,14 +1899,6 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.handleShiftEnterForSessionPicker()
 		}
 		return m, nil
-
-	case KeyStats:
-		// Story 16.3: Open Stats View (AC1)
-		if m.showHelp || m.isEditingNote || m.isConfirmingRemove {
-			return m, nil
-		}
-		m.enterStatsView()
-		return m, nil
 	}
 
 	// Story 11.4: Forward key messages to hibernated list when in hibernated view (AC8)
@@ -2243,11 +2132,6 @@ func (m Model) View() string {
 	// Story 12.1: Render text view (full screen log display)
 	if m.viewMode == viewModeTextView {
 		return m.renderTextView()
-	}
-
-	// Story 16.3: Render Stats View (full screen metrics display)
-	if m.viewMode == viewModeStats {
-		return m.renderStatsView()
 	}
 
 	// Story 12.1: Render session picker overlay
@@ -2841,64 +2725,6 @@ func (m Model) renderSessionPicker(width, height int) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
 }
 
-// Story 16.3/16.5/16.6: handleStatsViewKeyMsg handles keyboard input in Stats View.
-// Story 16.5: Supports breakdown sub-view with Enter to drill down, Esc to return.
-// Story 16.6: Supports date range cycling with [ and ] keys.
-func (m Model) handleStatsViewKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
-	switch msg.String() {
-	case KeyEscape, KeyQuit:
-		// Story 16.5: If in breakdown view, return to project list
-		if m.statsBreakdownProject != nil {
-			m.statsBreakdownProject = nil
-			m.statsBreakdownDurations = nil
-			return m, nil
-		}
-		// Exit Stats View entirely (return to dashboard)
-		m.exitStatsView()
-		return m, nil
-	case "enter":
-		// Story 16.5: Enter breakdown view for selected project
-		if m.statsBreakdownProject == nil && len(m.projects) > 0 {
-			selectedIdx := m.statsViewScroll
-			if selectedIdx >= 0 && selectedIdx < len(m.projects) {
-				p := m.projects[selectedIdx]
-				m.statsBreakdownProject = p
-				m.statsBreakdownDurations = m.getStageBreakdown(p.Path)
-			}
-		}
-		return m, nil
-	case "[":
-		// Story 16.6: Cycle to previous date range preset (only in project list view)
-		if m.statsBreakdownProject == nil {
-			m.statsDateRange = m.statsDateRange.Prev()
-		}
-		return m, nil
-	case "]":
-		// Story 16.6: Cycle to next date range preset (only in project list view)
-		if m.statsBreakdownProject == nil {
-			m.statsDateRange = m.statsDateRange.Next()
-		}
-		return m, nil
-	case KeyDown, KeyDownArrow:
-		// Only scroll in project list view (not breakdown)
-		if m.statsBreakdownProject == nil && len(m.projects) > 0 {
-			if m.statsViewScroll < len(m.projects)-1 {
-				m.statsViewScroll++
-			}
-		}
-		return m, nil
-	case KeyUp, KeyUpArrow:
-		// Only scroll in project list view (not breakdown)
-		if m.statsBreakdownProject == nil {
-			if m.statsViewScroll > 0 {
-				m.statsViewScroll--
-			}
-		}
-		return m, nil
-	}
-	return m, nil
-}
-
 // handleTextViewKeyMsg handles keyboard input in text view mode.
 func (m Model) handleTextViewKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	contentHeight := m.height - statusBarHeight(m.height) - 2 // -2 for header/footer
@@ -3390,21 +3216,4 @@ func (m Model) renderTextView() string {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Top, combined)
 	}
 	return combined
-}
-
-// Story 16.3: enterStatsView saves dashboard selection and switches to stats view.
-// Story 16.6: Initializes date range to default (30 days) on each entry (AC #7).
-func (m *Model) enterStatsView() {
-	m.statsActiveProjectIdx = m.projectList.Index()
-	m.viewMode = viewModeStats
-	m.statsViewScroll = 0
-	m.statsDateRange = statsview.DefaultDateRange() // Story 16.6: Reset to default on entry
-}
-
-// Story 16.3: exitStatsView returns to normal view with bounds-checked selection restoration.
-func (m *Model) exitStatsView() {
-	m.viewMode = viewModeNormal
-	if m.statsActiveProjectIdx >= 0 && m.statsActiveProjectIdx < len(m.projects) {
-		m.projectList.SelectByIndex(m.statsActiveProjectIdx)
-	}
 }

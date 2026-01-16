@@ -12,12 +12,10 @@ import (
 // Shortcut string constants (AC7: responsive width)
 const (
 	// Full shortcuts (width >= 80) - with pipe separators
-	// Story 16.3: Added [s] stats hint
-	shortcutsFull = "│ [j/k] nav [d] details [s] stats [f] fav [r] refresh [?] help [q] quit │"
+	shortcutsFull = "│ [j/k] nav [d] details [f] fav [r] refresh [?] help [q] quit │"
 
 	// Abbreviated shortcuts (width < 80)
-	// Story 16.3: Added [s] stats hint
-	shortcutsAbbrev = "│ [j/k] [d] [s] [f] [r] [?] [q] │"
+	shortcutsAbbrev = "│ [j/k] [d] [f] [r] [?] [q] │"
 
 	// Width threshold for abbreviation (AC7)
 	widthThreshold = 80
@@ -187,8 +185,7 @@ func (s StatusBarModel) renderCondensed() string {
 		counts += " " + styles.HintStyle.Render("[d] hidden")
 	}
 
-	// Story 16.3: Include [s] stats in condensed mode
-	return "│ " + counts + " │ [j/k][s][?][q] │"
+	return "│ " + counts + " │ [j/k][?][q] │"
 }
 
 // renderCounts renders the counts line with pipe separators (AC1, AC4, AC5).

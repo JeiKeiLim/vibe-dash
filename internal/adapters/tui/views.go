@@ -112,7 +112,6 @@ func renderHelpOverlay(width, height int, cfg *ports.Config) string {
 		"",
 		"Views",
 		"h        View hibernated projects",
-		"s        View stats and metrics",
 		"",
 		"Log View (when viewing logs)",
 		"G        Jump to end, resume auto-scroll",

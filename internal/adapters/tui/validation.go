@@ -19,7 +19,6 @@ const (
 	viewModeValidation
 	viewModeHibernated // Story 11.4: Hibernated projects view
 	viewModeTextView   // Story 12.1: Scrollable text view for logs
-	viewModeStats      // Story 16.3: Stats View
 )
 
 // InvalidProject represents a project with an inaccessible path
