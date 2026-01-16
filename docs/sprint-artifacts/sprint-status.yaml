@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2026-01-16
-updated_by: Dev (Amelia) - Story 14-5 code review passed, 1H/4M/1L fixes applied
+updated_by: SM (Bob) - Epic 14 retrospective completed
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -344,7 +344,7 @@ development_status:
   14-3-implement-most-recent-artifact-wins-selection: done
   14-4-implement-coexistence-warning-for-tie-breaker: done
   14-5-update-tui-to-display-methodology-coexistence: done
-  epic-14-retrospective: optional
+  epic-14-retrospective: completed
 
   # Epic 15: Sub-1-Minute Agent Detection - PHASE 2 (Core Feature, THE Killer Feature)
   # FR Coverage: FR-P2-1, FR-P2-2, FR-P2-3, FR-P2-4, FR-P2-5, FR-P2-6
