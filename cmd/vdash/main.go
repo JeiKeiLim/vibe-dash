@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/cli"
+	"github.com/JeiKeiLim/vibe-dash/internal/adapters/detection"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/detectors"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/detectors/bmad"
 	"github.com/JeiKeiLim/vibe-dash/internal/adapters/detectors/speckit"
@@ -151,21 +152,15 @@ func run(ctx context.Context) error {
 	detectionSvc := services.NewDetectionService(registry)
 	cli.SetDetectionService(detectionSvc)
 
-	// Initialize WaitingThresholdResolver with cascade support (Story 4.4)
-	// Priority: CLI flag > per-project config file > global config > default (10)
-	// Note: Pass function (not value) for lazy evaluation after Cobra parses flags
-	thresholdResolver := config.NewWaitingThresholdResolver(
-		cfg,
-		basePath,                // ~/.vibe-dash
-		cli.GetWaitingThreshold, // Function reference - called lazily at Resolve time
-	)
+	// Story 15.6: Create AgentDetectionService with Claude Code + Generic fallback detection.
+	// This REPLACES the old threshold-based WaitingDetector (Story 4.3/4.4).
+	// Benefits: Log-based detection (high confidence) with file-activity fallback (low confidence).
+	agentService := detection.NewAgentDetectionService()
+	waitingDetector := detection.NewAgentWaitingAdapter(agentService)
 
-	// Create WaitingDetector with resolver (Story 4.3/4.4)
-	waitingDetector := services.NewWaitingDetector(thresholdResolver)
-
-	// Log debug info about waiting detector initialization
-	slog.Debug("waiting detector initialized",
-		"cli_override", cli.GetWaitingThreshold(),
+	slog.Debug("agent detection service initialized",
+		"claude_detector", "ClaudeCodeDetector",
+		"generic_detector", "GenericDetector",
 	)
 
 	// Story 4.5: Pass waitingDetector to TUI for WAITING indicator display
