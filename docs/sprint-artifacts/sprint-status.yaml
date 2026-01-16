@@ -25,7 +25,7 @@
 
 generated: 2025-12-12
 updated: 2026-01-16
-updated_by: Amelia (Dev Agent) - Story 15-7 code review complete, test improvements applied
+updated_by: Amelia (Dev Agent) - Story 13-1 code review complete, marked done
 project: bmad-test
 project_key: vibe-dash
 tracking_system: file-system
@@ -326,8 +326,9 @@ development_status:
   # Epic 13: Dynamic Binary Name Polish - PHASE 2 (Quick Win)
   # FR Coverage: FR-P2-19, FR-P2-20
   # Use os.Args[0] for dynamic binary name in errors and version output
-  epic-13: backlog
-  13-1-create-binary-name-resolution-utility: backlog
+  # 2026-01-16: Story 13-1 done - Binary name utility implemented and reviewed
+  epic-13: in-progress
+  13-1-create-binary-name-resolution-utility: done
   13-2-update-version-command-to-use-dynamic-name: backlog
   13-3-update-error-messages-to-use-dynamic-name: backlog
   epic-13-retrospective: optional
@@ -348,7 +349,7 @@ development_status:
   # Parse Claude Code JSONL logs for instant agent state detection
   # Detection: stop_reason: "end_turn" → WAITING, "tool_use" → WORKING
   # 2026-01-16: Story 15-1 drafted - Interface and types foundation
-  epic-15: in-progress
+  epic-15: done
   15-1-define-agentactivitydetector-interface-and-types: done
   15-2-implement-claude-code-project-path-matcher: done
   15-3-implement-claude-code-jsonl-log-parser: done
